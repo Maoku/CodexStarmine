@@ -11,14 +11,23 @@ import {
   ShaderMaterial,
 } from "three";
 
-import { generateSphereBurst } from "../../core/burst";
+import {
+  generateHeartBurst,
+  generatePalmBurst,
+  generateSphereBurst,
+  type BurstDirection,
+} from "../../core/burst";
 import {
   evaluateColorStages,
   integrateParticle,
   type BallisticParticle,
   type Vector3Value,
 } from "../../core/particle";
-import type { FireworkDesign } from "../../data";
+import {
+  resolveSizePreset,
+  type ColorStage,
+  type FireworkDesign,
+} from "../../data";
 import { WATER_LEVEL } from "../scene/createNightSkyScene";
 
 const MAX_STARS = 6_000;
@@ -33,11 +42,22 @@ interface Shell extends BallisticParticle {
 }
 
 interface Star extends BallisticParticle {
+  brightness: number;
   colorStages: FireworkDesign["colorStages"];
   history: Vector3Value[];
+  pointScale: number;
   sparkle: number;
   trailLength: number;
   trailWidth: number;
+}
+
+interface DelayedBurst {
+  age: number;
+  delay: number;
+  design: FireworkDesign;
+  position: Vector3Value;
+  seed: number;
+  velocity: Vector3Value;
 }
 
 export interface LaunchOptions {
@@ -123,6 +143,7 @@ export class FireworkSystem {
   readonly #trailGeometry = new BufferGeometry();
   readonly #trails: LineSegments;
   readonly #wind = { x: 1.25, y: 0, z: 0.18 };
+  #delayedBursts: DelayedBurst[] = [];
   #shells: Shell[] = [];
   #stars: Star[] = [];
 
@@ -156,14 +177,22 @@ export class FireworkSystem {
   }
 
   get activeCount(): number {
-    return this.#shells.length + this.#stars.length;
+    return (
+      this.#shells.length + this.#stars.length + this.#delayedBursts.length
+    );
   }
 
   launch(design: FireworkDesign, options: LaunchOptions = {}): void {
     const lane = Math.min(Math.max(options.lane ?? 0, -1), 1);
-    const targetHeight = options.targetHeight ?? 138;
+    const size = resolveSizePreset(design.sizeClass);
+    const targetHeight =
+      options.targetHeight ?? size.targetHeight * (0.97 + Math.random() * 0.06);
     const seed = options.seed ?? Math.floor(Math.random() * 1_000_000);
-    const position = { x: lane * 42, y: 2.2, z: -112 };
+    const position = {
+      x: lane * 42 + (Math.random() - 0.5) * 1.8,
+      y: 2.2,
+      z: -112,
+    };
     this.#shells.push({
       age: 0,
       design,
@@ -189,6 +218,7 @@ export class FireworkSystem {
   update(deltaSeconds: number): void {
     const delta = Math.min(Math.max(deltaSeconds, 0), 0.05);
     this.#updateShells(delta);
+    this.#updateDelayedBursts(delta);
     this.#updateStars(delta);
     this.#writePointBuffers();
     this.#writeTrailBuffers();
@@ -203,38 +233,185 @@ export class FireworkSystem {
     (this.#trails.material as LineBasicMaterial).dispose();
   }
 
-  #burst(shell: Shell): void {
-    const directions = generateSphereBurst(
-      shell.design.particleDensity,
-      shell.design.symmetry,
-      shell.seed,
-    );
+  #appendStars(
+    position: Vector3Value,
+    inheritedVelocity: Vector3Value,
+    design: FireworkDesign,
+    directions: BurstDirection[],
+    speedScale: number,
+    colorStages = design.colorStages,
+  ): void {
+    const size = resolveSizePreset(design.sizeClass);
     for (const burst of directions) {
-      const speed = shell.design.burstVelocity * burst.speedFactor;
-      const lifetime = shell.design.burnDuration * (0.88 + Math.random() * 0.2);
+      const speed = design.burstVelocity * burst.speedFactor * speedScale;
+      const lifetime = design.burnDuration * (0.88 + Math.random() * 0.2);
       this.#stars.push({
         age: 0,
-        colorStages: shell.design.colorStages,
-        drag: shell.design.drag,
-        gravityScale: shell.design.gravityScale,
-        history: [clonePosition(shell.position)],
+        brightness: 0.72 + size.pointScale * 0.28,
+        colorStages,
+        drag: design.drag,
+        gravityScale: design.gravityScale,
+        history: [clonePosition(position)],
         lifetime,
-        position: clonePosition(shell.position),
-        sparkle: shell.design.trailStyle.sparkle,
-        trailLength: shell.design.trailStyle.length,
-        trailWidth: shell.design.trailStyle.width,
+        pointScale: size.pointScale * Math.max(design.trailStyle.width, 0.72),
+        position: clonePosition(position),
+        sparkle: design.trailStyle.sparkle,
+        trailLength: design.trailStyle.length,
+        trailWidth: design.trailStyle.width,
         velocity: {
-          x: burst.direction.x * speed + shell.velocity.x * 0.12,
-          y: burst.direction.y * speed + shell.velocity.y * 0.06,
-          z: burst.direction.z * speed + shell.velocity.z * 0.12,
+          x: burst.direction.x * speed + inheritedVelocity.x * 0.12,
+          y: burst.direction.y * speed + inheritedVelocity.y * 0.06,
+          z: burst.direction.z * speed + inheritedVelocity.z * 0.12,
         },
-        windResponse: shell.design.windResponse,
+        windResponse: design.windResponse,
       });
     }
+  }
+
+  #emitBurst(
+    position: Vector3Value,
+    inheritedVelocity: Vector3Value,
+    design: FireworkDesign,
+    seed: number,
+    includeCores = true,
+  ): void {
+    const size = resolveSizePreset(design.sizeClass);
+    const count = Math.max(
+      Math.round(design.particleDensity * size.particleScale),
+      12,
+    );
+    let directions: BurstDirection[];
+    switch (design.burstShape) {
+      case "heart":
+        directions = generateHeartBurst(count, seed);
+        break;
+      case "palm":
+        directions = generatePalmBurst(count, seed);
+        break;
+      case "children":
+        directions = generateSphereBurst(
+          Math.max(Math.round(count * 0.24), 18),
+          design.symmetry,
+          seed,
+        );
+        break;
+      default:
+        directions = generateSphereBurst(count, design.symmetry, seed);
+    }
+
+    const shapeScale = design.burstShape === "children" ? 0.36 : 1;
+    this.#appendStars(
+      position,
+      inheritedVelocity,
+      design,
+      directions,
+      size.burstScale * shapeScale,
+    );
+
+    if (includeCores) {
+      design.coreLayers.forEach((core, index) => {
+        const coreCount = Math.max(
+          Math.round(count * (0.24 + core.radius * 0.12)),
+          24,
+        );
+        const coreStages: ColorStage[] = [
+          {
+            normalizedTime: 0,
+            color: 0xffffff,
+            intensity: 1.32,
+            trailColor: core.color,
+          },
+          {
+            normalizedTime: 0.16,
+            color: core.color,
+            intensity: 0.94,
+            trailColor: core.color,
+          },
+          {
+            normalizedTime: 1,
+            color: core.color,
+            intensity: 0,
+            trailColor: core.color,
+          },
+        ];
+        this.#appendStars(
+          position,
+          inheritedVelocity,
+          { ...design, burnDuration: design.burnDuration * 0.72 },
+          generateSphereBurst(coreCount, 0.99, seed + 41 + index * 17),
+          size.burstScale * core.radius,
+          coreStages,
+        );
+      });
+    }
+
+    if (design.burstShape === "children") {
+      for (const child of design.childBursts) {
+        const carriers = generateSphereBurst(
+          child.count,
+          design.symmetry,
+          seed + 503,
+        );
+        carriers.forEach((carrier, index) => {
+          this.#delayedBursts.push({
+            age: 0,
+            delay: child.delay + index * 0.018 + Math.random() * 0.11,
+            design: {
+              ...design,
+              burstShape: "sphere",
+              burstVelocity: 11.5,
+              burnDuration: 1.5,
+              childBursts: [],
+              coreLayers: [],
+              particleDensity: 24,
+              trailStyle: { ...design.trailStyle, length: 0.12 },
+            },
+            position: clonePosition(position),
+            seed: seed + 701 + index * 23,
+            velocity: {
+              x: carrier.direction.x * child.radius,
+              y: carrier.direction.y * child.radius,
+              z: carrier.direction.z * child.radius,
+            },
+          });
+        });
+      }
+    }
+
     if (this.#stars.length > MAX_STARS - 10) {
       this.#stars.splice(0, this.#stars.length - (MAX_STARS - 10));
     }
+  }
+
+  #burst(shell: Shell): void {
+    this.#emitBurst(shell.position, shell.velocity, shell.design, shell.seed);
     this.#callbacks.onBurst?.(clonePosition(shell.position), shell.design);
+  }
+
+  #updateDelayedBursts(delta: number): void {
+    const active: DelayedBurst[] = [];
+    for (const delayed of this.#delayedBursts) {
+      delayed.age += delta;
+      delayed.velocity.y -= GRAVITY * 0.34 * delta;
+      delayed.position.x += delayed.velocity.x * delta;
+      delayed.position.y += delayed.velocity.y * delta;
+      delayed.position.z += delayed.velocity.z * delta;
+      delayed.velocity.x *= Math.exp(-0.9 * delta);
+      delayed.velocity.y *= Math.exp(-0.9 * delta);
+      delayed.velocity.z *= Math.exp(-0.9 * delta);
+      if (delayed.age >= delayed.delay) {
+        this.#emitBurst(
+          delayed.position,
+          delayed.velocity,
+          delayed.design,
+          delayed.seed,
+          false,
+        );
+      } else {
+        active.push(delayed);
+      }
+    }
+    this.#delayedBursts = active;
   }
 
   #updateShells(delta: number): void {
@@ -313,8 +490,13 @@ export class FireworkSystem {
       tempColor.setHex(evaluated.color);
       position.setXYZ(index, item.position.x, item.position.y, item.position.z);
       color.setXYZ(index, tempColor.r, tempColor.g, tempColor.b);
-      alpha.setX(index, opacity);
-      pointSize.setX(index, isShell ? 7.2 : 4.2);
+      alpha.setX(index, opacity * (isShell ? 1 : item.brightness));
+      pointSize.setX(
+        index,
+        isShell
+          ? 7.2 * resolveSizePreset(item.design.sizeClass).pointScale
+          : 4.2 * item.pointScale,
+      );
 
       reflectionPosition.setXYZ(
         index,
@@ -329,7 +511,12 @@ export class FireworkSystem {
         tempColor.b,
       );
       reflectionAlpha.setX(index, opacity);
-      reflectionSize.setX(index, isShell ? 3.5 : 2.8);
+      reflectionSize.setX(
+        index,
+        isShell
+          ? 3.5 * resolveSizePreset(item.design.sizeClass).pointScale
+          : 2.8 * item.pointScale,
+      );
     });
 
     for (const attribute of [

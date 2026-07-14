@@ -14,9 +14,10 @@ import { Vector2 } from "three";
 
 import { clampPixelRatio } from "../core/env";
 import {
-  CHRYSANTHEMUM_PRESET,
-  PEONY_PRESET,
+  FIREWORK_PRESETS,
+  withSizeClass,
   type FireworkDesign,
+  type SizeClass,
 } from "../data";
 import { createPhaseStatus } from "../ui/createPhaseStatus";
 import { FireworkSystem } from "./fx";
@@ -106,12 +107,16 @@ export class NightSkyApp {
   });
 
   readonly #launchDemo = (): void => {
-    const designs: FireworkDesign[] = [CHRYSANTHEMUM_PRESET, PEONY_PRESET];
-    const design = designs[this.#demoIndex % designs.length];
+    const sizes: SizeClass[] = ["small", "medium", "large"];
+    const preset = FIREWORK_PRESETS[this.#demoIndex % FIREWORK_PRESETS.length];
+    const size =
+      sizes[
+        Math.floor(this.#demoIndex / FIREWORK_PRESETS.length) % sizes.length
+      ];
+    const design: FireworkDesign = withSizeClass(preset, size);
     this.#fireworks.launch(design, {
-      lane: this.#demoIndex % 2 === 0 ? -0.42 : 0.42,
+      lane: [-0.62, 0, 0.62][this.#demoIndex % 3],
       seed: 2_026 + this.#demoIndex * 101,
-      targetHeight: design.pattern === "chrysanthemum" ? 142 : 128,
     });
     this.#demoIndex += 1;
   };
@@ -123,7 +128,7 @@ export class NightSkyApp {
     if (elapsed >= this.#nextDemoLaunch) {
       this.#launchDemo();
       this.#nextDemoLaunch =
-        elapsed + (this.#fireworks.activeCount > 500 ? 6 : 4.8);
+        elapsed + (this.#fireworks.activeCount > 1_400 ? 5.8 : 4.2);
     }
     this.#fireworks.update(delta);
     this.#updateScene(elapsed);

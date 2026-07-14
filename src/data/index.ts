@@ -2,3 +2,4 @@
 export {};
 export * from "./firework";
 export * from "./presets";
+export * from "./sizes";
