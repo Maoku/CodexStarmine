@@ -16,13 +16,15 @@ import { Vector2 } from "three";
 import { FireworkAudio } from "../audio";
 import { clampPixelRatio } from "../core/env";
 import {
+  DesignRepository,
   FIREWORK_PRESETS,
   resolveSizePreset,
   withSizeClass,
   type FireworkDesign,
   type SizeClass,
 } from "../data";
-import { createPhaseStatus } from "../ui/createPhaseStatus";
+import { CraftController } from "../modes/craft";
+import { AppShell, type AppMode } from "../ui/AppShell";
 import { FireworkSystem } from "./fx";
 import { createNightSkyScene } from "./scene/createNightSkyScene";
 
@@ -35,10 +37,13 @@ export class NightSkyApp {
   readonly #host: HTMLElement;
   readonly #renderer: WebGLRenderer;
   readonly #scene: Scene;
+  readonly #ui: AppShell;
   readonly #updateScene: (elapsedSeconds: number) => void;
   #animationFrame = 0;
   #demoIndex = 0;
   #isRunning = false;
+  #isFreeRunning = true;
+  #mode: AppMode = "craft";
   #nextDemoLaunch = 0.85;
 
   constructor(host: HTMLElement) {
@@ -72,7 +77,7 @@ export class NightSkyApp {
     this.#renderer.domElement.setAttribute("role", "img");
     this.#renderer.domElement.setAttribute(
       "aria-label",
-      "月明かりの湖畔で菊と牡丹が打ち上がる花火シーン",
+      "月明かりの湖畔で自作花火を鑑賞するシーン",
     );
     this.#renderer.outputColorSpace = SRGBColorSpace;
     this.#renderer.toneMapping = ACESFilmicToneMapping;
@@ -93,10 +98,43 @@ export class NightSkyApp {
     );
     this.#composer.addPass(new OutputPass());
 
-    this.#host.replaceChildren(
-      this.#renderer.domElement,
-      createPhaseStatus(this.#renderer.capabilities.isWebGL2),
-    );
+    let storage: Storage | undefined;
+    try {
+      storage = window.localStorage;
+    } catch {
+      storage = undefined;
+    }
+    const repository = new DesignRepository(storage);
+    const craft = new CraftController(repository);
+    this.#ui = new AppShell(craft, {
+      onAudioPhysicality: (value) => {
+        this.#audio.physicality = value;
+      },
+      onDesignLibraryChange: () => undefined,
+      onModeChange: (mode) => {
+        this.#mode = mode;
+        if (mode === "free") {
+          this.#nextDemoLaunch = this.#clock.elapsedTime + 0.4;
+          this.#ui.setFreeState(
+            true,
+            "湖畔の序章",
+            "プリセットから演目を構成中",
+          );
+        }
+      },
+      onPreview: (design) => {
+        this.#fireworks.launch(design, { lane: 0, seed: Date.now() });
+      },
+      onFreeToggle: () => {
+        this.#isFreeRunning = !this.#isFreeRunning;
+        this.#ui.setFreeState(
+          this.#isFreeRunning,
+          "湖畔の序章",
+          this.#isFreeRunning ? "自動演出を再生中" : "余韻を残して一時停止中",
+        );
+      },
+    });
+    this.#host.replaceChildren(this.#renderer.domElement, this.#ui.element);
   }
 
   start(): void {
@@ -117,6 +155,7 @@ export class NightSkyApp {
     window.removeEventListener("pointerdown", this.#unlockAudio);
     window.removeEventListener("keydown", this.#unlockAudio);
     void this.#audio.dispose();
+    this.#ui.destroy();
     this.#fireworks.dispose();
     this.#composer.dispose();
     this.#renderer.dispose();
@@ -147,7 +186,11 @@ export class NightSkyApp {
     if (!this.#isRunning) return;
     const delta = Math.min(this.#clock.getDelta(), 0.05);
     const elapsed = this.#clock.elapsedTime;
-    if (elapsed >= this.#nextDemoLaunch) {
+    if (
+      this.#mode === "free" &&
+      this.#isFreeRunning &&
+      elapsed >= this.#nextDemoLaunch
+    ) {
       this.#launchDemo();
       this.#nextDemoLaunch =
         elapsed + (this.#fireworks.activeCount > 1_400 ? 5.8 : 4.2);

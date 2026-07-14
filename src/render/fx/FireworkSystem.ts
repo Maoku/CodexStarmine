@@ -762,7 +762,17 @@ export class FireworkSystem {
     };
 
     for (const shell of this.#shells) {
-      writeHistory(shell.trail, 0xffa84f, 1.1);
+      const ascentColor =
+        shell.design.ascentEffect === "silver"
+          ? 0xe9f4ff
+          : shell.design.ascentEffect === "gold"
+            ? 0xffa84f
+            : 0x65707d;
+      writeHistory(
+        shell.trail,
+        ascentColor,
+        shell.design.ascentEffect === "none" ? 0.22 : 1.1,
+      );
     }
     for (const star of this.#stars) {
       if (star.history.length < 2) continue;

@@ -1,6 +1,7 @@
 import type { FireworkDesign } from "./firework";
 
 export const CHRYSANTHEMUM_PRESET: FireworkDesign = {
+  ascentEffect: "gold",
   id: "preset-chrysanthemum",
   name: "変化菊",
   family: "warimono",
@@ -48,6 +49,7 @@ export const CHRYSANTHEMUM_PRESET: FireworkDesign = {
 };
 
 export const PEONY_PRESET: FireworkDesign = {
+  ascentEffect: "silver",
   id: "preset-peony",
   name: "紅青牡丹",
   family: "warimono",
@@ -95,6 +97,7 @@ export const PEONY_PRESET: FireworkDesign = {
 };
 
 export const CROWN_PRESET: FireworkDesign = {
+  ascentEffect: "gold",
   id: "preset-crown",
   name: "錦冠",
   family: "warimono",
@@ -139,6 +142,7 @@ export const CROWN_PRESET: FireworkDesign = {
 };
 
 export const PALM_PRESET: FireworkDesign = {
+  ascentEffect: "silver",
   id: "preset-palm",
   name: "銀椰子",
   family: "warimono",
@@ -180,6 +184,7 @@ export const PALM_PRESET: FireworkDesign = {
 };
 
 export const SENRIN_PRESET: FireworkDesign = {
+  ascentEffect: "gold",
   id: "preset-senrin",
   name: "彩色千輪",
   family: "hanwarimono",
@@ -227,6 +232,7 @@ export const SENRIN_PRESET: FireworkDesign = {
 };
 
 export const HEART_PRESET: FireworkDesign = {
+  ascentEffect: "silver",
   id: "preset-heart",
   name: "紅恋花",
   family: "warimono",

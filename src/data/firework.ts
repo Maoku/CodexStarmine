@@ -3,6 +3,7 @@ export type FireworkPattern =
   "chrysanthemum" | "peony" | "crown" | "palm" | "senrin" | "heart";
 export type SizeClass = "small" | "medium" | "large";
 export type BurstShape = "sphere" | "palm" | "heart" | "children";
+export type AscentEffect = "gold" | "silver" | "none";
 
 export interface ColorStage {
   color: number;
@@ -40,6 +41,7 @@ export interface SmokeProfile {
 }
 
 export interface FireworkDesign {
+  ascentEffect: AscentEffect;
   burnDuration: number;
   burstShape: BurstShape;
   burstVelocity: number;
