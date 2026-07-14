@@ -13,19 +13,28 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { Vector2 } from "three";
 
 import { clampPixelRatio } from "../core/env";
+import {
+  CHRYSANTHEMUM_PRESET,
+  PEONY_PRESET,
+  type FireworkDesign,
+} from "../data";
 import { createPhaseStatus } from "../ui/createPhaseStatus";
+import { FireworkSystem } from "./fx";
 import { createNightSkyScene } from "./scene/createNightSkyScene";
 
 export class NightSkyApp {
   readonly #camera: PerspectiveCamera;
   readonly #clock = new Clock();
   readonly #composer: EffectComposer;
+  readonly #fireworks: FireworkSystem;
   readonly #host: HTMLElement;
   readonly #renderer: WebGLRenderer;
   readonly #scene: Scene;
   readonly #updateScene: (elapsedSeconds: number) => void;
   #animationFrame = 0;
+  #demoIndex = 0;
   #isRunning = false;
+  #nextDemoLaunch = 0.85;
 
   constructor(host: HTMLElement) {
     this.#host = host;
@@ -35,6 +44,7 @@ export class NightSkyApp {
     this.#camera = nightSky.camera;
     this.#scene = nightSky.scene;
     this.#updateScene = nightSky.update;
+    this.#fireworks = new FireworkSystem(this.#scene);
 
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -44,7 +54,7 @@ export class NightSkyApp {
     this.#renderer.domElement.setAttribute("role", "img");
     this.#renderer.domElement.setAttribute(
       "aria-label",
-      "月明かりと星空を映す湖畔の花火鑑賞シーン",
+      "月明かりの湖畔で菊と牡丹が打ち上がる花火シーン",
     );
     this.#renderer.outputColorSpace = SRGBColorSpace;
     this.#renderer.toneMapping = ACESFilmicToneMapping;
@@ -58,9 +68,9 @@ export class NightSkyApp {
     this.#composer.addPass(
       new UnrealBloomPass(
         new Vector2(size.width, size.height),
+        0.82,
+        0.6,
         0.72,
-        0.62,
-        0.78,
       ),
     );
     this.#composer.addPass(new OutputPass());
@@ -72,10 +82,7 @@ export class NightSkyApp {
   }
 
   start(): void {
-    if (this.#isRunning) {
-      return;
-    }
-
+    if (this.#isRunning) return;
     this.#isRunning = true;
     this.#clock.start();
     window.addEventListener("resize", this.#resize);
@@ -83,13 +90,11 @@ export class NightSkyApp {
   }
 
   destroy(): void {
-    if (!this.#isRunning) {
-      return;
-    }
-
+    if (!this.#isRunning) return;
     this.#isRunning = false;
     window.cancelAnimationFrame(this.#animationFrame);
     window.removeEventListener("resize", this.#resize);
+    this.#fireworks.dispose();
     this.#composer.dispose();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
@@ -100,12 +105,28 @@ export class NightSkyApp {
     width: Math.max(this.#host.clientWidth, 1),
   });
 
-  readonly #render = (): void => {
-    if (!this.#isRunning) {
-      return;
-    }
+  readonly #launchDemo = (): void => {
+    const designs: FireworkDesign[] = [CHRYSANTHEMUM_PRESET, PEONY_PRESET];
+    const design = designs[this.#demoIndex % designs.length];
+    this.#fireworks.launch(design, {
+      lane: this.#demoIndex % 2 === 0 ? -0.42 : 0.42,
+      seed: 2_026 + this.#demoIndex * 101,
+      targetHeight: design.pattern === "chrysanthemum" ? 142 : 128,
+    });
+    this.#demoIndex += 1;
+  };
 
-    this.#updateScene(this.#clock.getElapsedTime());
+  readonly #render = (): void => {
+    if (!this.#isRunning) return;
+    const delta = Math.min(this.#clock.getDelta(), 0.05);
+    const elapsed = this.#clock.elapsedTime;
+    if (elapsed >= this.#nextDemoLaunch) {
+      this.#launchDemo();
+      this.#nextDemoLaunch =
+        elapsed + (this.#fireworks.activeCount > 500 ? 6 : 4.8);
+    }
+    this.#fireworks.update(delta);
+    this.#updateScene(elapsed);
     this.#composer.render();
     this.#animationFrame = window.requestAnimationFrame(this.#render);
   };
