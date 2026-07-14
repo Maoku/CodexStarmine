@@ -62,3 +62,21 @@ export interface FireworkDesign {
   trailStyle: TrailStyle;
   windResponse: number;
 }
+
+export interface ShowCue {
+  fireworkDesignID: string;
+  id: string;
+  launchAngle: number;
+  launcherLane: number;
+  sizePreset: SizeClass;
+  targetHeight: number;
+  time: number;
+  timingVariation: number;
+}
+
+export interface ShowPlan {
+  cues: ShowCue[];
+  duration: number;
+  id: string;
+  title: string;
+}

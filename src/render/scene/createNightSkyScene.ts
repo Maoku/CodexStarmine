@@ -185,8 +185,8 @@ function createLake(): {
   const material = new ShaderMaterial({
     uniforms: {
       time: { value: 0 },
-      deepColor: { value: new Color(0x010711) },
-      horizonColor: { value: new Color(0x142c47) },
+      deepColor: { value: new Color(0x020c18) },
+      horizonColor: { value: new Color(0x1a3a5c) },
       moonColor: { value: new Color(0x9cb6d0) },
       flashColor: { value: new Color(0xffffff) },
       flashIntensity: { value: 0 },
@@ -265,9 +265,9 @@ export function createNightSkyScene(aspect: number): NightSkyScene {
   scene.background = new Color(NIGHT_SKY_COLOR);
   scene.fog = new FogExp2(0x07101d, 0.00105);
 
-  const camera = new PerspectiveCamera(48, aspect, 0.5, 2_100);
+  const camera = new PerspectiveCamera(60, aspect, 0.5, 2_100);
   camera.position.set(0, 13, 74);
-  camera.lookAt(new Vector3(0, 104, -155));
+  camera.lookAt(new Vector3(0, 95, -155));
 
   scene.add(createSkyDome(), createStars(), createMoon());
   scene.add(

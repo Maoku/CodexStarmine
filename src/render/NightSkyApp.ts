@@ -1,7 +1,7 @@
 import {
   ACESFilmicToneMapping,
-  Clock,
   SRGBColorSpace,
+  Timer,
   Vector3,
   WebGLRenderer,
   type PerspectiveCamera,
@@ -15,39 +15,31 @@ import { Vector2 } from "three";
 
 import { FireworkAudio } from "../audio";
 import { clampPixelRatio } from "../core/env";
-import {
-  DesignRepository,
-  FIREWORK_PRESETS,
-  resolveSizePreset,
-  withSizeClass,
-  type FireworkDesign,
-  type SizeClass,
-} from "../data";
+import { DesignRepository, FIREWORK_PRESETS, resolveSizePreset } from "../data";
 import { CraftController } from "../modes/craft";
-import { AppShell, type AppMode } from "../ui/AppShell";
+import { FreeShowController } from "../modes/viewFree";
+import { AppShell } from "../ui/AppShell";
 import { FireworkSystem } from "./fx";
 import { createNightSkyScene } from "./scene/createNightSkyScene";
 
 export class NightSkyApp {
   readonly #audio: FireworkAudio;
   readonly #camera: PerspectiveCamera;
-  readonly #clock = new Clock();
   readonly #composer: EffectComposer;
   readonly #fireworks: FireworkSystem;
+  readonly #freeShow: FreeShowController;
   readonly #host: HTMLElement;
   readonly #renderer: WebGLRenderer;
   readonly #scene: Scene;
+  readonly #timer = new Timer();
   readonly #ui: AppShell;
   readonly #updateScene: (elapsedSeconds: number) => void;
   #animationFrame = 0;
-  #demoIndex = 0;
   #isRunning = false;
-  #isFreeRunning = true;
-  #mode: AppMode = "craft";
-  #nextDemoLaunch = 0.85;
 
   constructor(host: HTMLElement) {
     this.#host = host;
+    this.#timer.connect(document);
 
     const size = this.#measure();
     const nightSky = createNightSkyScene(size.width / size.height);
@@ -106,33 +98,45 @@ export class NightSkyApp {
     }
     const repository = new DesignRepository(storage);
     const craft = new CraftController(repository);
+    const getDesigns = () => [...FIREWORK_PRESETS, ...repository.list()];
+    this.#freeShow = new FreeShowController({
+      getDesigns,
+      onCue: (cue) => {
+        const design = getDesigns().find(
+          (candidate) => candidate.id === cue.fireworkDesignID,
+        );
+        if (!design) return;
+        this.#fireworks.launch(
+          { ...design, sizeClass: cue.sizePreset },
+          {
+            lane: cue.launcherLane,
+            launchAngle: cue.launchAngle,
+            seed: Math.floor(cue.time * 10_000) + cue.id.length * 97,
+            targetHeight: cue.targetHeight,
+          },
+        );
+      },
+      onState: (state) => {
+        this.#ui.setFreeState(state.running, state.title, state.detail);
+      },
+    });
     this.#ui = new AppShell(craft, {
       onAudioPhysicality: (value) => {
         this.#audio.physicality = value;
       },
       onDesignLibraryChange: () => undefined,
+      onFreeDensityChange: (value) => this.#freeShow.setDensity(value),
       onModeChange: (mode) => {
-        this.#mode = mode;
         if (mode === "free") {
-          this.#nextDemoLaunch = this.#clock.elapsedTime + 0.4;
-          this.#ui.setFreeState(
-            true,
-            "湖畔の序章",
-            "プリセットから演目を構成中",
-          );
+          this.#freeShow.start();
+        } else {
+          this.#freeShow.pause();
         }
       },
       onPreview: (design) => {
         this.#fireworks.launch(design, { lane: 0, seed: Date.now() });
       },
-      onFreeToggle: () => {
-        this.#isFreeRunning = !this.#isFreeRunning;
-        this.#ui.setFreeState(
-          this.#isFreeRunning,
-          "湖畔の序章",
-          this.#isFreeRunning ? "自動演出を再生中" : "余韻を残して一時停止中",
-        );
-      },
+      onFreeToggle: () => this.#freeShow.toggle(),
     });
     this.#host.replaceChildren(this.#renderer.domElement, this.#ui.element);
   }
@@ -140,7 +144,6 @@ export class NightSkyApp {
   start(): void {
     if (this.#isRunning) return;
     this.#isRunning = true;
-    this.#clock.start();
     window.addEventListener("resize", this.#resize);
     window.addEventListener("pointerdown", this.#unlockAudio, { once: true });
     window.addEventListener("keydown", this.#unlockAudio, { once: true });
@@ -155,6 +158,7 @@ export class NightSkyApp {
     window.removeEventListener("pointerdown", this.#unlockAudio);
     window.removeEventListener("keydown", this.#unlockAudio);
     void this.#audio.dispose();
+    this.#timer.dispose();
     this.#ui.destroy();
     this.#fireworks.dispose();
     this.#composer.dispose();
@@ -167,37 +171,15 @@ export class NightSkyApp {
     width: Math.max(this.#host.clientWidth, 1),
   });
 
-  readonly #launchDemo = (): void => {
-    const sizes: SizeClass[] = ["small", "medium", "large"];
-    const preset = FIREWORK_PRESETS[this.#demoIndex % FIREWORK_PRESETS.length];
-    const size =
-      sizes[
-        Math.floor(this.#demoIndex / FIREWORK_PRESETS.length) % sizes.length
-      ];
-    const design: FireworkDesign = withSizeClass(preset, size);
-    this.#fireworks.launch(design, {
-      lane: [-0.62, 0, 0.62][this.#demoIndex % 3],
-      seed: 2_026 + this.#demoIndex * 101,
-    });
-    this.#demoIndex += 1;
-  };
-
-  readonly #render = (): void => {
+  readonly #render = (timestamp: number): void => {
     if (!this.#isRunning) return;
-    const delta = Math.min(this.#clock.getDelta(), 0.05);
-    const elapsed = this.#clock.elapsedTime;
-    if (
-      this.#mode === "free" &&
-      this.#isFreeRunning &&
-      elapsed >= this.#nextDemoLaunch
-    ) {
-      this.#launchDemo();
-      this.#nextDemoLaunch =
-        elapsed + (this.#fireworks.activeCount > 1_400 ? 5.8 : 4.2);
-    }
+    this.#timer.update(timestamp);
+    const delta = Math.min(this.#timer.getDelta(), 0.05);
+    const elapsed = this.#timer.getElapsed();
+    this.#freeShow.update(delta);
     this.#fireworks.update(delta);
     this.#updateScene(elapsed);
-    this.#composer.render();
+    this.#composer.render(delta);
     this.#animationFrame = window.requestAnimationFrame(this.#render);
   };
 

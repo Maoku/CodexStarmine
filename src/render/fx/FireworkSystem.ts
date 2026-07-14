@@ -76,6 +76,7 @@ interface DelayedBurst {
 
 export interface LaunchOptions {
   lane?: number;
+  launchAngle?: number;
   seed?: number;
   targetHeight?: number;
 }
@@ -91,6 +92,7 @@ function createStarMaterial(reflection = false): ShaderMaterial {
       reflectionOpacity: { value: reflection ? 0.22 : 1 },
     },
     vertexShader: `
+      uniform float reflectionOpacity;
       attribute float alpha;
       attribute float pointSize;
       varying vec3 vColor;
@@ -242,6 +244,12 @@ export class FireworkSystem {
         vertexColors: true,
       }),
     );
+    // Dynamic buffer bounds start at the origin and otherwise cause valid
+    // airborne particles to be rejected by the camera frustum.
+    this.#smokePoints.frustumCulled = false;
+    this.#trails.frustumCulled = false;
+    this.#starPoints.frustumCulled = false;
+    this.#reflectionPoints.frustumCulled = false;
     this.#reflectionPoints.renderOrder = 4;
     this.#smokePoints.renderOrder = 1;
     scene.add(
@@ -281,7 +289,10 @@ export class FireworkSystem {
       targetHeight,
       trail: [clonePosition(position)],
       velocity: {
-        x: lane * -1.8 + (Math.random() - 0.5) * 1.4,
+        x:
+          lane * -1.8 +
+          (options.launchAngle ?? 0) * 18 +
+          (Math.random() - 0.5) * 1.4,
         y:
           Math.sqrt(2 * GRAVITY * Math.max(targetHeight - position.y, 1)) *
           1.025,
@@ -686,8 +697,10 @@ export class FireworkSystem {
       reflectionPosition.setXYZ(
         index,
         item.position.x * 1.03,
-        WATER_LEVEL - Math.max(item.position.y - WATER_LEVEL, 0) * 0.31,
-        item.position.z - 2,
+        WATER_LEVEL + 0.34,
+        -70 -
+          Math.max(item.position.y, 0) * 1.72 +
+          (item.position.z + 112) * 0.2,
       );
       reflectionColor.setXYZ(
         index,

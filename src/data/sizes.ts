@@ -29,7 +29,7 @@ export const SIZE_PRESETS: Record<SizeClass, SizePreset> = {
   large: {
     sizeClass: "large",
     label: "10号 · Large",
-    targetHeight: 205,
+    targetHeight: 165,
     burstScale: 1.46,
     particleScale: 1.48,
     pointScale: 1.24,
