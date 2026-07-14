@@ -1,0 +1,112 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  background: #020511;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: #020511;
+}
+
+.night-sky-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+.status-panel {
+  position: absolute;
+  top: clamp(1.25rem, 3vw, 2.5rem);
+  left: clamp(1.25rem, 3vw, 2.5rem);
+  z-index: 1;
+  max-width: min(22rem, calc(100vw - 2.5rem));
+  padding: 1rem 1.1rem 1.05rem;
+  border: 1px solid rgb(180 208 255 / 12%);
+  border-radius: 0.65rem;
+  background: rgb(3 8 22 / 58%);
+  box-shadow: 0 1.25rem 4rem rgb(0 0 0 / 18%);
+  color: #dbe6f7;
+  pointer-events: none;
+  backdrop-filter: blur(0.7rem);
+}
+
+.status-panel__eyebrow {
+  margin: 0 0 0.42rem;
+  color: #8298b8;
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+}
+
+.status-panel h1,
+.webgl-error h1 {
+  margin: 0;
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: clamp(1.2rem, 2.1vw, 1.55rem);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.status-panel__state {
+  display: flex;
+  align-items: center;
+  gap: 0.48rem;
+  margin: 0.65rem 0 0;
+  color: #96a7bf;
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+}
+
+.status-panel__state::before {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: #7ec7b6;
+  box-shadow: 0 0 0.8rem rgb(126 199 182 / 80%);
+  content: "";
+}
+
+.webgl-error {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: min(30rem, calc(100vw - 3rem));
+  padding: 1.5rem;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.75rem;
+  background: #070c1b;
+  color: #dbe6f7;
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.webgl-error p:last-child {
+  margin: 0.8rem 0 0;
+  color: #96a7bf;
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+
+@media (max-width: 480px) {
+  .status-panel {
+    padding: 0.8rem 0.9rem 0.85rem;
+  }
+}

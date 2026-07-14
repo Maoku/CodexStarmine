@@ -70,10 +70,11 @@ src/
 
 各フェーズの完了時に動作確認のうえ commit する（PLAN.md のバージョン管理方針）。フェーズ内でも機能単位で commit する。
 
-### Phase 0: プロジェクト基盤
+### Phase 0: プロジェクト基盤（完了: 2026-07-14）
 
-- Vite + TypeScript + three.js の雛形、ESLint/Prettier、Vitest、`src/` 構成の骨組み
-- 空の夜空シーンがブラウザに表示されること
+- [x] Vite + TypeScript + three.js の雛形、ESLint/Prettier、Vitest、`src/` 構成の骨組み
+- [x] 空の夜空シーンがブラウザに表示されること
+- **完了確認**: `npm run lint`、`npm run test:run`（3件成功）、`npm run build` が成功。1280×720 のブラウザで WebGL 2 キャンバス、夜空、Phase 0 ステータスを確認
 
 ### Phase 1: 夜景シーン基盤（湖畔）
 
