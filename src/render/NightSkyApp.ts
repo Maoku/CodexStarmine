@@ -1,10 +1,16 @@
 import {
-  NoToneMapping,
+  ACESFilmicToneMapping,
+  Clock,
   SRGBColorSpace,
   WebGLRenderer,
   type PerspectiveCamera,
   type Scene,
 } from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { Vector2 } from "three";
 
 import { clampPixelRatio } from "../core/env";
 import { createPhaseStatus } from "../ui/createPhaseStatus";
@@ -12,9 +18,13 @@ import { createNightSkyScene } from "./scene/createNightSkyScene";
 
 export class NightSkyApp {
   readonly #camera: PerspectiveCamera;
+  readonly #clock = new Clock();
+  readonly #composer: EffectComposer;
   readonly #host: HTMLElement;
   readonly #renderer: WebGLRenderer;
   readonly #scene: Scene;
+  readonly #updateScene: (elapsedSeconds: number) => void;
+  #animationFrame = 0;
   #isRunning = false;
 
   constructor(host: HTMLElement) {
@@ -24,6 +34,7 @@ export class NightSkyApp {
     const nightSky = createNightSkyScene(size.width / size.height);
     this.#camera = nightSky.camera;
     this.#scene = nightSky.scene;
+    this.#updateScene = nightSky.update;
 
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -33,12 +44,26 @@ export class NightSkyApp {
     this.#renderer.domElement.setAttribute("role", "img");
     this.#renderer.domElement.setAttribute(
       "aria-label",
-      "花火の打ち上げを待つ静かな夜空",
+      "月明かりと星空を映す湖畔の花火鑑賞シーン",
     );
     this.#renderer.outputColorSpace = SRGBColorSpace;
-    this.#renderer.toneMapping = NoToneMapping;
+    this.#renderer.toneMapping = ACESFilmicToneMapping;
+    this.#renderer.toneMappingExposure = 0.9;
     this.#renderer.setPixelRatio(clampPixelRatio(window.devicePixelRatio));
     this.#renderer.setSize(size.width, size.height, false);
+
+    this.#composer = new EffectComposer(this.#renderer);
+    this.#composer.setPixelRatio(clampPixelRatio(window.devicePixelRatio));
+    this.#composer.addPass(new RenderPass(this.#scene, this.#camera));
+    this.#composer.addPass(
+      new UnrealBloomPass(
+        new Vector2(size.width, size.height),
+        0.72,
+        0.62,
+        0.78,
+      ),
+    );
+    this.#composer.addPass(new OutputPass());
 
     this.#host.replaceChildren(
       this.#renderer.domElement,
@@ -52,8 +77,9 @@ export class NightSkyApp {
     }
 
     this.#isRunning = true;
+    this.#clock.start();
     window.addEventListener("resize", this.#resize);
-    this.#render();
+    this.#animationFrame = window.requestAnimationFrame(this.#render);
   }
 
   destroy(): void {
@@ -62,7 +88,9 @@ export class NightSkyApp {
     }
 
     this.#isRunning = false;
+    window.cancelAnimationFrame(this.#animationFrame);
     window.removeEventListener("resize", this.#resize);
+    this.#composer.dispose();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
   }
@@ -73,15 +101,23 @@ export class NightSkyApp {
   });
 
   readonly #render = (): void => {
-    this.#renderer.render(this.#scene, this.#camera);
+    if (!this.#isRunning) {
+      return;
+    }
+
+    this.#updateScene(this.#clock.getElapsedTime());
+    this.#composer.render();
+    this.#animationFrame = window.requestAnimationFrame(this.#render);
   };
 
   readonly #resize = (): void => {
     const size = this.#measure();
+    const pixelRatio = clampPixelRatio(window.devicePixelRatio);
     this.#camera.aspect = size.width / size.height;
     this.#camera.updateProjectionMatrix();
-    this.#renderer.setPixelRatio(clampPixelRatio(window.devicePixelRatio));
+    this.#renderer.setPixelRatio(pixelRatio);
     this.#renderer.setSize(size.width, size.height, false);
-    this.#render();
+    this.#composer.setPixelRatio(pixelRatio);
+    this.#composer.setSize(size.width, size.height);
   };
 }
