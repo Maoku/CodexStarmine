@@ -16,6 +16,7 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   PlaneGeometry,
+  PointLight,
   Points,
   PointsMaterial,
   Scene,
@@ -32,6 +33,7 @@ export const WATER_LEVEL = 0;
 export interface NightSkyScene {
   camera: PerspectiveCamera;
   environmentLight: HemisphereLight;
+  flash: (position: Vector3, color: number, strength: number) => void;
   scene: Scene;
   update: (elapsedSeconds: number) => void;
 }
@@ -186,6 +188,8 @@ function createLake(): {
       deepColor: { value: new Color(0x010711) },
       horizonColor: { value: new Color(0x142c47) },
       moonColor: { value: new Color(0x9cb6d0) },
+      flashColor: { value: new Color(0xffffff) },
+      flashIntensity: { value: 0 },
     },
     vertexShader: `
       uniform float time;
@@ -206,6 +210,8 @@ function createLake(): {
       uniform vec3 deepColor;
       uniform vec3 horizonColor;
       uniform vec3 moonColor;
+      uniform vec3 flashColor;
+      uniform float flashIntensity;
       varying vec2 vUv;
       varying float vRipple;
       float hash(vec2 p) {
@@ -221,6 +227,7 @@ function createLake(): {
         moonPath *= smoothstep(0.02, 0.58, vUv.y) * (0.6 + sparkle * 1.8);
         color += moonColor * moonPath * (0.045 + sparkle * 0.075);
         color += vec3(0.018, 0.035, 0.052) * sparkle;
+        color += flashColor * flashIntensity * (0.035 + horizon * 0.12 + sparkle * 0.05);
         color += vRipple * 0.008;
         gl_FragColor = vec4(color, 0.97);
       }
@@ -273,14 +280,34 @@ export function createNightSkyScene(aspect: number): NightSkyScene {
 
   const environmentLight = new HemisphereLight(0x334b71, 0x010204, 0.42);
   const moonLight = new DirectionalLight(0x8ca6c9, 0.36);
+  const burstLight = new PointLight(0xffffff, 0, 620, 1.45);
+  let flashEnergy = 0;
+  let lastElapsed = 0;
   moonLight.position.set(-160, 260, -180);
-  scene.add(environmentLight, moonLight, new AmbientLight(0x10182b, 0.18));
+  scene.add(
+    environmentLight,
+    moonLight,
+    burstLight,
+    new AmbientLight(0x10182b, 0.18),
+  );
 
   return {
     camera,
     environmentLight,
+    flash: (position: Vector3, color: number, strength: number) => {
+      flashEnergy = Math.min(Math.max(strength, 0), 1.8);
+      burstLight.position.copy(position);
+      burstLight.color.setHex(color);
+      lakeMaterial.uniforms.flashColor.value.setHex(color);
+    },
     scene,
     update: (elapsedSeconds: number) => {
+      const delta = Math.min(Math.max(elapsedSeconds - lastElapsed, 0), 0.1);
+      lastElapsed = elapsedSeconds;
+      flashEnergy *= Math.exp(-delta * 5.8);
+      burstLight.intensity = flashEnergy * 210;
+      environmentLight.intensity = 0.42 + flashEnergy * 0.23;
+      lakeMaterial.uniforms.flashIntensity.value = flashEnergy;
       lakeMaterial.uniforms.time.value = elapsedSeconds;
     },
   };

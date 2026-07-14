@@ -2,6 +2,7 @@ import {
   ACESFilmicToneMapping,
   Clock,
   SRGBColorSpace,
+  Vector3,
   WebGLRenderer,
   type PerspectiveCamera,
   type Scene,
@@ -12,9 +13,11 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { Vector2 } from "three";
 
+import { FireworkAudio } from "../audio";
 import { clampPixelRatio } from "../core/env";
 import {
   FIREWORK_PRESETS,
+  resolveSizePreset,
   withSizeClass,
   type FireworkDesign,
   type SizeClass,
@@ -24,6 +27,7 @@ import { FireworkSystem } from "./fx";
 import { createNightSkyScene } from "./scene/createNightSkyScene";
 
 export class NightSkyApp {
+  readonly #audio: FireworkAudio;
   readonly #camera: PerspectiveCamera;
   readonly #clock = new Clock();
   readonly #composer: EffectComposer;
@@ -45,7 +49,20 @@ export class NightSkyApp {
     this.#camera = nightSky.camera;
     this.#scene = nightSky.scene;
     this.#updateScene = nightSky.update;
-    this.#fireworks = new FireworkSystem(this.#scene);
+    this.#audio = new FireworkAudio();
+    this.#fireworks = new FireworkSystem(this.#scene, {
+      onBurst: (position, design) => {
+        this.#audio.playBurst(position, design);
+        const stage = design.colorStages[1] ?? design.colorStages[0];
+        const size = resolveSizePreset(design.sizeClass);
+        nightSky.flash(
+          new Vector3(position.x, position.y, position.z),
+          stage?.color ?? 0xffffff,
+          (stage?.intensity ?? 1) * size.pointScale,
+        );
+      },
+      onLaunch: (design) => this.#audio.playLaunch(design),
+    });
 
     this.#renderer = new WebGLRenderer({
       antialias: true,
@@ -87,6 +104,8 @@ export class NightSkyApp {
     this.#isRunning = true;
     this.#clock.start();
     window.addEventListener("resize", this.#resize);
+    window.addEventListener("pointerdown", this.#unlockAudio, { once: true });
+    window.addEventListener("keydown", this.#unlockAudio, { once: true });
     this.#animationFrame = window.requestAnimationFrame(this.#render);
   }
 
@@ -95,6 +114,9 @@ export class NightSkyApp {
     this.#isRunning = false;
     window.cancelAnimationFrame(this.#animationFrame);
     window.removeEventListener("resize", this.#resize);
+    window.removeEventListener("pointerdown", this.#unlockAudio);
+    window.removeEventListener("keydown", this.#unlockAudio);
+    void this.#audio.dispose();
     this.#fireworks.dispose();
     this.#composer.dispose();
     this.#renderer.dispose();
@@ -134,6 +156,10 @@ export class NightSkyApp {
     this.#updateScene(elapsed);
     this.#composer.render();
     this.#animationFrame = window.requestAnimationFrame(this.#render);
+  };
+
+  readonly #unlockAudio = (): void => {
+    void this.#audio.unlock();
   };
 
   readonly #resize = (): void => {

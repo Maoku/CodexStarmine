@@ -8,13 +8,13 @@ export function createPhaseStatus(isWebGL2: boolean): HTMLElement {
   eyebrow.textContent = "CODEX STARMINE";
 
   const heading = document.createElement("h1");
-  heading.textContent = "六景、三つの大きさ";
+  heading.textContent = "光のあと、音が届く";
 
   const state = document.createElement("p");
   state.className = "status-panel__state";
   state.textContent = isWebGL2
-    ? "PHASE 3 · 6 PATTERNS / 3 SIZES"
-    : "PHASE 3 · WEBGL ACTIVE";
+    ? "PHASE 4 · LIGHT / SOUND / SMOKE"
+    : "PHASE 4 · WEBGL ACTIVE";
 
   panel.append(eyebrow, heading, state);
   return panel;

@@ -6,6 +6,7 @@ import {
   DynamicDrawUsage,
   LineBasicMaterial,
   LineSegments,
+  NormalBlending,
   Points,
   Scene,
   ShaderMaterial,
@@ -31,14 +32,27 @@ import {
 import { WATER_LEVEL } from "../scene/createNightSkyScene";
 
 const MAX_STARS = 6_000;
+const MAX_SMOKE = 1_400;
 const MAX_TRAIL_VERTICES = 60_000;
 const GRAVITY = 9.81;
 
 interface Shell extends BallisticParticle {
   design: FireworkDesign;
   seed: number;
+  smokeTimer: number;
   targetHeight: number;
   trail: Vector3Value[];
+}
+
+interface SmokeParticle {
+  age: number;
+  baseColor: number;
+  illumination: number;
+  illuminationColor: number;
+  lifetime: number;
+  position: Vector3Value;
+  size: number;
+  velocity: Vector3Value;
 }
 
 interface Star extends BallisticParticle {
@@ -127,6 +141,56 @@ function createPointGeometry(): BufferGeometry {
   return geometry;
 }
 
+function createSmokeGeometry(): BufferGeometry {
+  const geometry = new BufferGeometry();
+  const position = new BufferAttribute(new Float32Array(MAX_SMOKE * 3), 3);
+  const color = new BufferAttribute(new Float32Array(MAX_SMOKE * 3), 3);
+  const alpha = new BufferAttribute(new Float32Array(MAX_SMOKE), 1);
+  const pointSize = new BufferAttribute(new Float32Array(MAX_SMOKE), 1);
+  for (const attribute of [position, color, alpha, pointSize]) {
+    attribute.setUsage(DynamicDrawUsage);
+  }
+  geometry.setAttribute("position", position);
+  geometry.setAttribute("color", color);
+  geometry.setAttribute("alpha", alpha);
+  geometry.setAttribute("pointSize", pointSize);
+  geometry.setDrawRange(0, 0);
+  return geometry;
+}
+
+function createSmokeMaterial(): ShaderMaterial {
+  return new ShaderMaterial({
+    vertexShader: `
+      attribute float alpha;
+      attribute float pointSize;
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+        vColor = color;
+        vAlpha = alpha;
+        gl_PointSize = clamp(pointSize * (260.0 / max(-viewPosition.z, 1.0)), 2.0, 54.0);
+        gl_Position = projectionMatrix * viewPosition;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        float d = length(gl_PointCoord - vec2(0.5));
+        float cloud = 1.0 - smoothstep(0.15, 0.5, d);
+        cloud *= 0.72 + sin(gl_PointCoord.x * 21.0) * sin(gl_PointCoord.y * 17.0) * 0.12;
+        if (cloud * vAlpha < 0.008) discard;
+        gl_FragColor = vec4(vColor, cloud * vAlpha);
+      }
+    `,
+    blending: NormalBlending,
+    depthWrite: false,
+    transparent: true,
+    vertexColors: true,
+  });
+}
+
 function clonePosition(position: Vector3Value): Vector3Value {
   return { x: position.x, y: position.y, z: position.z };
 }
@@ -140,11 +204,17 @@ export class FireworkSystem {
   );
   readonly #starGeometry = createPointGeometry();
   readonly #starPoints = new Points(this.#starGeometry, createStarMaterial());
+  readonly #smokeGeometry = createSmokeGeometry();
+  readonly #smokePoints = new Points(
+    this.#smokeGeometry,
+    createSmokeMaterial(),
+  );
   readonly #trailGeometry = new BufferGeometry();
   readonly #trails: LineSegments;
   readonly #wind = { x: 1.25, y: 0, z: 0.18 };
   #delayedBursts: DelayedBurst[] = [];
   #shells: Shell[] = [];
+  #smoke: SmokeParticle[] = [];
   #stars: Star[] = [];
 
   constructor(scene: Scene, callbacks: FireworkSystemCallbacks = {}) {
@@ -173,7 +243,13 @@ export class FireworkSystem {
       }),
     );
     this.#reflectionPoints.renderOrder = 4;
-    scene.add(this.#trails, this.#starPoints, this.#reflectionPoints);
+    this.#smokePoints.renderOrder = 1;
+    scene.add(
+      this.#smokePoints,
+      this.#trails,
+      this.#starPoints,
+      this.#reflectionPoints,
+    );
   }
 
   get activeCount(): number {
@@ -201,6 +277,7 @@ export class FireworkSystem {
       lifetime: 4.2,
       position,
       seed,
+      smokeTimer: 0,
       targetHeight,
       trail: [clonePosition(position)],
       velocity: {
@@ -220,16 +297,20 @@ export class FireworkSystem {
     this.#updateShells(delta);
     this.#updateDelayedBursts(delta);
     this.#updateStars(delta);
+    this.#updateSmoke(delta);
     this.#writePointBuffers();
     this.#writeTrailBuffers();
+    this.#writeSmokeBuffers();
   }
 
   dispose(): void {
     this.#starGeometry.dispose();
     this.#reflectionGeometry.dispose();
+    this.#smokeGeometry.dispose();
     this.#trailGeometry.dispose();
     (this.#starPoints.material as ShaderMaterial).dispose();
     (this.#reflectionPoints.material as ShaderMaterial).dispose();
+    (this.#smokePoints.material as ShaderMaterial).dispose();
     (this.#trails.material as LineBasicMaterial).dispose();
   }
 
@@ -385,6 +466,14 @@ export class FireworkSystem {
 
   #burst(shell: Shell): void {
     this.#emitBurst(shell.position, shell.velocity, shell.design, shell.seed);
+    this.#spawnBurstSmoke(shell.position, shell.design);
+    this.#illuminateSmoke(
+      shell.position,
+      shell.design.colorStages[1]?.color ??
+        shell.design.colorStages[0]?.color ??
+        0xffffff,
+      resolveSizePreset(shell.design.sizeClass).burstScale,
+    );
     this.#callbacks.onBurst?.(clonePosition(shell.position), shell.design);
   }
 
@@ -418,6 +507,24 @@ export class FireworkSystem {
     const active: Shell[] = [];
     for (const shell of this.#shells) {
       integrateParticle(shell, delta, { gravity: GRAVITY, wind: this.#wind });
+      shell.smokeTimer += delta;
+      if (shell.smokeTimer >= 0.085) {
+        shell.smokeTimer = 0;
+        this.#smoke.push({
+          age: 0,
+          baseColor: 0x536170,
+          illumination: 0,
+          illuminationColor: 0xffffff,
+          lifetime: shell.design.smokeProfile.lifetime * 0.58,
+          position: clonePosition(shell.position),
+          size: 2.4 + shell.design.smokeProfile.amount * 2.1,
+          velocity: {
+            x: this.#wind.x * 0.32 + (Math.random() - 0.5) * 0.25,
+            y: -0.45 + Math.random() * 0.5,
+            z: this.#wind.z * 0.3,
+          },
+        });
+      }
       shell.trail.push(clonePosition(shell.position));
       if (shell.trail.length > 18) {
         shell.trail.shift();
@@ -433,6 +540,84 @@ export class FireworkSystem {
       }
     }
     this.#shells = active;
+  }
+
+  #spawnBurstSmoke(position: Vector3Value, design: FireworkDesign): void {
+    const size = resolveSizePreset(design.sizeClass);
+    const count = Math.round(
+      14 * design.smokeProfile.amount * Math.sqrt(size.particleScale),
+    );
+    for (let index = 0; index < count; index += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const vertical = Math.random() * 2 - 1;
+      const radial = Math.sqrt(Math.max(1 - vertical * vertical, 0));
+      this.#smoke.push({
+        age: 0,
+        baseColor: 0x4c5664,
+        illumination: 0.82,
+        illuminationColor:
+          design.colorStages[1]?.color ??
+          design.colorStages[0]?.color ??
+          0xffffff,
+        lifetime: design.smokeProfile.lifetime * (0.82 + Math.random() * 0.35),
+        position: {
+          x: position.x + Math.cos(angle) * radial * Math.random() * 3,
+          y: position.y + vertical * Math.random() * 3,
+          z: position.z + Math.sin(angle) * radial * Math.random() * 3,
+        },
+        size: (4.8 + Math.random() * 4.2) * size.pointScale,
+        velocity: {
+          x: Math.cos(angle) * radial * (1.2 + Math.random() * 2.4),
+          y: vertical * (1 + Math.random() * 1.8),
+          z: Math.sin(angle) * radial * (1.2 + Math.random() * 2.4),
+        },
+      });
+    }
+    if (this.#smoke.length > MAX_SMOKE) {
+      this.#smoke.splice(0, this.#smoke.length - MAX_SMOKE);
+    }
+  }
+
+  #illuminateSmoke(
+    position: Vector3Value,
+    color: number,
+    sizeScale: number,
+  ): void {
+    const range = 92 * sizeScale;
+    for (const smoke of this.#smoke) {
+      const distance = Math.hypot(
+        smoke.position.x - position.x,
+        smoke.position.y - position.y,
+        smoke.position.z - position.z,
+      );
+      if (distance < range) {
+        smoke.illumination = Math.max(
+          smoke.illumination,
+          (1 - distance / range) * 0.92,
+        );
+        smoke.illuminationColor = color;
+      }
+    }
+  }
+
+  #updateSmoke(delta: number): void {
+    const active: SmokeParticle[] = [];
+    for (const smoke of this.#smoke) {
+      smoke.age += delta;
+      smoke.velocity.x += this.#wind.x * 0.12 * delta;
+      smoke.velocity.y += 0.13 * delta;
+      smoke.velocity.z += this.#wind.z * 0.12 * delta;
+      smoke.position.x += smoke.velocity.x * delta;
+      smoke.position.y += smoke.velocity.y * delta;
+      smoke.position.z += smoke.velocity.z * delta;
+      smoke.velocity.x *= Math.exp(-0.34 * delta);
+      smoke.velocity.y *= Math.exp(-0.34 * delta);
+      smoke.velocity.z *= Math.exp(-0.34 * delta);
+      smoke.size += delta * 1.9;
+      smoke.illumination *= Math.exp(-delta * 2.8);
+      if (smoke.age < smoke.lifetime) active.push(smoke);
+    }
+    this.#smoke = active;
   }
 
   #updateStars(delta: number): void {
@@ -591,5 +776,44 @@ export class FireworkSystem {
     position.needsUpdate = true;
     color.needsUpdate = true;
     this.#trailGeometry.setDrawRange(0, vertex);
+  }
+
+  #writeSmokeBuffers(): void {
+    const position = this.#smokeGeometry.getAttribute(
+      "position",
+    ) as BufferAttribute;
+    const color = this.#smokeGeometry.getAttribute("color") as BufferAttribute;
+    const alpha = this.#smokeGeometry.getAttribute("alpha") as BufferAttribute;
+    const pointSize = this.#smokeGeometry.getAttribute(
+      "pointSize",
+    ) as BufferAttribute;
+    const base = new Color();
+    const lit = new Color();
+
+    this.#smoke.slice(0, MAX_SMOKE).forEach((smoke, index) => {
+      const life = smoke.age / smoke.lifetime;
+      const fadeIn = Math.min(smoke.age / 0.6, 1);
+      const fadeOut = Math.pow(1 - life, 1.45);
+      base.setHex(smoke.baseColor);
+      lit.setHex(smoke.illuminationColor);
+      base.lerp(lit, smoke.illumination * 0.72);
+      position.setXYZ(
+        index,
+        smoke.position.x,
+        smoke.position.y,
+        smoke.position.z,
+      );
+      color.setXYZ(index, base.r, base.g, base.b);
+      alpha.setX(index, fadeIn * fadeOut * (0.12 + smoke.illumination * 0.2));
+      pointSize.setX(index, smoke.size);
+    });
+
+    for (const attribute of [position, color, alpha, pointSize]) {
+      attribute.needsUpdate = true;
+    }
+    this.#smokeGeometry.setDrawRange(
+      0,
+      Math.min(this.#smoke.length, MAX_SMOKE),
+    );
   }
 }
