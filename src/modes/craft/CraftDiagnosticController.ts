@@ -3,6 +3,7 @@ import type {
   FireworkLayer,
   VirtualStarPreset,
 } from "../../data";
+import { deriveVirtualBehavior } from "../../core/burst";
 
 export interface DiagnosticColorStep {
   color: number;
@@ -65,6 +66,36 @@ function uniqueDefinitions(
     .filter((value): value is VirtualStarPreset => Boolean(value));
 }
 
+function layerDensity(layer: FireworkLayer): number {
+  if (layer.kind === "spherical") return Math.min(layer.count / 900, 1);
+  if (layer.kind === "pattern") return Math.min(layer.points.length / 320, 1);
+  if (layer.kind === "branch") {
+    return Math.min((layer.branchCount * layer.starsPerBranch) / 320, 1);
+  }
+  return Math.min(layer.count / 48, 1);
+}
+
+function derivedBehavior(
+  design: FireworkDesign,
+  layer: FireworkLayer,
+  star: VirtualStarPreset,
+) {
+  if (design.schemaVersion !== 3) return undefined;
+  return deriveVirtualBehavior({
+    assemblySeed: design.assemblySeed,
+    derivationVersion: design.derivationVersion,
+    layer,
+    localDensity: layerDensity(layer),
+    normalizedPosition: {
+      x: layer.kind === "spherical" ? layer.radius : 1,
+      y: 0,
+      z: 0,
+    },
+    sizeClass: design.sizeClass,
+    star,
+  });
+}
+
 export function buildEditorDiagnostic(
   design: FireworkDesign,
 ): EditorDiagnostic {
@@ -86,12 +117,13 @@ export function buildEditorDiagnostic(
     }
     const definitions = uniqueDefinitions(design, layer);
     definitions.forEach((definition) => {
+      const behavior = derivedBehavior(design, layer, definition);
       definition.colorStages.forEach((stage) => {
         colors.push({
           color: stage.color,
           label: `${layer.name}・${definition.displayName}`,
           time:
-            layer.ignitionOffset +
+            (behavior?.ignitionOffset ?? layer.ignitionOffset) +
             stage.normalizedTime * definition.burnDuration,
         });
       });
@@ -104,7 +136,8 @@ export function buildEditorDiagnostic(
         duration: definition.burnDuration,
         label: layer.name,
         start:
-          layer.ignitionOffset + (layer.kind === "child" ? layer.delay : 0),
+          (behavior?.ignitionOffset ?? layer.ignitionOffset) +
+          (layer.kind === "child" ? (behavior?.childDelay ?? layer.delay) : 0),
       });
     });
   });
@@ -124,7 +157,13 @@ export function buildEditorDiagnostic(
   }
   for (const layer of visibleLayers) {
     if (layer.kind === "spherical" && layer.count > 0) {
-      const effectiveMissing = layer.missingRate + design.realism.missingRate;
+      const definition = design.starDefinitions[layer.defaultStarId];
+      const behavior = definition
+        ? derivedBehavior(design, layer, definition)
+        : undefined;
+      const effectiveMissing =
+        layer.missingRate +
+        (behavior?.missingRate ?? design.realism.missingRate);
       if (effectiveMissing > 0.25) {
         warnings.push(
           `${layer.name}は欠け率が高く、輪が途切れる可能性があります。`,
@@ -136,7 +175,17 @@ export function buildEditorDiagnostic(
         );
       }
     }
-    if (layer.kind === "pattern" && layer.rotationJitter > layer.allowedAngle) {
+    if (layer.kind === "pattern") {
+      const definition = design.starDefinitions[layer.defaultStarId];
+      const behavior = definition
+        ? derivedBehavior(design, layer, definition)
+        : undefined;
+      if (
+        (behavior?.rotationJitter ?? layer.rotationJitter) <=
+        (behavior?.allowedAngle ?? layer.allowedAngle)
+      ) {
+        continue;
+      }
       warnings.push(
         `${layer.name}は許容角度を超えて向きが崩れる可能性があります。`,
       );

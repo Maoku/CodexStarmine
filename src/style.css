@@ -1767,6 +1767,16 @@ input[type="range"] {
   padding: 0.65rem 0.72rem;
 }
 
+.inspector-note {
+  margin: 0;
+  padding: 0.62rem 0.7rem;
+  border-left: 3px solid rgba(198, 164, 119, 0.68);
+  color: #aeb5ba;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.58rem;
+  line-height: 1.55;
+}
+
 .inspector-fields label {
   display: grid;
   gap: 0.3rem;

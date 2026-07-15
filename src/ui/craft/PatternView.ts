@@ -1,4 +1,5 @@
 import type { FireworkDesign, PatternStarLayer } from "../../data";
+import { deriveVirtualBehavior } from "../../core/burst";
 import { colorToCSS, escapeHTML } from "./viewUtils";
 
 export function renderPatternView(
@@ -10,6 +11,19 @@ export function renderPatternView(
     return `<div class="pattern-empty"><strong>型物レイヤーを選択</strong><p>左の「型物を追加」から、玉内の平面配置ガイドを作成します。</p></div>`;
   }
   const groups = new Map(layer.groups.map((group) => [group.id, group]));
+  const defaultStar = design.starDefinitions[layer.defaultStarId];
+  const orientationDegrees =
+    design.schemaVersion === 3 && defaultStar
+      ? deriveVirtualBehavior({
+          assemblySeed: design.assemblySeed,
+          derivationVersion: design.derivationVersion,
+          layer,
+          localDensity: Math.min(layer.points.length / 320, 1),
+          normalizedPosition: { x: 1, y: 0, z: 0 },
+          sizeClass: design.sizeClass,
+          star: defaultStar,
+        }).orientationDegrees
+      : layer.orientationDegrees;
   const points = layer.points
     .map((point, index) => {
       const group = groups.get(point.groupId);
@@ -41,7 +55,7 @@ export function renderPatternView(
         <path d="M220 28v324M28 190h384" class="pattern-axis" />
         <circle cx="220" cy="190" r="156" class="pattern-boundary" />
         ${points}
-        <path d="M220 190l${Math.sin((layer.orientationDegrees / 180) * Math.PI) * 70} ${-Math.cos((layer.orientationDegrees / 180) * Math.PI) * 70}" class="pattern-facing" />
+        <path d="M220 190l${Math.sin((orientationDegrees / 180) * Math.PI) * 70} ${-Math.cos((orientationDegrees / 180) * Math.PI) * 70}" class="pattern-facing" />
       </svg>
       <div class="pattern-groups">${groupRows}</div>
       <p>これは玉内の配置ガイドです。空中で開いた完成形は表示していません。</p>

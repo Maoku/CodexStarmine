@@ -1,6 +1,7 @@
 import {
   FIREWORK_PRESETS,
   PEONY_PRESET,
+  ensureFireworkDesignV3,
   type AscentEffect,
   type DesignRepository,
   type FireworkDesign,
@@ -33,7 +34,7 @@ export class CraftController {
     this.#repository = repository;
     this.#presets = presets;
     this.document = new CraftDocumentStore(
-      cloneDesign(presets[0] ?? PEONY_PRESET),
+      ensureFireworkDesignV3(cloneDesign(presets[0] ?? PEONY_PRESET)),
     );
   }
 
@@ -57,7 +58,7 @@ export class CraftController {
     const sizeClass = this.draft.sizeClass;
     this.document.replace(
       {
-        ...cloneDesign(preset),
+        ...ensureFireworkDesignV3(cloneDesign(preset)),
         id: `draft-${pattern}`,
         sizeClass,
       },
@@ -81,7 +82,9 @@ export class CraftController {
         : template === "peony"
           ? this.#presets.find((candidate) => candidate.pattern === "peony")
           : undefined;
-    const draft = source ? cloneDesign(source) : this.#createBlankDesign();
+    const draft = source
+      ? ensureFireworkDesignV3(cloneDesign(source))
+      : this.#createBlankDesign();
     draft.id = "draft-new";
     draft.name =
       template === "chrysanthemum"
@@ -94,7 +97,7 @@ export class CraftController {
   }
 
   #createBlankDesign(): FireworkDesign {
-    const blank = cloneDesign(PEONY_PRESET);
+    const blank = ensureFireworkDesignV3(cloneDesign(PEONY_PRESET));
     blank.ascentEffect = "none";
     blank.childBursts = [];
     blank.coreLayers = [];

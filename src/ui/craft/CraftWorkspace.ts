@@ -331,7 +331,7 @@ export class CraftWorkspace {
           .join("")}</select></label>
         <label><span>号数</span><select name="size"><option value="small" ${design.sizeClass === "small" ? "selected" : ""}>3号</option><option value="medium" ${design.sizeClass === "medium" ? "selected" : ""}>5号</option><option value="large" ${design.sizeClass === "large" ? "selected" : ""}>10号</option></select></label>
       </div>
-      <label><span>本番の揺らぎ <output>${Math.round(design.launchVariation.velocity * 100)}%</output></span><input name="launch-variation" type="range" min="0" max="12" value="${Math.round(design.launchVariation.velocity * 100)}" /></label>
+      <p class="inspector-note">広がり、発火順、速度、重力、減速は、星種と玉内配置から自動調整されます。</p>
     </div>`;
   }
 
@@ -349,28 +349,21 @@ export class CraftWorkspace {
       specific = `
         <label><span>仮想星数 <output>${layer.count}</output></span><input name="layer-count" type="range" min="12" max="900" step="1" value="${layer.count}" /></label>
         <label><span>層の半径 <output>${Math.round(layer.radius * 100)}%</output></span><input name="layer-radius" type="range" min="20" max="100" value="${Math.round(layer.radius * 100)}" /></label>
-        <label><span>欠け率 <output>${Math.round(layer.missingRate * 100)}%</output></span><input name="layer-missing" type="range" min="0" max="35" value="${Math.round(layer.missingRate * 100)}" /></label>
         <label><span>空間配色</span><select name="spatial-color"><option value="layer" ${layer.coloring.mode === "layer" ? "selected" : ""}>レイヤー一括</option><option value="alternating" ${layer.coloring.mode === "alternating" ? "selected" : ""}>交互色</option><option value="latitude" ${layer.coloring.mode === "latitude" ? "selected" : ""}>緯度帯</option><option value="longitude" ${layer.coloring.mode === "longitude" ? "selected" : ""}>経度セクター</option></select></label>`;
     } else if (layer.kind === "pattern") {
       specific = `
-        <label><span>正面方向 <output>${layer.orientationDegrees}°</output></span><input name="pattern-orientation" type="range" min="0" max="90" step="30" value="${layer.orientationDegrees}" /></label>
-        <label><span>許容角度 <output>${layer.allowedAngle}°</output></span><input name="pattern-angle" type="range" min="15" max="60" value="${layer.allowedAngle}" /></label>
         <label><span>奥行き <output>${Math.round(layer.depth * 100)}%</output></span><input name="pattern-depth" type="range" min="0" max="25" value="${Math.round(layer.depth * 100)}" /></label>
         <label><span>向き方針</span><select name="pattern-facing"><option value="audience" ${layer.facingPolicy === "audience" ? "selected" : ""}>観客正面を優先</option><option value="venue" ${layer.facingPolicy === "venue" ? "selected" : ""}>会場正面に固定</option><option value="random" ${layer.facingPolicy === "random" ? "selected" : ""}>ランダム</option></select></label>
-        <label><span>回転ゆらぎ <output>${layer.rotationJitter}°</output></span><input name="pattern-jitter" type="range" min="0" max="60" value="${layer.rotationJitter}" /></label>
         <div class="pattern-group-editors">${layer.groups.map((group) => `<label><span>${escapeHTML(group.name)}の色</span><select name="pattern-group-star" data-group="${group.id}">${optionsFor(group.starId)}</select></label>`).join("")}</div>`;
     } else if (layer.kind === "child") {
       specific = `
-        <label><span>子花数 <output>${layer.count}</output></span><input name="child-count" type="range" min="4" max="48" value="${layer.count}" /></label>
-        <label><span>発火遅延 <output>${layer.delay.toFixed(2)}秒</output></span><input name="child-delay" type="range" min="20" max="160" value="${Math.round(layer.delay * 100)}" /></label>
-        <label><span>波状時間差 <output>${layer.waveDelay.toFixed(3)}秒</output></span><input name="child-wave" type="range" min="0" max="8" value="${Math.round(layer.waveDelay * 1000)}" /></label>`;
+        <label><span>子花数 <output>${layer.count}</output></span><input name="child-count" type="range" min="4" max="48" value="${layer.count}" /></label>`;
     } else {
       specific = `<label><span>枝数 <output>${layer.branchCount}</output></span><input name="branch-count" type="range" min="5" max="20" value="${layer.branchCount}" /></label>`;
     }
     return `<div class="inspector-divider"></div><div class="inspector-fields">
       <label><span>レイヤー名</span><input name="layer-name" type="text" maxlength="24" value="${escapeHTML(layer.name)}" /></label>
       <label><span>既定の仮想星</span><select name="layer-star">${starOptions}</select></label>
-      <label><span>発火タイミング <output>${layer.ignitionOffset.toFixed(2)}秒</output></span><input name="layer-ignition" type="range" min="0" max="100" value="${Math.round(layer.ignitionOffset * 100)}" /></label>
       ${specific}
       <div class="inspector-actions"><button type="button" data-action="duplicate-layer">複製</button><button type="button" data-action="delete-layer">削除</button></div>
     </div>`;
@@ -382,12 +375,7 @@ export class CraftWorkspace {
   ): string {
     return `<div class="inspector-fields" data-star-editor="${id}">
       <label><span>名称</span><input name="star-name" type="text" maxlength="28" value="${escapeHTML(star.displayName)}" /></label>
-      <label><span>寿命 <output>${star.burnDuration.toFixed(1)}秒</output></span><input name="star-duration" type="range" min="80" max="600" value="${Math.round(star.burnDuration * 100)}" /></label>
-      <label><span>輝度 <output>${Math.round(star.brightness * 100)}%</output></span><input name="star-brightness" type="range" min="40" max="160" value="${Math.round(star.brightness * 100)}" /></label>
-      <label><span>尾 <output>${Math.round(star.trailLifetime * 100)}%</output></span><input name="star-trail" type="range" min="0" max="100" value="${Math.round(star.trailLifetime * 100)}" /></label>
-      <label><span>点滅 <output>${Math.round(star.flicker * 100)}%</output></span><input name="star-flicker" type="range" min="0" max="100" value="${Math.round(star.flicker * 100)}" /></label>
-      <label><span>垂れ方 <output>${Math.round(star.gravityScale * 100)}%</output></span><input name="star-gravity" type="range" min="20" max="220" value="${Math.round(star.gravityScale * 100)}" /></label>
-      <label><span>減速 <output>${Math.round(star.drag * 100)}%</output></span><input name="star-drag" type="range" min="10" max="120" value="${Math.round(star.drag * 100)}" /></label>
+      <p class="inspector-note">星の広がり方と寿命は種類ごとの特性として自動調整されます。ここでは時間配色だけを編集できます。</p>
       <div class="star-stage-list">
         ${star.colorStages.map((stage, index) => `<div><b>${index + 1}</b><input aria-label="段階${index + 1}の色" name="star-stage-color" data-stage="${index}" type="color" value="${colorToCSS(stage.color)}" /><input aria-label="段階${index + 1}の時刻" name="star-stage-time" data-stage="${index}" type="range" min="0" max="100" value="${Math.round(stage.normalizedTime * 100)}" />${star.colorStages.length > 1 ? `<button type="button" data-action="remove-star-stage" data-stage="${index}">×</button>` : ""}</div>`).join("")}
       </div>
@@ -506,11 +494,6 @@ export class CraftWorkspace {
       this.#controller.selectPattern(value as FireworkDesign["pattern"]);
     } else if (name === "size") {
       this.#controller.updateSize(value as FireworkDesign["sizeClass"]);
-    } else if (name === "launch-variation") {
-      this.#controller.document.update("本番の揺らぎを変更", (draft) => {
-        draft.launchVariation.velocity = Number(value) / 100;
-        draft.launchVariation.placement = Number(value) / 250;
-      });
     } else if (
       name.startsWith("layer-") ||
       name.startsWith("pattern-") ||
@@ -784,26 +767,17 @@ export class CraftWorkspace {
     this.#updateLayer(layerId, "配置属性を変更", (layer) => {
       if (name === "layer-name") layer.name = value;
       else if (name === "layer-star") layer.defaultStarId = value;
-      else if (name === "layer-ignition")
-        layer.ignitionOffset = Number(value) / 100;
       else if (layer.kind === "spherical") {
         if (name === "layer-count") layer.count = Number(value);
         else if (name === "layer-radius") {
           layer.radius = Number(value) / 100;
           layer.radialSpeedScale = layer.radius;
-        } else if (name === "layer-missing")
-          layer.missingRate = Number(value) / 100;
-        else if (name === "spatial-color")
+        } else if (name === "spatial-color")
           layer.coloring.mode = value as SphericalStarLayer["coloring"]["mode"];
       } else if (layer.kind === "pattern") {
-        if (name === "pattern-orientation")
-          layer.orientationDegrees = Number(value);
-        else if (name === "pattern-angle") layer.allowedAngle = Number(value);
-        else if (name === "pattern-depth") layer.depth = Number(value) / 100;
+        if (name === "pattern-depth") layer.depth = Number(value) / 100;
         else if (name === "pattern-facing")
           layer.facingPolicy = value as typeof layer.facingPolicy;
-        else if (name === "pattern-jitter")
-          layer.rotationJitter = Number(value);
         else if (name === "pattern-group-star" && groupId) {
           const group = layer.groups.find(
             (candidate) => candidate.id === groupId,
@@ -812,8 +786,6 @@ export class CraftWorkspace {
         }
       } else if (layer.kind === "child") {
         if (name === "child-count") layer.count = Number(value);
-        else if (name === "child-delay") layer.delay = Number(value) / 100;
-        else if (name === "child-wave") layer.waveDelay = Number(value) / 1000;
       } else if (name === "branch-count") layer.branchCount = Number(value);
     });
   }
@@ -827,14 +799,6 @@ export class CraftWorkspace {
       const star = draft.starDefinitions[starId];
       if (!star) return;
       if (name === "star-name") star.displayName = value;
-      else if (name === "star-duration")
-        star.burnDuration = Number(value) / 100;
-      else if (name === "star-brightness")
-        star.brightness = Number(value) / 100;
-      else if (name === "star-trail") star.trailLifetime = Number(value) / 100;
-      else if (name === "star-flicker") star.flicker = Number(value) / 100;
-      else if (name === "star-gravity") star.gravityScale = Number(value) / 100;
-      else if (name === "star-drag") star.drag = Number(value) / 100;
       else if (name === "star-stage-color" && stageValue !== undefined) {
         const color = Number.parseInt(value.slice(1), 16);
         const stage = star.colorStages[Number(stageValue)];

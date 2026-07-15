@@ -9,6 +9,7 @@ import type {
   SphericalStarLayer,
   VirtualStarPreset,
 } from "../../data/firework";
+import { deriveVirtualBehavior } from "./deriveVirtualBehavior";
 
 export interface CompiledStar {
   definition: VirtualStarPreset;
@@ -106,6 +107,15 @@ function resolveDefinition(
   );
 }
 
+function layerDensity(layer: FireworkLayer): number {
+  if (layer.kind === "spherical") return Math.min(layer.count / 900, 1);
+  if (layer.kind === "pattern") return Math.min(layer.points.length / 320, 1);
+  if (layer.kind === "branch") {
+    return Math.min((layer.branchCount * layer.starsPerBranch) / 320, 1);
+  }
+  return Math.min(layer.count / 48, 1);
+}
+
 function compileLayerStar(
   design: FireworkDesign,
   layer: FireworkLayer,
@@ -114,12 +124,32 @@ function compileLayerStar(
   index: number,
   random: ReturnType<typeof createSeededRandom>,
 ): CompiledStar {
-  const definition = resolveDefinition(design, definitionId);
-  const velocityJitter = design.launchVariation.velocity;
-  const placementJitter = design.launchVariation.placement;
+  const sourceDefinition = resolveDefinition(design, definitionId);
+  const behavior =
+    design.schemaVersion === 3
+      ? deriveVirtualBehavior({
+          assemblySeed: design.assemblySeed,
+          derivationVersion: design.derivationVersion,
+          layer,
+          localDensity: layerDensity(layer),
+          normalizedPosition: direction,
+          placementIndex: index,
+          sizeClass: design.sizeClass,
+          star: sourceDefinition,
+        })
+      : undefined;
+  const definition = structuredClone(sourceDefinition);
+  if (behavior) {
+    definition.drag = behavior.drag;
+    definition.gravityScale = behavior.gravityScale;
+  }
+  const velocityJitter =
+    behavior?.velocityJitter ?? design.launchVariation.velocity;
+  const placementJitter =
+    behavior?.placementJitter ?? design.launchVariation.placement;
   const speed =
-    design.burstField.baseVelocity *
-    layer.radialSpeedScale *
+    (behavior?.baseVelocity ?? design.burstField.baseVelocity) *
+    (behavior?.radialSpeedScale ?? layer.radialSpeedScale) *
     (1 + random.signed() * velocityJitter);
   const normalized = normalize({
     x: direction.x + random.signed() * placementJitter,
@@ -127,7 +157,7 @@ function compileLayerStar(
     z: direction.z + random.signed() * placementJitter,
   });
   return {
-    definition: structuredClone(definition),
+    definition,
     id: `${layer.id}-star-${index}`,
     initialPosition: { x: 0, y: 0, z: 0 },
     initialVelocity: {
@@ -138,17 +168,28 @@ function compileLayerStar(
     intensityScale: definition.brightness,
     layerID: layer.id,
     lifetimeScale:
-      1 + random.signed() * Math.min(design.launchVariation.lifetime, 0.25),
+      (behavior?.lifetimeScale ?? 1) *
+      (1 +
+        random.signed() *
+          Math.min(
+            behavior?.lifetimeJitter ?? design.launchVariation.lifetime,
+            0.25,
+          )),
     timingOffset:
-      layer.ignitionOffset +
-      random.next() * Math.min(design.launchVariation.ignition, 0.2),
+      (behavior?.ignitionOffset ?? layer.ignitionOffset) +
+      random.next() *
+        Math.min(
+          behavior?.ignitionJitter ?? design.launchVariation.ignition,
+          0.2,
+        ),
   };
 }
 
 function compileSpherical(
   design: FireworkDesign,
   layer: SphericalStarLayer,
-  random: ReturnType<typeof createSeededRandom>,
+  assemblyRandom: ReturnType<typeof createSeededRandom>,
+  launchRandom: ReturnType<typeof createSeededRandom>,
 ): CompiledStar[] {
   const overrides = new Map(layer.overrides.map((item) => [item.index, item]));
   const points = fibonacciSphere(layer.count);
@@ -156,18 +197,41 @@ function compileSpherical(
   points.forEach((point, index) => {
     const override = overrides.get(index);
     if (override?.removed) return;
+    const source = override?.position ?? point;
+    const definitionId = override?.starId ?? layer.defaultStarId;
+    const behavior =
+      design.schemaVersion === 3
+        ? deriveVirtualBehavior({
+            assemblySeed: design.assemblySeed,
+            derivationVersion: design.derivationVersion,
+            layer,
+            localDensity: layerDensity(layer),
+            normalizedPosition: source,
+            placementIndex: index,
+            sizeClass: design.sizeClass,
+            star: resolveDefinition(design, definitionId),
+          })
+        : undefined;
     if (
-      random.next() <
-      Math.min(layer.missingRate + design.realism.missingRate, 0.5)
+      assemblyRandom.next() <
+      Math.min(
+        behavior?.missingRate ?? layer.missingRate + design.realism.missingRate,
+        0.5,
+      )
     ) {
       return;
     }
-    const source = override?.position ?? point;
-    const direction = normalize({
-      x: source.x + random.signed() * layer.jitter * 0.08,
-      y: source.y + random.signed() * layer.jitter * 0.08,
-      z: source.z + random.signed() * layer.jitter * 0.08,
-    });
+    const direction = behavior
+      ? normalize({
+          x: source.x + assemblyRandom.signed() * 0,
+          y: source.y + assemblyRandom.signed() * 0,
+          z: source.z + assemblyRandom.signed() * 0,
+        })
+      : normalize({
+          x: source.x + assemblyRandom.signed() * layer.jitter * 0.08,
+          y: source.y + assemblyRandom.signed() * layer.jitter * 0.08,
+          z: source.z + assemblyRandom.signed() * layer.jitter * 0.08,
+        });
     const useAlternate =
       Boolean(layer.coloring.alternateStarId) &&
       (layer.coloring.mode === "alternating"
@@ -187,7 +251,7 @@ function compileSpherical(
             ? (layer.coloring.alternateStarId ?? layer.defaultStarId)
             : layer.defaultStarId),
         index,
-        random,
+        launchRandom,
       ),
     );
   });
@@ -197,21 +261,39 @@ function compileSpherical(
 function compilePattern(
   design: FireworkDesign,
   layer: PatternStarLayer,
-  random: ReturnType<typeof createSeededRandom>,
+  assemblyRandom: ReturnType<typeof createSeededRandom>,
+  launchRandom: ReturnType<typeof createSeededRandom>,
 ): CompiledStar[] {
   const groups = new Map(layer.groups.map((group) => [group.id, group]));
   return layer.points.map((point, index) => {
     const group = groups.get(point.groupId);
-    const depth = random.signed() * layer.depth;
+    const depth = assemblyRandom.signed() * layer.depth;
+    const definitionId = group?.starId ?? layer.defaultStarId;
+    const definition = resolveDefinition(design, definitionId);
+    const behavior =
+      design.schemaVersion === 3
+        ? deriveVirtualBehavior({
+            assemblySeed: design.assemblySeed,
+            derivationVersion: design.derivationVersion,
+            layer,
+            localDensity: layerDensity(layer),
+            normalizedPosition: { x: point.x, y: point.y, z: depth },
+            placementIndex: index,
+            sizeClass: design.sizeClass,
+            star: definition,
+          })
+        : undefined;
     const orientation =
-      layer.orientationDegrees + random.signed() * layer.rotationJitter;
+      (behavior?.orientationDegrees ?? layer.orientationDegrees) +
+      assemblyRandom.signed() *
+        (behavior?.rotationJitter ?? layer.rotationJitter);
     return compileLayerStar(
       design,
       layer,
       rotatePatternPoint(point.x, point.y, depth, orientation),
-      group?.starId ?? layer.defaultStarId,
+      definitionId,
       index,
-      random,
+      launchRandom,
     );
   });
 }
@@ -219,12 +301,13 @@ function compilePattern(
 function compileBranch(
   design: FireworkDesign,
   layer: BranchStarLayer,
-  random: ReturnType<typeof createSeededRandom>,
+  assemblyRandom: ReturnType<typeof createSeededRandom>,
+  launchRandom: ReturnType<typeof createSeededRandom>,
 ): CompiledStar[] {
   const stars: CompiledStar[] = [];
   for (let branch = 0; branch < layer.branchCount; branch += 1) {
     const angle = (branch / layer.branchCount) * Math.PI * 2;
-    const tilt = 0.18 + random.next() * 0.5;
+    const tilt = 0.18 + assemblyRandom.next() * 0.5;
     for (let index = 0; index < layer.starsPerBranch; index += 1) {
       const progress = (index + 1) / layer.starsPerBranch;
       const direction = normalize({
@@ -236,10 +319,16 @@ function compileBranch(
         compileLayerStar(
           design,
           { ...layer, radialSpeedScale: layer.radialSpeedScale * progress },
-          direction,
+          design.schemaVersion === 3
+            ? {
+                x: direction.x * progress,
+                y: direction.y * progress,
+                z: direction.z * progress,
+              }
+            : direction,
           layer.defaultStarId,
           branch * layer.starsPerBranch + index,
-          random,
+          launchRandom,
         ),
       );
     }
@@ -250,9 +339,24 @@ function compileBranch(
 function compileChildren(
   design: FireworkDesign,
   layer: ChildBurstLayer,
-  random: ReturnType<typeof createSeededRandom>,
+  assemblyRandom: ReturnType<typeof createSeededRandom>,
+  launchRandom: ReturnType<typeof createSeededRandom>,
 ): CompiledChildBurst[] {
   return fibonacciSphere(layer.count).map((carrier, index) => {
+    const definition = resolveDefinition(design, layer.defaultStarId);
+    const behavior =
+      design.schemaVersion === 3
+        ? deriveVirtualBehavior({
+            assemblySeed: design.assemblySeed,
+            derivationVersion: design.derivationVersion,
+            layer,
+            localDensity: layerDensity(layer),
+            normalizedPosition: carrier,
+            placementIndex: index,
+            sizeClass: design.sizeClass,
+            star: definition,
+          })
+        : undefined;
     const childLayer: SphericalStarLayer = {
       coloring: { mode: "layer" },
       count: 24,
@@ -273,17 +377,27 @@ function compileChildren(
     };
     return {
       delay:
-        layer.delay +
-        index * layer.waveDelay +
-        random.next() * design.launchVariation.ignition,
+        (behavior?.childDelay ?? layer.delay) +
+        index * (behavior?.childWaveDelay ?? layer.waveDelay) +
+        launchRandom.next() *
+          (behavior?.ignitionJitter ?? design.launchVariation.ignition),
       id: `${layer.id}-child-${index}`,
       initialVelocity: {
-        x: carrier.x * 22 * layer.radialSpeedScale,
-        y: carrier.y * 22 * layer.radialSpeedScale,
-        z: carrier.z * 22 * layer.radialSpeedScale,
+        x:
+          carrier.x *
+          22 *
+          (behavior?.radialSpeedScale ?? layer.radialSpeedScale),
+        y:
+          carrier.y *
+          22 *
+          (behavior?.radialSpeedScale ?? layer.radialSpeedScale),
+        z:
+          carrier.z *
+          22 *
+          (behavior?.radialSpeedScale ?? layer.radialSpeedScale),
       },
       layerID: layer.id,
-      stars: compileSpherical(design, childLayer, random),
+      stars: compileSpherical(design, childLayer, assemblyRandom, launchRandom),
     };
   });
 }
@@ -310,19 +424,29 @@ export function compileFireworkDesign(
   design: FireworkDesign,
   launchSeed: number,
 ): CompiledBurstPlan {
-  const random = createSeededRandom(launchSeed ^ design.assemblySeed);
+  const launchRandom = createSeededRandom(launchSeed ^ design.assemblySeed);
+  const assemblyRandom =
+    design.schemaVersion === 3
+      ? createSeededRandom(design.assemblySeed ^ 0x5f37_59df)
+      : launchRandom;
   const stars: CompiledStar[] = [];
   const childBursts: CompiledChildBurst[] = [];
   for (const layer of design.layers) {
     if (!layer.visible) continue;
     if (layer.kind === "spherical") {
-      stars.push(...compileSpherical(design, layer, random));
+      stars.push(
+        ...compileSpherical(design, layer, assemblyRandom, launchRandom),
+      );
     } else if (layer.kind === "pattern") {
-      stars.push(...compilePattern(design, layer, random));
+      stars.push(
+        ...compilePattern(design, layer, assemblyRandom, launchRandom),
+      );
     } else if (layer.kind === "branch") {
-      stars.push(...compileBranch(design, layer, random));
+      stars.push(...compileBranch(design, layer, assemblyRandom, launchRandom));
     } else {
-      childBursts.push(...compileChildren(design, layer, random));
+      childBursts.push(
+        ...compileChildren(design, layer, assemblyRandom, launchRandom),
+      );
     }
   }
   const estimatedCost = estimateBurstCost(stars, childBursts);

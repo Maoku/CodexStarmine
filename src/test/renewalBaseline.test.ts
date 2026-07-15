@@ -8,10 +8,14 @@ import {
   FIREWORK_DESIGN_V2_SCHEMA_VERSION,
   FIREWORK_PRESETS,
   isFireworkDesignV2,
+  isFireworkDesignV3,
+  restoreLegacyV2Design,
   STORAGE_KEY_V2,
+  STORAGE_KEY_V3,
   type FireworkDesign,
   type StorageLike,
   type StoredLibraryV2,
+  type StoredLibraryV3,
 } from "../data";
 import { generateFreeShow } from "../modes/viewFree";
 import {
@@ -86,26 +90,35 @@ describe("Renewal Phase 0 baselines", () => {
     expect(actual).toEqual(PRESET_BASELINES);
   });
 
-  it("round-trips the saved v2 fixture without changing the legacy envelope", () => {
+  it("migrates the saved v2 fixture without changing its legacy envelope", () => {
     const { storage, values } = memoryStorage();
-    const repository = new DesignRepository(storage, () => "renewal-baseline");
-    const saved = repository.save(SAVED_DESIGN_V2_FIXTURE);
-    const raw = values.get(STORAGE_KEY_V2);
+    const rawV2 = JSON.stringify({
+      version: FIREWORK_DESIGN_V2_SCHEMA_VERSION,
+      designs: [SAVED_DESIGN_V2_FIXTURE],
+    } satisfies StoredLibraryV2);
+    values.set(STORAGE_KEY_V2, rawV2);
+    const migrated = new DesignRepository(
+      storage,
+      () => "renewal-baseline",
+    ).list()[0];
+    const restored = restoreLegacyV2Design(migrated);
+    const rawV3 = values.get(STORAGE_KEY_V3);
 
-    expect(saved).toEqual(SAVED_DESIGN_V2_FIXTURE);
-    expect(hash(saved)).toBe(SAVED_DESIGN_V2_HASH);
+    expect(hash(SAVED_DESIGN_V2_FIXTURE)).toBe(SAVED_DESIGN_V2_HASH);
     expect(
-      hash(compileFireworkDesign(saved, RENEWAL_BASELINE_SEED)),
+      hash(
+        compileFireworkDesign(SAVED_DESIGN_V2_FIXTURE, RENEWAL_BASELINE_SEED),
+      ),
     ).toBe(SAVED_DESIGN_V2_PLAN_HASH);
-    expect(raw).toBeDefined();
+    expect(values.get(STORAGE_KEY_V2)).toBe(rawV2);
+    expect(restored).toEqual(SAVED_DESIGN_V2_FIXTURE);
+    expect(restored && isFireworkDesignV2(restored)).toBe(true);
+    expect(rawV3).toBeDefined();
 
-    const envelope = JSON.parse(raw ?? "") as StoredLibraryV2;
-    expect(envelope.version).toBe(FIREWORK_DESIGN_V2_SCHEMA_VERSION);
-    expect(envelope.designs).toEqual([SAVED_DESIGN_V2_FIXTURE]);
-    expect(envelope.designs.every(isFireworkDesignV2)).toBe(true);
-    expect(new DesignRepository(storage).list()).toEqual([
-      SAVED_DESIGN_V2_FIXTURE,
-    ]);
+    const envelope = JSON.parse(rawV3 ?? "") as StoredLibraryV3;
+    expect(envelope.version).toBe(3);
+    expect(envelope.designs.every(isFireworkDesignV3)).toBe(true);
+    expect(new DesignRepository(storage).list()).toEqual([migrated]);
   });
 
   it("locks the fixed-seed free-view show using presets and the saved work", () => {

@@ -1,7 +1,7 @@
 # 画面遷移・編集体験リニューアル 改修計画書
 
 - 作成日: 2026-07-15
-- ステータス: 実装中（Renewal Phase 2 完了）
+- ステータス: 実装中（Renewal Phase 3 完了）
 - 基準資料: [RENEWAL_PLAN.md](RENEWAL_PLAN.md)
 - 関連資料: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 - 対象: モード選択、作品棚、初期設定、製作エディター、確認、フリー鑑賞、保存データ
@@ -426,14 +426,24 @@ NightSkyApp
 
 ### Renewal Phase 3: 自動導出モデルとv3移行
 
-- [ ] `deriveVirtualBehavior` の入力・出力契約を固定する。
-- [ ] 星種、正規化位置、配置方法、玉サイズから実行値を決定する。
-- [ ] 低レベル値の直接編集UIを削除する。
-- [ ] v2→v3の非破壊移行を実装する。
-- [ ] `derivationVersion` と旧結果比較を実装する。
-- [ ] コンパイラをv3意図モデル + 導出結果から動作させる。
+- [x] `deriveVirtualBehavior` の入力・出力契約を固定する。
+- [x] 星種、正規化位置、配置方法、玉サイズから実行値を決定する。
+- [x] 低レベル値の直接編集UIを削除する。
+- [x] v2→v3の非破壊移行を実装する。
+- [x] `derivationVersion` と旧結果比較を実装する。
+- [x] コンパイラをv3意図モデル + 導出結果から動作させる。
 
 完了基準: 同じ入力から同じ導出結果を得られ、既存作品を失わず保存・再読込できる。
+
+**完了確認**:
+
+- `src/core/burst/deriveVirtualBehavior.ts` に `derivationVersion: 1` の入力・出力契約を実装した。星種、レイヤー種別、正規化位置、配置方法、局所密度、玉サイズ、assembly seedだけから、基準速度、発火順、速度・位置・寿命の揺らぎ、重力、抗力、型物の向き、子花の時間差、簡易確認用の広がり包絡を決定的に導出する。
+- `src/core/burst/compiler.ts` はv2作品だけ旧値を読み、v3作品では `ignitionOffset`、`radialSpeedScale`、`allowedAngle`、`orientationDegrees`、`rotationJitter`、`delay`、`waveDelay`、`burstField.baseVelocity`、`launchVariation`、`realism` の互換shadowを実行値として使わない構成へ変更した。仮想星の重力と抗力も導出結果を使う。
+- `src/data/firework.ts` に `FireworkDesignV3`、`IntentLayer`、`LegacyBehaviorSnapshot`、厳格なv3型検証を追加した。Phase 4でワークベンチを置換するまで既存レンダラーが必要とする低レベルフィールドは互換shadowとして保持するが、編集UIとv3コンパイラからは切り離した。
+- `src/data/migrations/v2ToV3.ts` と `src/data/storage.ts` にv2→v3の全件移行を追加した。v3を優先して読み、v3がなければv2をメモリ上で変換し、型検証と固定seed `424242` の旧結果比較に全件成功した場合だけ `codex-starmine.designs.v3` へ書く。v2キーは削除せず、破損した1件またはv3検証失敗時はv3を書かずv2へフォールバックする。
+- `CraftController` は新規draftを編集開始時からv3へ変換する。`CraftWorkspace` から本番の揺らぎ、欠け率、発火タイミング、許容角度、正面角度、回転揺らぎ、子花の発火遅延・波状時間差、星の寿命・輝度・尾・点滅・重力・抗力の直接編集を撤去し、自動調整の説明へ置き換えた。
+- 実ブラウザで新規の菊draftと型物レイヤーを開き、削除対象の低レベル設定コントロールが0件、自動調整説明が表示されること、1280px幅で `scrollWidth = innerWidth = 1280`、ブラウザコンソールのwarning/errorが0件であることを確認した。
+- `rtk npm run lint`、`rtk npm run test:run`（20ファイル、73件成功）、`rtk npm run build`、変更ファイルのPrettier確認が成功した。production buildには既存の550 kB超chunk警告が残る。
 
 ### Renewal Phase 4: 統合編集ワークベンチ
 
@@ -517,13 +527,13 @@ NightSkyApp
 - [ ] 円形、ハート、手動の配置を使える。
 - [ ] 仮想星の長押しとキーボード操作で抽象プレビューを開ける。
 - [ ] 編集画面内の小窓で配置全体の簡易確認アニメーションを再生できる。
-- [ ] 許容角度、発火タイミング、速度、重力、抗力を手動設定するUIがない。
-- [ ] 星種と位置から同じ実行値を再現可能に導出する。
+- [x] 許容角度、発火タイミング、速度、重力、抗力を手動設定するUIがない。
+- [x] 星種と位置から同じ実行値を再現可能に導出する。
 - [ ] `確認` とフリー鑑賞が同じ湖面画面シェルを使う。
 - [ ] `確認` では編集中の1作品だけが単発ループ発射される。
 - [ ] checkとfreeの発射予約が同時に残らない。
 - [x] 花火棚と編集画面が工房を基調とし、過剰な飾り罫、柄、発光を使わない。
-- [ ] v2作品を失わずv3へ移行し、v2キーが残る。
+- [x] v2作品を失わずv3へ移行し、v2キーが残る。
 - [x] 既存6プリセット、完成打上、フリー鑑賞が回帰しない。
 - [x] `npm run lint`、`npm run test:run`、`npm run build` が成功する。
 

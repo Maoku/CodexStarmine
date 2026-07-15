@@ -1,7 +1,7 @@
-import type { FireworkDesign, FireworkDesignV1 } from "./firework";
+import type { FireworkDesignV1, FireworkDesignV2 } from "./firework";
 import { migrateV1ToV2 } from "./migrations/v1ToV2";
 
-export const CHRYSANTHEMUM_PRESET: FireworkDesign = migrateV1ToV2({
+export const CHRYSANTHEMUM_PRESET: FireworkDesignV2 = migrateV1ToV2({
   ascentEffect: "gold",
   id: "preset-chrysanthemum",
   name: "変化菊",
@@ -49,7 +49,7 @@ export const CHRYSANTHEMUM_PRESET: FireworkDesign = migrateV1ToV2({
   smokeProfile: { amount: 0.58, lifetime: 8 },
 } satisfies FireworkDesignV1);
 
-export const PEONY_PRESET: FireworkDesign = migrateV1ToV2({
+export const PEONY_PRESET: FireworkDesignV2 = migrateV1ToV2({
   ascentEffect: "silver",
   id: "preset-peony",
   name: "紅青牡丹",
@@ -97,7 +97,7 @@ export const PEONY_PRESET: FireworkDesign = migrateV1ToV2({
   smokeProfile: { amount: 0.48, lifetime: 7 },
 } satisfies FireworkDesignV1);
 
-export const CROWN_PRESET: FireworkDesign = migrateV1ToV2({
+export const CROWN_PRESET: FireworkDesignV2 = migrateV1ToV2({
   ascentEffect: "gold",
   id: "preset-crown",
   name: "錦冠",
@@ -142,7 +142,7 @@ export const CROWN_PRESET: FireworkDesign = migrateV1ToV2({
   smokeProfile: { amount: 0.76, lifetime: 10 },
 } satisfies FireworkDesignV1);
 
-export const PALM_PRESET: FireworkDesign = migrateV1ToV2({
+export const PALM_PRESET: FireworkDesignV2 = migrateV1ToV2({
   ascentEffect: "silver",
   id: "preset-palm",
   name: "銀椰子",
@@ -184,7 +184,7 @@ export const PALM_PRESET: FireworkDesign = migrateV1ToV2({
   smokeProfile: { amount: 0.7, lifetime: 9 },
 } satisfies FireworkDesignV1);
 
-export const SENRIN_PRESET: FireworkDesign = migrateV1ToV2({
+export const SENRIN_PRESET: FireworkDesignV2 = migrateV1ToV2({
   ascentEffect: "gold",
   id: "preset-senrin",
   name: "彩色千輪",
@@ -232,7 +232,7 @@ export const SENRIN_PRESET: FireworkDesign = migrateV1ToV2({
   smokeProfile: { amount: 0.78, lifetime: 9 },
 } satisfies FireworkDesignV1);
 
-export const HEART_PRESET: FireworkDesign = migrateV1ToV2({
+export const HEART_PRESET: FireworkDesignV2 = migrateV1ToV2({
   ascentEffect: "silver",
   id: "preset-heart",
   name: "紅恋花",
@@ -280,7 +280,7 @@ export const HEART_PRESET: FireworkDesign = migrateV1ToV2({
   smokeProfile: { amount: 0.46, lifetime: 7 },
 } satisfies FireworkDesignV1);
 
-export const FIREWORK_PRESETS: FireworkDesign[] = [
+export const FIREWORK_PRESETS: FireworkDesignV2[] = [
   CHRYSANTHEMUM_PRESET,
   PEONY_PRESET,
   CROWN_PRESET,

@@ -8,6 +8,7 @@ import {
   buildEditorDiagnostic,
   type EditorDiagnostic,
 } from "./CraftDiagnosticController";
+import { deriveVirtualBehavior } from "../../core/burst";
 
 export interface CraftSelection {
   layerId?: string;
@@ -44,10 +45,52 @@ export function syncCompatibilityFields(design: FireworkDesign): void {
   if (outer) {
     const definition = design.starDefinitions[outer.defaultStarId];
     if (definition) {
+      const behavior =
+        design.schemaVersion === 3
+          ? deriveVirtualBehavior({
+              assemblySeed: design.assemblySeed,
+              derivationVersion: design.derivationVersion,
+              layer: outer,
+              localDensity:
+                outer.kind === "spherical"
+                  ? Math.min(outer.count / 900, 1)
+                  : outer.kind === "pattern"
+                    ? Math.min(outer.points.length / 320, 1)
+                    : Math.min(
+                        (outer.branchCount * outer.starsPerBranch) / 320,
+                        1,
+                      ),
+              normalizedPosition: {
+                x: outer.kind === "spherical" ? outer.radius : 1,
+                y: 0,
+                z: 0,
+              },
+              sizeClass: design.sizeClass,
+              star: definition,
+            })
+          : undefined;
       design.colorStages = clone(definition.colorStages);
       design.burnDuration = definition.burnDuration;
-      design.drag = definition.drag;
-      design.gravityScale = definition.gravityScale;
+      design.drag = behavior?.drag ?? definition.drag;
+      design.gravityScale = behavior?.gravityScale ?? definition.gravityScale;
+      if (behavior) {
+        design.burstField.baseVelocity = behavior.baseVelocity;
+        design.burstField.drag = behavior.drag;
+        design.burstField.gravityScale = behavior.gravityScale;
+        design.launchVariation = {
+          ignition: behavior.ignitionJitter,
+          lifetime: behavior.lifetimeJitter,
+          placement: behavior.placementJitter,
+          velocity: behavior.velocityJitter,
+        };
+        design.realism = {
+          ignitionJitter: behavior.ignitionJitter,
+          lifetimeJitter: behavior.lifetimeJitter,
+          missingRate: behavior.missingRate,
+          placementJitter: behavior.placementJitter,
+          velocityJitter: behavior.velocityJitter,
+        };
+      }
       design.trailStyle = {
         length: definition.trailLifetime,
         sparkle: definition.flicker,
@@ -76,11 +119,26 @@ export function syncCompatibilityFields(design: FireworkDesign): void {
     }));
   design.childBursts = design.layers
     .filter((layer): layer is ChildBurstLayer => layer.kind === "child")
-    .map((layer) => ({
-      count: layer.count,
-      delay: layer.delay,
-      radius: 22 * layer.radialSpeedScale,
-    }));
+    .map((layer) => {
+      const definition = design.starDefinitions[layer.defaultStarId];
+      const behavior =
+        design.schemaVersion === 3 && definition
+          ? deriveVirtualBehavior({
+              assemblySeed: design.assemblySeed,
+              derivationVersion: design.derivationVersion,
+              layer,
+              localDensity: Math.min(layer.count / 48, 1),
+              normalizedPosition: { x: 1, y: 0, z: 0 },
+              sizeClass: design.sizeClass,
+              star: definition,
+            })
+          : undefined;
+      return {
+        count: layer.count,
+        delay: behavior?.childDelay ?? layer.delay,
+        radius: 22 * (behavior?.radialSpeedScale ?? layer.radialSpeedScale),
+      };
+    });
   design.burstShape = design.layers.some((layer) => layer.kind === "pattern")
     ? "heart"
     : design.layers.some((layer) => layer.kind === "branch")

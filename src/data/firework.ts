@@ -6,6 +6,8 @@ export type BurstShape = "sphere" | "palm" | "heart" | "children";
 export type AscentEffect = "gold" | "silver" | "none";
 
 export const FIREWORK_DESIGN_V2_SCHEMA_VERSION = 2 as const;
+export const FIREWORK_DESIGN_V3_SCHEMA_VERSION = 3 as const;
+export const CURRENT_DERIVATION_VERSION = 1 as const;
 
 export interface ColorStage {
   color: number;
@@ -226,18 +228,244 @@ type DeepReadonly<T> = T extends (...args: never[]) => unknown
  */
 export type FireworkDesignV2Compatibility = DeepReadonly<FireworkDesignV2>;
 
-export type FireworkDesign = FireworkDesignV2;
+export interface LegacyLayerBehavior {
+  allowedAngle?: number;
+  delay?: number;
+  id: string;
+  ignitionOffset: number;
+  orientationDegrees?: number;
+  radialSpeedScale: number;
+  rotationJitter?: number;
+  waveDelay?: number;
+}
+
+/**
+ * Values retained only to compare a migrated work with its schema-v2 launch.
+ * Renewal editing and compilation never use this snapshot as user intent.
+ */
+export interface LegacyBehaviorSnapshot {
+  burstField: BurstField;
+  launchVariation: LaunchVariation;
+  layers: LegacyLayerBehavior[];
+  realism: DesignRealism;
+  sourceSchemaVersion: typeof FIREWORK_DESIGN_V2_SCHEMA_VERSION;
+}
+
+/**
+ * Phase 3 keeps the existing display/audio compatibility fields while the UI
+ * is moved to intent-only editing. Low-level layer and launch values in this
+ * shape are derived compatibility shadows and are ignored by the v3 compiler.
+ */
+export type IntentLayer = FireworkLayer;
+
+export interface FireworkDesignV3 extends Omit<
+  FireworkDesignV2,
+  "layers" | "schemaVersion"
+> {
+  derivationVersion: typeof CURRENT_DERIVATION_VERSION;
+  legacyBehavior?: LegacyBehaviorSnapshot;
+  layers: IntentLayer[];
+  schemaVersion: typeof FIREWORK_DESIGN_V3_SCHEMA_VERSION;
+}
+
+export type FireworkDesign = FireworkDesignV2 | FireworkDesignV3;
 
 export function isFireworkDesignV2(value: unknown): value is FireworkDesignV2 {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<FireworkDesignV2>;
+  if (!isRecord(value)) return false;
+  if (
+    value.schemaVersion !== FIREWORK_DESIGN_V2_SCHEMA_VERSION ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.assemblySeed !== "number" ||
+    !["small", "medium", "large"].includes(String(value.sizeClass)) ||
+    !Array.isArray(value.layers) ||
+    !value.layers.every(isIntentLayer) ||
+    !isRecord(value.starDefinitions) ||
+    !Object.values(value.starDefinitions).every(isVirtualStarPreset) ||
+    !hasNumberFields(value.burstField, [
+      "baseVelocity",
+      "drag",
+      "gravityScale",
+      "windResponse",
+    ]) ||
+    !hasNumberFields(value.launchVariation, [
+      "ignition",
+      "lifetime",
+      "placement",
+      "velocity",
+    ]) ||
+    !hasNumberFields(value.realism, [
+      "ignitionJitter",
+      "lifetimeJitter",
+      "missingRate",
+      "placementJitter",
+      "velocityJitter",
+    ])
+  ) {
+    return false;
+  }
+  const starDefinitions = value.starDefinitions;
+  return value.layers.every((layer) =>
+    Boolean(starDefinitions[(layer as IntentLayer).defaultStarId]),
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isVirtualStarPreset(value: unknown): value is VirtualStarPreset {
+  if (!isRecord(value)) return false;
   return (
-    candidate.schemaVersion === 2 &&
-    typeof candidate.id === "string" &&
-    typeof candidate.name === "string" &&
-    Array.isArray(candidate.layers) &&
-    Boolean(candidate.starDefinitions) &&
-    typeof candidate.assemblySeed === "number"
+    typeof value.id === "string" &&
+    typeof value.displayName === "string" &&
+    typeof value.brightness === "number" &&
+    typeof value.burnDuration === "number" &&
+    typeof value.drag === "number" &&
+    typeof value.gravityScale === "number" &&
+    Array.isArray(value.colorStages) &&
+    value.colorStages.every(
+      (stage) =>
+        isRecord(stage) &&
+        typeof stage.color === "number" &&
+        typeof stage.intensity === "number" &&
+        typeof stage.normalizedTime === "number" &&
+        typeof stage.trailColor === "number",
+    )
+  );
+}
+
+function hasNumberFields(
+  value: unknown,
+  fields: readonly string[],
+): value is Record<string, number> {
+  return (
+    isRecord(value) && fields.every((field) => typeof value[field] === "number")
+  );
+}
+
+function isLegacyBehaviorSnapshot(
+  value: unknown,
+): value is LegacyBehaviorSnapshot {
+  if (!isRecord(value)) return false;
+  return (
+    value.sourceSchemaVersion === FIREWORK_DESIGN_V2_SCHEMA_VERSION &&
+    hasNumberFields(value.burstField, [
+      "baseVelocity",
+      "drag",
+      "gravityScale",
+      "windResponse",
+    ]) &&
+    hasNumberFields(value.launchVariation, [
+      "ignition",
+      "lifetime",
+      "placement",
+      "velocity",
+    ]) &&
+    hasNumberFields(value.realism, [
+      "ignitionJitter",
+      "lifetimeJitter",
+      "missingRate",
+      "placementJitter",
+      "velocityJitter",
+    ]) &&
+    Array.isArray(value.layers) &&
+    value.layers.every(
+      (layer) =>
+        isRecord(layer) &&
+        typeof layer.id === "string" &&
+        typeof layer.ignitionOffset === "number" &&
+        typeof layer.radialSpeedScale === "number",
+    )
+  );
+}
+
+function isIntentLayer(value: unknown): value is IntentLayer {
+  if (!isRecord(value)) return false;
+  if (
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.defaultStarId !== "string" ||
+    typeof value.ignitionOffset !== "number" ||
+    typeof value.radialSpeedScale !== "number" ||
+    typeof value.visible !== "boolean" ||
+    typeof value.locked !== "boolean"
+  ) {
+    return false;
+  }
+  if (value.kind === "spherical") {
+    return (
+      typeof value.count === "number" &&
+      typeof value.radius === "number" &&
+      Array.isArray(value.overrides)
+    );
+  }
+  if (value.kind === "pattern") {
+    return (
+      typeof value.allowedAngle === "number" &&
+      typeof value.orientationDegrees === "number" &&
+      typeof value.rotationJitter === "number" &&
+      Array.isArray(value.groups) &&
+      Array.isArray(value.points)
+    );
+  }
+  if (value.kind === "branch") {
+    return (
+      typeof value.branchCount === "number" &&
+      typeof value.starsPerBranch === "number"
+    );
+  }
+  if (value.kind === "child") {
+    return (
+      typeof value.count === "number" &&
+      typeof value.delay === "number" &&
+      typeof value.scale === "number" &&
+      typeof value.waveDelay === "number"
+    );
+  }
+  return false;
+}
+
+export function isFireworkDesignV3(value: unknown): value is FireworkDesignV3 {
+  if (!isRecord(value)) return false;
+  if (
+    value.schemaVersion !== FIREWORK_DESIGN_V3_SCHEMA_VERSION ||
+    value.derivationVersion !== CURRENT_DERIVATION_VERSION ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.assemblySeed !== "number" ||
+    !["small", "medium", "large"].includes(String(value.sizeClass)) ||
+    !Array.isArray(value.layers) ||
+    !value.layers.every(isIntentLayer) ||
+    !isRecord(value.starDefinitions) ||
+    !Object.values(value.starDefinitions).every(isVirtualStarPreset) ||
+    !hasNumberFields(value.burstField, [
+      "baseVelocity",
+      "drag",
+      "gravityScale",
+      "windResponse",
+    ]) ||
+    !hasNumberFields(value.launchVariation, [
+      "ignition",
+      "lifetime",
+      "placement",
+      "velocity",
+    ]) ||
+    !hasNumberFields(value.realism, [
+      "ignitionJitter",
+      "lifetimeJitter",
+      "missingRate",
+      "placementJitter",
+      "velocityJitter",
+    ]) ||
+    (value.legacyBehavior !== undefined &&
+      !isLegacyBehaviorSnapshot(value.legacyBehavior))
+  ) {
+    return false;
+  }
+  const starDefinitions = value.starDefinitions;
+  return value.layers.every((layer) =>
+    Boolean(starDefinitions[(layer as IntentLayer).defaultStarId]),
   );
 }
 
