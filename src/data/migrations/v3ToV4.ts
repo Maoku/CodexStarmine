@@ -9,12 +9,12 @@ import {
   type LayerBaseV4,
   type LayerIntentV4,
   type ManualLayerIntent,
-  type PatternLayerIntent,
   type PresetLayerIntent,
   type SectionRatio,
   type SectionRef,
   type SpatialColoring,
 } from "../firework";
+import { createPatternRecipePoints } from "../../ui/craft/PatternRecipe";
 import { migrateV2ToV3 } from "./v2ToV3";
 
 export const V3_TO_V4_REGRESSION_SEED = 624_207;
@@ -199,45 +199,6 @@ export function ensureFireworkDesignV4(
   return migrateV3ToV4(v3);
 }
 
-function sectionPoint(
-  section: SectionRef,
-  horizontal: number,
-  vertical: number,
-): { x: number; y: number; z: number } {
-  const fixed = section.ratio * 2 - 1;
-  const radius = Math.sqrt(Math.max(1 - fixed * fixed, 0));
-  return section.plane === "xy"
-    ? { x: horizontal * radius, y: vertical * radius, z: fixed }
-    : { x: horizontal * radius, y: fixed, z: vertical * radius };
-}
-
-function createPatternPoints(intent: PatternLayerIntent) {
-  const count = Math.min(Math.max(Math.round(intent.pattern.density), 8), 240);
-  const rotation = (intent.pattern.rotationDegrees / 180) * Math.PI;
-  return Array.from({ length: count }, (_, index) => {
-    const angle = (index / count) * Math.PI * 2;
-    let horizontal = Math.cos(angle);
-    let vertical = Math.sin(angle);
-    if (intent.pattern.template === "heart") {
-      const x = 16 * Math.sin(angle) ** 3;
-      const y =
-        13 * Math.cos(angle) -
-        5 * Math.cos(2 * angle) -
-        2 * Math.cos(3 * angle) -
-        Math.cos(4 * angle);
-      horizontal = x / 18;
-      vertical = y / 18;
-    }
-    const scaledX = horizontal * intent.pattern.scale;
-    const scaledY = vertical * intent.pattern.scale;
-    const rotatedX =
-      scaledX * Math.cos(rotation) - scaledY * Math.sin(rotation);
-    const rotatedY =
-      scaledX * Math.sin(rotation) + scaledY * Math.cos(rotation);
-    return sectionPoint(intent.pattern.section, rotatedX, rotatedY);
-  });
-}
-
 export function resolveLayerIntent(intent: LayerIntentV4): FireworkLayer {
   const base = {
     defaultStarId: intent.defaultStarId,
@@ -270,7 +231,9 @@ export function resolveLayerIntent(intent: LayerIntentV4): FireworkLayer {
     };
   }
   if (intent.authoringMode === "pattern") {
-    const positions = createPatternPoints(intent);
+    const positions = createPatternRecipePoints(intent.pattern).map(
+      (point) => point.position,
+    );
     return {
       ...base,
       coloring: { mode: "layer" },

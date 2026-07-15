@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CHRYSANTHEMUM_PRESET, type SphericalStarLayer } from "../../data";
 import { buildEditorDiagnostic } from "./CraftDiagnosticController";
 import { CraftDocumentStore } from "./CraftDocumentStore";
+import { createPlacementTemplatePoints } from "../../ui/craft/IntegratedPlacementWorkbench";
 
 describe("CraftDocumentStore", () => {
   it("undoes and redoes a layer edit without changing other layers", () => {
@@ -80,5 +81,47 @@ describe("CraftDocumentStore", () => {
     expect(store.intentDraft.layers[0].name).toBe(originalName);
     store.redo();
     expect(store.intentDraft.layers[0].name).toBe("外周の設計意図");
+  });
+
+  it("treats a manual convenience placement as one undoable operation", () => {
+    const store = new CraftDocumentStore(CHRYSANTHEMUM_PRESET);
+    store.updateIntent("手動レイヤーを追加", (draft) => {
+      draft.layers.push({
+        authoringMode: "manual",
+        defaultStarId: "star-solid-red",
+        id: "manual-test",
+        ignitionOffset: 0,
+        locked: false,
+        name: "手動テスト",
+        points: [],
+        radialSpeedScale: 1,
+        visible: true,
+      });
+    });
+    store.updateIntent("円形配置", (draft) => {
+      const layer = draft.layers.find((item) => item.id === "manual-test");
+      if (!layer || layer.authoringMode !== "manual") return;
+      const section = { plane: "xz" as const, ratio: 0.3 as const };
+      layer.points = createPlacementTemplatePoints("circle", section).map(
+        (position, index) => ({
+          id: `point-${index}`,
+          position,
+          section,
+          starId: layer.defaultStarId,
+        }),
+      );
+    });
+
+    const manualPointCount = () => {
+      const layer = store.intentDraft.layers.find(
+        (item) => item.id === "manual-test",
+      );
+      return layer?.authoringMode === "manual" ? layer.points.length : -1;
+    };
+    expect(manualPointCount()).toBe(36);
+    store.undo();
+    expect(manualPointCount()).toBe(0);
+    store.redo();
+    expect(manualPointCount()).toBe(36);
   });
 });

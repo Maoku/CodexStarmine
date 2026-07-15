@@ -335,6 +335,28 @@
   cursor: default;
 }
 
+.template-apply-mode {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+  color: #777f84;
+  font-size: 0.46rem;
+}
+
+.template-apply-mode select {
+  min-height: 1.85rem;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0.2rem;
+  background: #11171b;
+  color: #c4b399;
+  font-size: 0.48rem;
+}
+
+.template-apply-mode + button:last-child {
+  margin-left: 0;
+}
+
 .workbench-canvas-wrap {
   position: relative;
   min-height: 0;

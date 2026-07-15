@@ -20,6 +20,7 @@ import {
   projectSectionPoint,
   renderIntegratedPlacementWorkbench,
   type PlacementTemplate,
+  type TemplateApplyMode,
 } from "./IntegratedPlacementWorkbench";
 import { renderLayerPanel } from "./LayerPanel";
 import { renderStarLibraryPanel } from "./StarLibraryPanel";
@@ -59,6 +60,7 @@ export class IntegratedCraftEditor {
   #drawer?: MobileDrawer;
   #section: SectionRef = { plane: "xy", ratio: 0.5 };
   #placementTemplate: PlacementTemplate = "manual";
+  #templateApplyMode: TemplateApplyMode = "replace";
   #pointDrag?: PointDrag;
   #previewModel?: ApproximateSpreadModel;
   #previewRevision = 0;
@@ -166,6 +168,7 @@ export class IntegratedCraftEditor {
           this.#section,
           this.#placementTemplate,
           pointEditingAllowed ? this.#selectedPointIndex : undefined,
+          this.#templateApplyMode,
         )}
       </main>
 
@@ -226,7 +229,11 @@ export class IntegratedCraftEditor {
             <label><span>玉内の半径 <output>${Math.round(parameters.radius * 100)}%</output></span><input name="layer-radius" type="range" min="20" max="100" value="${Math.round(parameters.radius * 100)}" aria-label="玉内の半径" aria-valuetext="${Math.round(parameters.radius * 100)}パーセント" /></label>`;
         }
       } else if (selectedLayer.authoringMode === "pattern") {
-        specific = `<p class="inspector-note">型物の生成点は個別編集できません。形状、サイズ、密度、回転はワークベンチで調整します。</p>`;
+        specific = `<label><span>形状</span><select name="pattern-template"><option value="circle" ${selectedLayer.pattern.template === "circle" ? "selected" : ""}>円</option><option value="heart" ${selectedLayer.pattern.template === "heart" ? "selected" : ""}>ハート</option></select></label>
+          <label><span>大きさ <output>${Math.round(selectedLayer.pattern.scale * 100)}%</output></span><input name="pattern-scale" type="range" min="15" max="95" value="${Math.round(selectedLayer.pattern.scale * 100)}" aria-label="型物の大きさ" aria-valuetext="${Math.round(selectedLayer.pattern.scale * 100)}パーセント" /></label>
+          <label><span>密度 <output>${selectedLayer.pattern.density}</output></span><input name="pattern-density" type="range" min="12" max="240" value="${selectedLayer.pattern.density}" aria-label="型物の密度" aria-valuetext="${selectedLayer.pattern.density}個" /></label>
+          <label><span>回転 <output>${selectedLayer.pattern.rotationDegrees}°</output></span><input name="pattern-rotation" type="range" min="0" max="345" step="15" value="${selectedLayer.pattern.rotationDegrees}" aria-label="型物の回転" aria-valuetext="${selectedLayer.pattern.rotationDegrees}度" /></label>
+          <p class="inspector-note">型物の生成点は個別編集できません。断面は中央のワークベンチで選びます。</p>`;
       } else {
         specific = `<p class="inspector-note">手動レイヤーでは、表示中の断面上にある仮想星を1点ずつ編集できます。</p>`;
       }
@@ -390,7 +397,10 @@ export class IntegratedCraftEditor {
   readonly #handleChange = (event: Event): void => {
     const input = event.target as HTMLInputElement | HTMLSelectElement;
     if (!this.#snapshot) return;
-    if (input.name) {
+    if (input.name === "template-apply-mode") {
+      this.#templateApplyMode = input.value as TemplateApplyMode;
+      this.#render();
+    } else if (input.name) {
       this.#changeSelectedLayer(input.name, input.value);
     }
   };
@@ -867,21 +877,26 @@ export class IntegratedCraftEditor {
       `${template === "circle" ? "円形" : "ハート"}配置`,
       (layer) => {
         if (layer.authoringMode !== "manual") return;
-        layer.points = createPlacementTemplatePoints(
+        const existingCount = layer.points.length;
+        const generated = createPlacementTemplatePoints(
           template,
           this.#section,
         ).map((position, index) => ({
-          id: `${layer.id}-${template}-${index + 1}`,
+          id: `${layer.id}-${template}-${existingCount + index + 1}`,
           position,
           section: { ...this.#section },
           starId: selectedStarId ?? layer.defaultStarId,
         }));
+        layer.points =
+          this.#templateApplyMode === "append"
+            ? [...layer.points, ...generated]
+            : generated;
         applied = true;
       },
     );
     this.#callbacks.onToast(
       applied
-        ? `${this.#section.plane.toUpperCase()} ${Math.round(this.#section.ratio * 100)}%断面へ${template === "circle" ? "円形" : "ハート"}を配置しました`
+        ? `${this.#section.plane.toUpperCase()} ${Math.round(this.#section.ratio * 100)}%断面へ${template === "circle" ? "円形" : "ハート"}を${this.#templateApplyMode === "append" ? "追加" : "配置"}しました`
         : "手動レイヤーを選んでください",
     );
   }
@@ -962,6 +977,16 @@ export class IntegratedCraftEditor {
           layer.parameters.count = Number(value);
         } else if (name === "branch-count") {
           layer.parameters.branchCount = Number(value);
+        }
+      } else if (layer.authoringMode === "pattern") {
+        if (name === "pattern-template") {
+          layer.pattern.template = value === "heart" ? "heart" : "circle";
+        } else if (name === "pattern-scale") {
+          layer.pattern.scale = Number(value) / 100;
+        } else if (name === "pattern-density") {
+          layer.pattern.density = Number(value);
+        } else if (name === "pattern-rotation") {
+          layer.pattern.rotationDegrees = Number(value);
         }
       }
     });

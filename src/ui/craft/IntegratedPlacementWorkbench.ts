@@ -20,6 +20,7 @@ import {
 } from "./SectionGeometry";
 
 export type PlacementTemplate = "circle" | "heart" | "manual";
+export type TemplateApplyMode = "append" | "replace";
 
 interface WorkbenchPoint {
   color: number;
@@ -214,6 +215,7 @@ export function renderIntegratedPlacementWorkbench(
   section: SectionRef,
   placementTemplate: PlacementTemplate,
   selectedPointIndex?: number,
+  templateApplyMode: TemplateApplyMode = "replace",
 ): string {
   const pointEditingAllowed = selectedIntent?.authoringMode === "manual";
   const points = workbenchPoints(
@@ -255,6 +257,7 @@ export function renderIntegratedPlacementWorkbench(
     <div class="placement-tool-row" aria-label="便利な配置">
       <span>便利な配置</span>
       ${pointEditingAllowed ? (["circle", "heart", "manual"] as PlacementTemplate[]).map((template) => `<button type="button" data-action="placement-template" data-template="${template}" class="${placementTemplate === template ? "is-active" : ""}" aria-pressed="${placementTemplate === template}">${({ circle: "円形", heart: "ハート", manual: "手動" } as const)[template]}</button>`).join("") : '<span class="placement-permission-note">このレイヤーはパラメーターで編集します</span>'}
+      ${pointEditingAllowed ? `<label class="template-apply-mode"><span>生成方法</span><select name="template-apply-mode"><option value="replace" ${templateApplyMode === "replace" ? "selected" : ""}>置換</option><option value="append" ${templateApplyMode === "append" ? "selected" : ""}>追加</option></select></label>` : ""}
       ${pointEditingAllowed ? `<button type="button" data-action="delete-point" ${selectedPointIndex === undefined ? "disabled" : ""}>選択点を削除</button>` : ""}
     </div>
     <div class="workbench-canvas-wrap">
