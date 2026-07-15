@@ -7,6 +7,7 @@ export type AscentEffect = "gold" | "silver" | "none";
 
 export const FIREWORK_DESIGN_V2_SCHEMA_VERSION = 2 as const;
 export const FIREWORK_DESIGN_V3_SCHEMA_VERSION = 3 as const;
+export const FIREWORK_DESIGN_V4_SCHEMA_VERSION = 4 as const;
 export const CURRENT_DERIVATION_VERSION = 1 as const;
 
 export interface ColorStage {
@@ -268,7 +269,91 @@ export interface FireworkDesignV3 extends Omit<
   schemaVersion: typeof FIREWORK_DESIGN_V3_SCHEMA_VERSION;
 }
 
+export type LayerAuthoringMode = "preset" | "pattern" | "manual";
+export type SectionPlane = "xy" | "xz";
+export type SectionRatio = 0.1 | 0.3 | 0.5 | 0.7 | 0.9;
+
+export interface SectionRef {
+  plane: SectionPlane;
+  ratio: SectionRatio;
+}
+
+export interface LayerBaseV4 {
+  defaultStarId: string;
+  id: string;
+  ignitionOffset: number;
+  locked: boolean;
+  name: string;
+  radialSpeedScale: number;
+  visible: boolean;
+}
+
+export interface PresetLayerParameters {
+  branchCount: number;
+  childDelay: number;
+  childPlacement: "sphere" | "ring" | "pattern";
+  childScale: number;
+  childWaveDelay: number;
+  coloring: SpatialColoring;
+  count: number;
+  jitter: number;
+  missingRate: number;
+  placement: "fibonacci" | "latitude" | "manual";
+  placementSeed: number;
+  radius: number;
+  starsPerBranch: number;
+  thickness: number;
+  upwardBias: number;
+}
+
+export interface PresetLayerIntent extends LayerBaseV4 {
+  authoringMode: "preset";
+  parameters: PresetLayerParameters;
+  presetKind: "outer" | "core" | "child" | "branch";
+}
+
+export interface PatternLayerIntent extends LayerBaseV4 {
+  authoringMode: "pattern";
+  pattern: {
+    density: number;
+    rotationDegrees: number;
+    scale: number;
+    section: SectionRef;
+    template: "circle" | "heart";
+  };
+}
+
+export interface ManualLayerPoint {
+  id: string;
+  position: { x: number; y: number; z: number };
+  section: SectionRef;
+  starId: string;
+}
+
+export interface ManualLayerIntent extends LayerBaseV4 {
+  authoringMode: "manual";
+  points: ManualLayerPoint[];
+}
+
+export type LayerIntentV4 =
+  PresetLayerIntent | PatternLayerIntent | ManualLayerIntent;
+
+/**
+ * Schema v4 stores editing intent. `legacyIntent` is a read-only migration
+ * snapshot used until a migrated layer is intentionally edited as v4.
+ */
+export interface FireworkDesignV4 extends Omit<
+  FireworkDesignV3,
+  "layers" | "schemaVersion"
+> {
+  layers: LayerIntentV4[];
+  legacyIntent?: FireworkDesignV3;
+  schemaVersion: typeof FIREWORK_DESIGN_V4_SCHEMA_VERSION;
+}
+
+/** Runtime compatibility view used by the existing renderer during migration. */
 export type FireworkDesign = FireworkDesignV2 | FireworkDesignV3;
+export type AnyFireworkDesign = FireworkDesign | FireworkDesignV4;
 
 export function isFireworkDesignV2(value: unknown): value is FireworkDesignV2 {
   if (!isRecord(value)) return false;
@@ -466,6 +551,125 @@ export function isFireworkDesignV3(value: unknown): value is FireworkDesignV3 {
   const starDefinitions = value.starDefinitions;
   return value.layers.every((layer) =>
     Boolean(starDefinitions[(layer as IntentLayer).defaultStarId]),
+  );
+}
+
+function isSectionRef(value: unknown): value is SectionRef {
+  return (
+    isRecord(value) &&
+    (value.plane === "xy" || value.plane === "xz") &&
+    [0.1, 0.3, 0.5, 0.7, 0.9].includes(Number(value.ratio))
+  );
+}
+
+function isLayerBaseV4(value: Record<string, unknown>): boolean {
+  return (
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    typeof value.defaultStarId === "string" &&
+    typeof value.ignitionOffset === "number" &&
+    typeof value.radialSpeedScale === "number" &&
+    typeof value.visible === "boolean" &&
+    typeof value.locked === "boolean"
+  );
+}
+
+function isLayerIntentV4(value: unknown): value is LayerIntentV4 {
+  if (!isRecord(value) || !isLayerBaseV4(value)) return false;
+  if (value.authoringMode === "preset") {
+    const parameters = value.parameters;
+    return (
+      ["outer", "core", "child", "branch"].includes(String(value.presetKind)) &&
+      hasNumberFields(parameters, [
+        "branchCount",
+        "childDelay",
+        "childScale",
+        "childWaveDelay",
+        "count",
+        "jitter",
+        "missingRate",
+        "placementSeed",
+        "radius",
+        "starsPerBranch",
+        "thickness",
+        "upwardBias",
+      ]) &&
+      isRecord(parameters.coloring) &&
+      ["layer", "latitude", "longitude", "alternating", "selection"].includes(
+        String(parameters.coloring.mode),
+      ) &&
+      ["fibonacci", "latitude", "manual"].includes(
+        String(parameters.placement),
+      ) &&
+      ["sphere", "ring", "pattern"].includes(String(parameters.childPlacement))
+    );
+  }
+  if (value.authoringMode === "pattern") {
+    return (
+      isRecord(value.pattern) &&
+      ["circle", "heart"].includes(String(value.pattern.template)) &&
+      isSectionRef(value.pattern.section) &&
+      hasNumberFields(value.pattern, ["density", "rotationDegrees", "scale"])
+    );
+  }
+  if (value.authoringMode === "manual") {
+    return (
+      Array.isArray(value.points) &&
+      value.points.every(
+        (point) =>
+          isRecord(point) &&
+          typeof point.id === "string" &&
+          typeof point.starId === "string" &&
+          isSectionRef(point.section) &&
+          hasNumberFields(point.position, ["x", "y", "z"]),
+      )
+    );
+  }
+  return false;
+}
+
+export function isFireworkDesignV4(value: unknown): value is FireworkDesignV4 {
+  if (!isRecord(value)) return false;
+  if (
+    value.schemaVersion !== FIREWORK_DESIGN_V4_SCHEMA_VERSION ||
+    value.derivationVersion !== CURRENT_DERIVATION_VERSION ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.assemblySeed !== "number" ||
+    !["small", "medium", "large"].includes(String(value.sizeClass)) ||
+    !Array.isArray(value.layers) ||
+    !value.layers.every(isLayerIntentV4) ||
+    !isRecord(value.starDefinitions) ||
+    !Object.values(value.starDefinitions).every(isVirtualStarPreset) ||
+    !hasNumberFields(value.burstField, [
+      "baseVelocity",
+      "drag",
+      "gravityScale",
+      "windResponse",
+    ]) ||
+    !hasNumberFields(value.launchVariation, [
+      "ignition",
+      "lifetime",
+      "placement",
+      "velocity",
+    ]) ||
+    !hasNumberFields(value.realism, [
+      "ignitionJitter",
+      "lifetimeJitter",
+      "missingRate",
+      "placementJitter",
+      "velocityJitter",
+    ]) ||
+    (value.legacyBehavior !== undefined &&
+      !isLegacyBehaviorSnapshot(value.legacyBehavior)) ||
+    (value.legacyIntent !== undefined &&
+      !isFireworkDesignV3(value.legacyIntent))
+  ) {
+    return false;
+  }
+  const starDefinitions = value.starDefinitions;
+  return value.layers.every((layer) =>
+    Boolean(starDefinitions[(layer as LayerIntentV4).defaultStarId]),
   );
 }
 

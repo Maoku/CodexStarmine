@@ -1,7 +1,7 @@
 # 編集体験リニューアル2 改修計画書
 
 - 作成日: 2026-07-16
-- ステータス: Renewal2 Phase 1 完了・Phase 2 着手前
+- ステータス: Renewal2 Phase 2 完了・Phase 3 着手前
 - 基準資料: [RENEWAL_PLAN2.md](RENEWAL_PLAN2.md)
 - 先行計画: [RENEWAL_IMPLEMENTATION_PLAN.md](RENEWAL_IMPLEMENTATION_PLAN.md)
 - 関連資料: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RESEARCH.md](RESEARCH.md)
@@ -629,3 +629,12 @@ rtk npm run test:e2e
 - `AdvertiseCameraController` を追加し、4つの安全な視点を28秒で巡回する決定的な自動カメラを実装した。reduced motion時は固定視点になる。
 - タブ非表示中はデモ時間とcue発射を停止する。タイトル、確認、フリー鑑賞は `BackgroundRuntimeController` の `stop → clear → start` で排他遷移する。
 - ブラウザでタイトルDOMの削除文言0件、2.5秒間の描画変化、制作遷移後の非インタラクティブ背景、フリー鑑賞遷移後の自由カメラ有効化を確認した。
+
+### Renewal2 Phase 2
+
+- 完了日: 2026-07-16
+- `FireworkDesignV4`、`LayerIntentV4`、`SectionRef`、`preset / pattern / manual` の3 authoring modeを追加した。
+- `v3ToV4` を追加し、現行v3、ハート型物、手動override、芯、子花の全fixtureをv4へ変換して型検証した。既存の明示点群は形状の近似損失を避けるためmanualへ移行する。
+- 移行作品は読取専用の `legacyIntent` を保持し、固定seedのコンパイル結果がv3と一致した場合だけv4を書き込む。新規v4は `resolveLayerIntent()` から決定的な描画レイヤーへ解決する。
+- `DesignRepository` をv4優先読込へ変更した。v1/v2/v3は削除せず、v1→v2→v3→v4とv3→v4の両経路を検証し、破損v4時は上書きせずv3へ戻る。
+- ブラウザで既存の2保存作品が棚へ表示され、移行後もレイヤー、作品名、簡易確認を含む編集画面が開くことを確認した。

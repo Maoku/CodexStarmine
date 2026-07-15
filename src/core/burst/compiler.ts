@@ -1,6 +1,7 @@
 import type { Vector3Value } from "../particle";
 import { createSeededRandom } from "../random";
 import type {
+  AnyFireworkDesign,
   BranchStarLayer,
   ChildBurstLayer,
   FireworkDesign,
@@ -9,6 +10,7 @@ import type {
   SphericalStarLayer,
   VirtualStarPreset,
 } from "../../data/firework";
+import { resolveFireworkDesignV4 } from "../../data/migrations/v3ToV4";
 import { deriveVirtualBehavior } from "./deriveVirtualBehavior";
 
 export interface CompiledStar {
@@ -421,6 +423,15 @@ export function estimateBurstCost(
 }
 
 export function compileFireworkDesign(
+  design: AnyFireworkDesign,
+  launchSeed: number,
+): CompiledBurstPlan {
+  const runtimeDesign =
+    design.schemaVersion === 4 ? resolveFireworkDesignV4(design) : design;
+  return compileRuntimeFireworkDesign(runtimeDesign, launchSeed);
+}
+
+function compileRuntimeFireworkDesign(
   design: FireworkDesign,
   launchSeed: number,
 ): CompiledBurstPlan {

@@ -6,6 +6,7 @@ import {
   STORAGE_KEY_V1,
   STORAGE_KEY_V2,
   STORAGE_KEY_V3,
+  STORAGE_KEY_V4,
   type StorageLike,
 } from "./storage";
 
@@ -73,7 +74,7 @@ describe("DesignRepository", () => {
     expect(new DesignRepository(storage).list()).toEqual([]);
   });
 
-  it("migrates a complete v1 library through v2 to v3 without deleting old keys", () => {
+  it("migrates a complete v1 library through v2 and v3 to v4 without deleting old keys", () => {
     const values = new Map<string, string>();
     const storage: StorageLike = {
       getItem: (key) => values.get(key) ?? null,
@@ -103,6 +104,7 @@ describe("DesignRepository", () => {
     expect(values.has(STORAGE_KEY_V1)).toBe(true);
     expect(values.has(STORAGE_KEY_V2)).toBe(true);
     expect(values.has(STORAGE_KEY_V3)).toBe(true);
+    expect(values.has(STORAGE_KEY_V4)).toBe(true);
   });
 
   it("does not partially migrate a damaged v1 library", () => {
@@ -120,9 +122,10 @@ describe("DesignRepository", () => {
     expect(repository.migrationWarning).toContain("自動移行せず");
     expect(values.has(STORAGE_KEY_V2)).toBe(false);
     expect(values.has(STORAGE_KEY_V3)).toBe(false);
+    expect(values.has(STORAGE_KEY_V4)).toBe(false);
   });
 
-  it("migrates a complete v2 library to v3 while retaining the v2 source", () => {
+  it("migrates a complete v2 library to v4 while retaining v2 and v3 sources", () => {
     const values = new Map<string, string>();
     const storage: StorageLike = {
       getItem: (key) => values.get(key) ?? null,
@@ -145,9 +148,14 @@ describe("DesignRepository", () => {
     expect(migrated[0].legacyBehavior?.sourceSchemaVersion).toBe(2);
     expect(values.get(STORAGE_KEY_V2)).toBe(rawV2);
     expect(values.has(STORAGE_KEY_V3)).toBe(true);
+    expect(values.has(STORAGE_KEY_V4)).toBe(true);
+    expect(new DesignRepository(storage).listIntents()[0]).toMatchObject({
+      id: "custom-legacy",
+      schemaVersion: 4,
+    });
   });
 
-  it("does not write v3 when any v2 work is damaged", () => {
+  it("does not write v3 or v4 when any v2 work is damaged", () => {
     const values = new Map<string, string>();
     const storage: StorageLike = {
       getItem: (key) => values.get(key) ?? null,
@@ -165,6 +173,7 @@ describe("DesignRepository", () => {
     expect(repository.list()).toEqual([]);
     expect(repository.migrationWarning).toContain("v2作品に破損");
     expect(values.has(STORAGE_KEY_V3)).toBe(false);
+    expect(values.has(STORAGE_KEY_V4)).toBe(false);
   });
 
   it("falls back to retained v2 data when the v3 envelope is damaged", () => {
@@ -188,7 +197,53 @@ describe("DesignRepository", () => {
       id: CHRYSANTHEMUM_PRESET.id,
       schemaVersion: 3,
     });
-    expect(repository.migrationWarning).toContain("v3保存作品");
+    expect(repository.migrationWarning).toContain("v3作品に破損");
     expect(values.get(STORAGE_KEY_V3)).toBe(damagedV3);
+    expect(values.has(STORAGE_KEY_V4)).toBe(false);
+  });
+
+  it("prefers a valid v4 envelope over retained legacy keys", () => {
+    const values = new Map<string, string>();
+    const storage: StorageLike = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+    };
+    const repository = new DesignRepository(storage, () => "v4");
+    repository.save({ ...CHRYSANTHEMUM_PRESET, name: "v4正本" });
+    values.set(
+      STORAGE_KEY_V3,
+      JSON.stringify({ version: 3, designs: [{ id: "broken-v3" }] }),
+    );
+
+    expect(new DesignRepository(storage).list()[0]?.name).toBe("v4正本");
+    expect(new DesignRepository(storage).listIntents()[0]?.schemaVersion).toBe(
+      4,
+    );
+  });
+
+  it("falls back to retained v3 without overwriting a damaged v4 envelope", () => {
+    const values = new Map<string, string>();
+    const storage: StorageLike = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+    };
+    const sourceRepository = new DesignRepository(storage, () => "source");
+    const v3Source = sourceRepository.save(CHRYSANTHEMUM_PRESET);
+    values.set(
+      STORAGE_KEY_V3,
+      JSON.stringify({ version: 3, designs: [v3Source] }),
+    );
+    const validV3 = values.get(STORAGE_KEY_V3);
+    expect(validV3).toBeDefined();
+    const damagedV4 = JSON.stringify({
+      version: 4,
+      designs: [{ id: "broken-v4" }],
+    });
+    values.set(STORAGE_KEY_V4, damagedV4);
+
+    const repository = new DesignRepository(storage);
+    expect(repository.list()[0]?.id).toBe("custom-source");
+    expect(repository.migrationWarning).toContain("v4保存作品");
+    expect(values.get(STORAGE_KEY_V4)).toBe(damagedV4);
   });
 });

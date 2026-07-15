@@ -9,13 +9,16 @@ import {
   FIREWORK_PRESETS,
   isFireworkDesignV2,
   isFireworkDesignV3,
+  isFireworkDesignV4,
   restoreLegacyV2Design,
   STORAGE_KEY_V2,
   STORAGE_KEY_V3,
+  STORAGE_KEY_V4,
   type FireworkDesign,
   type StorageLike,
   type StoredLibraryV2,
   type StoredLibraryV3,
+  type StoredLibraryV4,
 } from "../data";
 import { generateFreeShow } from "../modes/viewFree";
 import {
@@ -103,6 +106,7 @@ describe("Renewal Phase 0 baselines", () => {
     ).list()[0];
     const restored = restoreLegacyV2Design(migrated);
     const rawV3 = values.get(STORAGE_KEY_V3);
+    const rawV4 = values.get(STORAGE_KEY_V4);
 
     expect(hash(SAVED_DESIGN_V2_FIXTURE)).toBe(SAVED_DESIGN_V2_HASH);
     expect(
@@ -114,10 +118,14 @@ describe("Renewal Phase 0 baselines", () => {
     expect(restored).toEqual(SAVED_DESIGN_V2_FIXTURE);
     expect(restored && isFireworkDesignV2(restored)).toBe(true);
     expect(rawV3).toBeDefined();
+    expect(rawV4).toBeDefined();
 
     const envelope = JSON.parse(rawV3 ?? "") as StoredLibraryV3;
     expect(envelope.version).toBe(3);
     expect(envelope.designs.every(isFireworkDesignV3)).toBe(true);
+    const v4Envelope = JSON.parse(rawV4 ?? "") as StoredLibraryV4;
+    expect(v4Envelope.version).toBe(4);
+    expect(v4Envelope.designs.every(isFireworkDesignV4)).toBe(true);
     expect(new DesignRepository(storage).list()).toEqual([migrated]);
   });
 
