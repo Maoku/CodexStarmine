@@ -23,7 +23,12 @@ import {
   type TemplateApplyMode,
 } from "./IntegratedPlacementWorkbench";
 import { renderLayerPanel } from "./LayerPanel";
-import { renderStarLibraryPanel } from "./StarLibraryPanel";
+import {
+  computeStarPreviewPosition,
+  renderStarLibraryPanel,
+  renderStarPreviewOverlay,
+  type StarPreviewPosition,
+} from "./StarLibraryPanel";
 import {
   STAR_LONG_PRESS_DELAY_MS,
   StarLongPressGesture,
@@ -71,6 +76,7 @@ export class IntegratedCraftEditor {
   #snapshot?: CraftDocumentSnapshot;
   #starPressTimer = 0;
   #starPreviewId?: string;
+  #starPreviewPosition?: StarPreviewPosition;
   #suppressStarClickId?: string;
   #unsubscribe: () => void;
 
@@ -156,7 +162,7 @@ export class IntegratedCraftEditor {
       <aside class="craft-rail craft-rail--left" aria-label="レイヤーと仮想星">
         <button class="drawer-close" type="button" data-action="close-drawer">閉じる</button>
         ${renderLayerPanel(intentDesign, snapshot.selection.layerId)}
-        ${renderStarLibraryPanel(design, selectedStarId, this.#starPreviewId)}
+        ${renderStarLibraryPanel(design, selectedStarId)}
       </aside>
 
       <main class="craft-bench integrated-craft-bench">
@@ -174,6 +180,7 @@ export class IntegratedCraftEditor {
 
       <aside class="craft-rail craft-rail--right" aria-label="作品と配置の設定">
         <button class="drawer-close" type="button" data-action="close-drawer">閉じる</button>
+        <div class="inspector-scroll-region">
         <section class="craft-card performance-card ${warningClass}">
           <header><span>描画負荷</span><strong>${warningClass === "is-good" ? "● 良好" : warningClass === "is-warning" ? "▲ 注意" : "× 超過"}</strong></header>
           <p><span>最大粒子</span><b>${diagnostic.estimatedCost.maximumParticles.toLocaleString()} / 6,000</b></p>
@@ -184,6 +191,7 @@ export class IntegratedCraftEditor {
           <header><span>選択レイヤー</span><strong>${selectedIntent ? layerAuthoringLabel(selectedIntent) : "未選択"}</strong></header>
           ${this.#renderInspector(intentDesign, selectedIntent)}
         </section>
+        </div>
         ${renderInlineDiagnosticPreview(
           preview,
           this.#previewRunning,
@@ -199,7 +207,12 @@ export class IntegratedCraftEditor {
         <span class="editor-save-state" role="status" aria-live="polite">${snapshot.dirty ? "未保存の変更あり" : "保存済み"}</span>
         <button type="button" data-action="save" class="secondary-save">保存して棚へ</button>
         <button type="button" data-action="check" class="confirm-craft">湖面で確認</button>
-      </footer>`;
+      </footer>
+      ${renderStarPreviewOverlay(
+        design,
+        this.#starPreviewId,
+        this.#starPreviewPosition,
+      )}`;
     this.#syncMobileDrawerAccessibility();
   }
 
@@ -267,10 +280,6 @@ export class IntegratedCraftEditor {
     if (canvas && this.#placementTemplate === "manual") {
       this.#addManualPoint(event as MouseEvent, canvas);
       return;
-    }
-    if (this.#starPreviewId) {
-      this.#starPreviewId = undefined;
-      this.#render();
     }
   };
 
@@ -350,7 +359,9 @@ export class IntegratedCraftEditor {
       }
       this.#assignStar(starId);
     } else if (action === "preview-star") {
-      this.#openStarPreview(button.dataset.starId);
+      this.#openStarPreview(button.dataset.starId, button);
+    } else if (action === "close-star-preview") {
+      this.#closeStarPreview();
     } else if (action === "select-section-plane") {
       this.#setSection({
         plane: button.dataset.plane as SectionPlane,
@@ -455,8 +466,7 @@ export class IntegratedCraftEditor {
         );
         if (!starId) return;
         this.#suppressStarClickId = starId;
-        this.#starPreviewId = starId;
-        this.#render();
+        this.#openStarPreview(starId, starButton);
       }, STAR_LONG_PRESS_DELAY_MS);
       return;
     }
@@ -505,13 +515,9 @@ export class IntegratedCraftEditor {
   };
 
   readonly #handlePointerEnd = (event: PointerEvent): void => {
-    const openedId = this.#starLongPress.end(event.pointerId);
+    this.#starLongPress.end(event.pointerId);
     window.clearTimeout(this.#starPressTimer);
     this.#starPressTimer = 0;
-    if (openedId) {
-      this.#starPreviewId = undefined;
-      this.#render();
-    }
     const drag = this.#pointDrag;
     if (!drag || drag.pointerId !== event.pointerId) return;
     this.#pointDrag = undefined;
@@ -539,7 +545,16 @@ export class IntegratedCraftEditor {
     );
     if (starButton?.dataset.starId && event.key === " ") {
       event.preventDefault();
-      this.#openStarPreview(starButton.dataset.starId);
+      this.#openStarPreview(starButton.dataset.starId, starButton);
+      return;
+    }
+    if (this.#starPreviewId && event.key === "Tab") {
+      event.preventDefault();
+      this.element
+        .querySelector<HTMLButtonElement>(
+          ".star-spread-balloon [data-action='close-star-preview']",
+        )
+        ?.focus();
       return;
     }
     const command = event.metaKey || event.ctrlKey;
@@ -550,12 +565,7 @@ export class IntegratedCraftEditor {
       else this.#controller.document.undo();
     } else if (event.key === "Escape") {
       if (this.#starPreviewId) {
-        const starId = this.#starPreviewId;
-        this.#starPreviewId = undefined;
-        this.#render();
-        this.#focusAfterRender(
-          `[data-action="assign-star"][data-star-id="${CSS.escape(starId)}"]`,
-        );
+        this.#closeStarPreview();
       } else if (this.#drawer) {
         const drawer = this.#drawer;
         this.#drawer = undefined;
@@ -604,17 +614,30 @@ export class IntegratedCraftEditor {
     }, 150);
   }
 
-  #openStarPreview(starId: string | undefined): void {
+  #openStarPreview(starId: string | undefined, anchor: HTMLElement): void {
     if (!starId || !this.#snapshot?.draft.starDefinitions[starId]) return;
+    const bounds = anchor.getBoundingClientRect();
     this.#starPreviewId = starId;
-    this.#render();
-    window.setTimeout(() => {
-      this.element
-        .querySelector<HTMLButtonElement>(
-          `[data-action="preview-star"][data-star-id="${CSS.escape(starId)}"]`,
-        )
-        ?.focus();
+    this.#starPreviewPosition = computeStarPreviewPosition(bounds, {
+      height: window.innerHeight,
+      width: window.innerWidth,
     });
+    this.#render();
+    queueMicrotask(() => {
+      this.element.querySelector<HTMLElement>(".star-spread-balloon")?.focus();
+    });
+  }
+
+  #closeStarPreview(): void {
+    const starId = this.#starPreviewId;
+    this.#starPreviewId = undefined;
+    this.#starPreviewPosition = undefined;
+    this.#render();
+    if (starId) {
+      this.#focusAfterRender(
+        `[data-action="preview-star"][data-star-id="${CSS.escape(starId)}"]`,
+      );
+    }
   }
 
   readonly #handleMobileQueryChange = (): void => {
@@ -842,6 +865,7 @@ export class IntegratedCraftEditor {
     const layerId = this.#snapshot?.selection.layerId;
     if (!layerId) return;
     this.#starPreviewId = undefined;
+    this.#starPreviewPosition = undefined;
     this.#controller.document.selectStarDefinition(starId);
     let replacedPoint = false;
     this.#updateIntentLayer(layerId, "仮想星を配置", (layer) => {
