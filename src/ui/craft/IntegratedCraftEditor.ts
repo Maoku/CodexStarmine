@@ -1,11 +1,12 @@
 import {
-  createHeartPoints,
   type FireworkDesign,
   type FireworkDesignV4,
-  type FireworkLayer,
   type LayerIntentV4,
   type PresetLayerIntent,
   type PresetLayerParameters,
+  type SectionPlane,
+  type SectionRatio,
+  type SectionRef,
 } from "../../data";
 import type { CraftController, CraftDocumentSnapshot } from "../../modes/craft";
 import {
@@ -14,12 +15,10 @@ import {
 } from "../../render/preview/ApproximateSpreadRenderer";
 import { renderInlineDiagnosticPreview } from "./InlineDiagnosticPreview";
 import {
+  canvasPointOnSection,
   createPlacementTemplatePoints,
-  pointOnPlacementFace,
-  projectPlacementPoint,
+  projectSectionPoint,
   renderIntegratedPlacementWorkbench,
-  type NormalizedPlacementPoint,
-  type PlacementFace,
   type PlacementTemplate,
 } from "./IntegratedPlacementWorkbench";
 import { renderLayerPanel } from "./LayerPanel";
@@ -28,6 +27,7 @@ import {
   STAR_LONG_PRESS_DELAY_MS,
   StarLongPressGesture,
 } from "./StarLongPressGesture";
+import { pointFromSection, type Point3D } from "./SectionGeometry";
 import { escapeHTML, layerAuthoringLabel } from "./viewUtils";
 
 export interface IntegratedCraftEditorCallbacks {
@@ -40,10 +40,8 @@ export interface IntegratedCraftEditorCallbacks {
 interface PointDrag {
   index: number;
   layerId: string;
-  localX: number;
-  localY: number;
   moved: boolean;
-  normalized: NormalizedPlacementPoint;
+  position: Point3D;
   pointerId: number;
   startX: number;
   startY: number;
@@ -52,28 +50,6 @@ interface PointDrag {
 
 type MobileDrawer = "layers" | "inspector";
 
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(Math.max(value, minimum), maximum);
-}
-
-function circlePatternPoints(count = 44) {
-  return Array.from({ length: count }, (_, index) => {
-    const angle = (index / count) * Math.PI * 2;
-    return {
-      groupId: "outline",
-      x: Math.cos(angle) * 0.84,
-      y: Math.sin(angle) * 0.84,
-    };
-  });
-}
-
-function defaultPatternGroups() {
-  return [
-    { id: "left", name: "左輪郭", starId: "star-solid-red" },
-    { id: "right", name: "右輪郭", starId: "star-change-blue" },
-  ];
-}
-
 export class IntegratedCraftEditor {
   readonly element = document.createElement("section");
   readonly #callbacks: IntegratedCraftEditorCallbacks;
@@ -81,11 +57,7 @@ export class IntegratedCraftEditor {
   readonly #mobileQuery: MediaQueryList;
   readonly #starLongPress = new StarLongPressGesture();
   #drawer?: MobileDrawer;
-  #face: PlacementFace = {
-    latitudeBand: 2,
-    longitudeSector: 2,
-    rotationDegrees: 0,
-  };
+  #section: SectionRef = { plane: "xy", ratio: 0.5 };
   #placementTemplate: PlacementTemplate = "manual";
   #pointDrag?: PointDrag;
   #previewModel?: ApproximateSpreadModel;
@@ -188,11 +160,12 @@ export class IntegratedCraftEditor {
       <main class="craft-bench integrated-craft-bench">
         ${renderIntegratedPlacementWorkbench(
           design,
+          intentDesign,
           selectedLayer,
-          this.#face,
+          selectedIntent,
+          this.#section,
           this.#placementTemplate,
           pointEditingAllowed ? this.#selectedPointIndex : undefined,
-          pointEditingAllowed,
         )}
       </main>
 
@@ -219,11 +192,6 @@ export class IntegratedCraftEditor {
         <div class="history-actions">
           <button type="button" data-action="undo" ${snapshot.canUndo ? "" : "disabled"}>Undo</button>
           <button type="button" data-action="redo" ${snapshot.canRedo ? "" : "disabled"}>Redo</button>
-        </div>
-        <div class="surface-rotation" aria-label="配置面の回転">
-          <button type="button" data-action="rotate-surface" data-step="-15" aria-label="配置面を左へ15度回転">↶</button>
-          <label><span>配置面 ${this.#face.rotationDegrees}°</span><input name="surface-rotation" type="range" min="0" max="345" step="15" value="${this.#face.rotationDegrees}" /></label>
-          <button type="button" data-action="rotate-surface" data-step="15" aria-label="配置面を右へ15度回転">↷</button>
         </div>
         <span class="editor-save-state" role="status" aria-live="polite">${snapshot.dirty ? "未保存の変更あり" : "保存済み"}</span>
         <button type="button" data-action="save" class="secondary-save">保存して棚へ</button>
@@ -325,6 +293,14 @@ export class IntegratedCraftEditor {
       }
     } else if (action === "select-layer" && layerId) {
       this.#selectedPointIndex = undefined;
+      const intent = snapshot.intentDraft.layers.find(
+        (candidate) => candidate.id === layerId,
+      );
+      if (intent?.authoringMode === "pattern") {
+        this.#section = { ...intent.pattern.section };
+      } else if (intent?.authoringMode === "manual" && intent.points[0]) {
+        this.#section = { ...intent.points[0].section };
+      }
       this.#controller.document.selectLayer(layerId);
       this.#drawer = undefined;
     } else if (action === "toggle-layer" && layerId) {
@@ -368,12 +344,16 @@ export class IntegratedCraftEditor {
       this.#assignStar(starId);
     } else if (action === "preview-star") {
       this.#openStarPreview(button.dataset.starId);
-    } else if (action === "select-latitude") {
-      this.#face.latitudeBand = Number(button.dataset.index);
-      this.#render();
-    } else if (action === "select-longitude") {
-      this.#face.longitudeSector = Number(button.dataset.index);
-      this.#render();
+    } else if (action === "select-section-plane") {
+      this.#setSection({
+        plane: button.dataset.plane as SectionPlane,
+        ratio: this.#section.ratio,
+      });
+    } else if (action === "select-section-ratio") {
+      this.#setSection({
+        plane: this.#section.plane,
+        ratio: Number(button.dataset.ratio) as SectionRatio,
+      });
     } else if (action === "placement-template") {
       const template = button.dataset.template as PlacementTemplate;
       this.#placementTemplate = template;
@@ -385,10 +365,6 @@ export class IntegratedCraftEditor {
       }
     } else if (action === "delete-point") {
       this.#deleteSelectedPoint();
-    } else if (action === "rotate-surface") {
-      this.#face.rotationDegrees =
-        (this.#face.rotationDegrees + Number(button.dataset.step) + 360) % 360;
-      this.#render();
     } else if (action === "undo") {
       this.#selectedPointIndex = undefined;
       this.#controller.document.undo();
@@ -414,10 +390,7 @@ export class IntegratedCraftEditor {
   readonly #handleChange = (event: Event): void => {
     const input = event.target as HTMLInputElement | HTMLSelectElement;
     if (!this.#snapshot) return;
-    if (input.name === "surface-rotation") {
-      this.#face.rotationDegrees = Number(input.value);
-      this.#render();
-    } else if (input.name) {
+    if (input.name) {
       this.#changeSelectedLayer(input.name, input.value);
     }
   };
@@ -485,16 +458,11 @@ export class IntegratedCraftEditor {
     const canvas = point.closest<SVGSVGElement>("[data-workbench-canvas]");
     if (!canvas || !point.dataset.layerId) return;
     const local = this.#canvasLocalPoint(event.clientX, event.clientY, canvas);
-    const selectedLayer = this.#selectedLayer();
-    const radius =
-      selectedLayer?.kind === "spherical" ? selectedLayer.radius : 1;
     this.#pointDrag = {
       index: Number(point.dataset.pointIndex),
       layerId: point.dataset.layerId,
-      localX: local.x,
-      localY: local.y,
       moved: false,
-      normalized: pointOnPlacementFace(local.x, local.y, this.#face, radius),
+      position: pointFromSection(this.#section, local),
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -517,25 +485,10 @@ export class IntegratedCraftEditor {
     );
     if (!canvas) return;
     const local = this.#canvasLocalPoint(event.clientX, event.clientY, canvas);
-    const selectedLayer = this.#snapshot?.draft.layers.find(
-      (layer) => layer.id === drag.layerId,
-    );
-    const radius =
-      selectedLayer?.kind === "spherical" ? selectedLayer.radius : 1;
-    drag.localX = local.x;
-    drag.localY = local.y;
-    drag.normalized = pointOnPlacementFace(
-      local.x,
-      local.y,
-      this.#face,
-      radius,
-    );
+    drag.position = pointFromSection(this.#section, local);
     drag.moved ||=
       Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 3;
-    const projected = projectPlacementPoint(
-      drag.normalized,
-      this.#face.rotationDegrees,
-    );
+    const projected = projectSectionPoint(drag.position, this.#section);
     drag.target.setAttribute("cx", projected.x.toFixed(1));
     drag.target.setAttribute("cy", projected.y.toFixed(1));
     event.preventDefault();
@@ -557,30 +510,15 @@ export class IntegratedCraftEditor {
       this.#render();
       return;
     }
-    this.#controller.document.update("配置点を移動", (draft) => {
+    this.#controller.document.updateIntent("配置点を移動", (draft) => {
       const layer = draft.layers.find(
         (candidate) => candidate.id === drag.layerId,
       );
-      if (!layer || layer.locked) return;
-      if (layer.kind === "spherical") {
-        const override = layer.overrides.find(
-          (item) => item.index === drag.index,
-        );
-        if (override) override.position = drag.normalized;
-        else
-          layer.overrides.push({
-            index: drag.index,
-            position: drag.normalized,
-          });
-        layer.placement = "manual";
-      } else if (layer.kind === "pattern") {
-        const point = layer.points[drag.index];
-        if (point) {
-          point.x = clamp(drag.localX, -1, 1);
-          point.y = clamp(drag.localY, -1, 1);
-          layer.template = "custom";
-        }
-      }
+      if (!layer || layer.locked || layer.authoringMode !== "manual") return;
+      const point = layer.points[drag.index];
+      if (!point) return;
+      point.position = drag.position;
+      point.section = { ...this.#section };
     });
   };
 
@@ -715,15 +653,7 @@ export class IntegratedCraftEditor {
     const bounds = canvas.getBoundingClientRect();
     const svgX = ((clientX - bounds.left) / bounds.width) * 600;
     const svgY = ((clientY - bounds.top) / bounds.height) * 544;
-    return {
-      x: clamp((svgX - 300) / 214, -1, 1),
-      y: clamp((272 - svgY) / 214, -1, 1),
-    };
-  }
-
-  #selectedLayer(): FireworkLayer | undefined {
-    const layerId = this.#snapshot?.selection.layerId;
-    return this.#snapshot?.draft.layers.find((layer) => layer.id === layerId);
+    return canvasPointOnSection(svgX, svgY, this.#section);
   }
 
   #selectedIntentLayer(): LayerIntentV4 | undefined {
@@ -745,16 +675,19 @@ export class IntegratedCraftEditor {
     });
   }
 
-  #updateLayer(
-    layerId: string,
-    label: string,
-    recipe: (layer: FireworkLayer) => void,
-  ): void {
-    this.#controller.document.update(label, (draft) => {
-      const layer = draft.layers.find((candidate) => candidate.id === layerId);
-      if (!layer || layer.locked) return;
-      recipe(layer);
-    });
+  #setSection(section: SectionRef): void {
+    this.#section = section;
+    const selected = this.#selectedIntentLayer();
+    if (selected?.authoringMode === "pattern") {
+      this.#updateIntentLayer(selected.id, "型物の断面を変更", (layer) => {
+        if (layer.authoringMode === "pattern") {
+          layer.pattern.section = { ...section };
+        }
+      });
+    } else {
+      this.#selectedPointIndex = undefined;
+      this.#render();
+    }
   }
 
   #moveLayer(layerId: string, offset: number): void {
@@ -929,48 +862,27 @@ export class IntegratedCraftEditor {
     if (!layerId) return;
     const selectedStarId = this.#snapshot?.selection.starDefinitionId;
     let applied = false;
-    this.#updateLayer(
+    this.#updateIntentLayer(
       layerId,
       `${template === "circle" ? "円形" : "ハート"}配置`,
       (layer) => {
-        if (layer.kind === "spherical") {
-          const points = createPlacementTemplatePoints(
-            template,
-            this.#face,
-            layer.radius,
-          );
-          layer.count = points.length;
-          layer.placement = "manual";
-          layer.overrides = points.map((position, index) => ({
-            index,
-            position,
-            starId: selectedStarId,
-          }));
-          applied = true;
-        } else if (layer.kind === "pattern") {
-          layer.points =
-            template === "heart"
-              ? createHeartPoints(72)
-              : circlePatternPoints();
-          layer.groups =
-            template === "heart"
-              ? defaultPatternGroups()
-              : [
-                  {
-                    id: "outline",
-                    name: "輪郭",
-                    starId: selectedStarId ?? layer.defaultStarId,
-                  },
-                ];
-          layer.template = template;
-          applied = true;
-        }
+        if (layer.authoringMode !== "manual") return;
+        layer.points = createPlacementTemplatePoints(
+          template,
+          this.#section,
+        ).map((position, index) => ({
+          id: `${layer.id}-${template}-${index + 1}`,
+          position,
+          section: { ...this.#section },
+          starId: selectedStarId ?? layer.defaultStarId,
+        }));
+        applied = true;
       },
     );
     this.#callbacks.onToast(
       applied
-        ? `選択区画へ${template === "circle" ? "円形" : "ハート"}を配置しました`
-        : "球面または型物レイヤーを選んでください",
+        ? `${this.#section.plane.toUpperCase()} ${Math.round(this.#section.ratio * 100)}%断面へ${template === "circle" ? "円形" : "ハート"}を配置しました`
+        : "手動レイヤーを選んでください",
     );
   }
 
@@ -980,54 +892,37 @@ export class IntegratedCraftEditor {
     starId?: string,
   ): void {
     const layerId = this.#snapshot?.selection.layerId;
-    const selectedLayer = this.#selectedLayer();
+    const selectedLayer = this.#selectedIntentLayer();
     if (
       !layerId ||
       !selectedLayer ||
       selectedLayer.locked ||
-      this.#selectedIntentLayer()?.authoringMode !== "manual"
+      selectedLayer.authoringMode !== "manual"
     )
       return;
     const local = this.#canvasLocalPoint(event.clientX, event.clientY, canvas);
     let addedIndex: number | undefined;
-    this.#updateLayer(layerId, "配置点を追加", (layer) => {
-      if (layer.kind === "spherical") {
-        addedIndex = layer.count;
-        layer.count += 1;
-        layer.placement = "manual";
-        layer.overrides.push({
-          index: addedIndex,
-          position: pointOnPlacementFace(
-            local.x,
-            local.y,
-            this.#face,
-            layer.radius,
-          ),
-          starId,
-        });
-      } else if (layer.kind === "pattern") {
-        let group = layer.groups.find((candidate) => candidate.id === "manual");
-        if (!group) {
-          group = {
-            id: "manual",
-            name: "手動配置",
-            starId: starId ?? layer.defaultStarId,
-          };
-          layer.groups.push(group);
-        }
-        if (starId) group.starId = starId;
-        addedIndex = layer.points.length;
-        layer.points.push({
-          groupId: group.id,
-          x: local.x,
-          y: local.y,
-        });
-        layer.template = "custom";
+    this.#updateIntentLayer(layerId, "配置点を追加", (layer) => {
+      if (layer.authoringMode !== "manual") return;
+      addedIndex = layer.points.length;
+      let pointNumber = layer.points.length + 1;
+      while (
+        layer.points.some(
+          (point) => point.id === `${layer.id}-point-${pointNumber}`,
+        )
+      ) {
+        pointNumber += 1;
       }
+      layer.points.push({
+        id: `${layer.id}-point-${pointNumber}`,
+        position: pointFromSection(this.#section, local),
+        section: { ...this.#section },
+        starId: starId ?? layer.defaultStarId,
+      });
     });
     if (addedIndex === undefined) {
       if (starId) this.#assignStar(starId);
-      else this.#callbacks.onToast("球面または型物レイヤーを選んでください");
+      else this.#callbacks.onToast("手動レイヤーを選んでください");
       return;
     }
     this.#placementTemplate = "manual";
@@ -1043,15 +938,8 @@ export class IntegratedCraftEditor {
       this.#selectedIntentLayer()?.authoringMode !== "manual"
     )
       return;
-    this.#updateLayer(layerId, "配置点を削除", (layer) => {
-      if (layer.kind === "spherical") {
-        const override = layer.overrides.find((item) => item.index === index);
-        if (override) override.removed = true;
-        else layer.overrides.push({ index, removed: true });
-      } else if (layer.kind === "pattern") {
-        layer.points.splice(index, 1);
-        layer.template = "custom";
-      }
+    this.#updateIntentLayer(layerId, "配置点を削除", (layer) => {
+      if (layer.authoringMode === "manual") layer.points.splice(index, 1);
     });
     this.#selectedPointIndex = undefined;
   }

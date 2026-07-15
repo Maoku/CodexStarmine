@@ -1,84 +1,66 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CHRYSANTHEMUM_PRESET,
+  ensureFireworkDesignV3,
+  migrateV3ToV4,
+} from "../../data";
+import {
+  canvasPointOnSection,
   createPlacementTemplatePoints,
-  normalizePlacementFace,
-  placementFaceCenter,
-  pointOnPlacementFace,
-  projectPlacementPoint,
+  projectSectionPoint,
   renderIntegratedPlacementWorkbench,
 } from "./IntegratedPlacementWorkbench";
-import { CHRYSANTHEMUM_PRESET } from "../../data";
 
 describe("IntegratedPlacementWorkbench", () => {
-  it("clamps the 4 by 4 placement face and wraps its rotation", () => {
-    expect(
-      normalizePlacementFace({
-        latitudeBand: 9,
-        longitudeSector: -2,
-        rotationDegrees: -15,
-      }),
-    ).toEqual({
-      latitudeBand: 3,
-      longitudeSector: 0,
-      rotationDegrees: 345,
-    });
-  });
-
-  it("creates deterministic circle and heart points on the selected face", () => {
-    const face = {
-      latitudeBand: 2,
-      longitudeSector: 1,
-      rotationDegrees: 30,
-    };
-    const circle = createPlacementTemplatePoints("circle", face, 0.72);
-    const heart = createPlacementTemplatePoints("heart", face, 0.72);
+  it("creates deterministic circle and heart points on the selected section", () => {
+    const section = { plane: "xy" as const, ratio: 0.3 as const };
+    const circle = createPlacementTemplatePoints("circle", section, 0.72);
+    const heart = createPlacementTemplatePoints("heart", section, 0.72);
 
     expect(circle).toHaveLength(36);
     expect(heart).toHaveLength(44);
-    expect(createPlacementTemplatePoints("heart", face, 0.72)).toEqual(heart);
+    expect(createPlacementTemplatePoints("heart", section, 0.72)).toEqual(
+      heart,
+    );
     [...circle, ...heart].forEach((point) => {
-      expect(Math.hypot(point.x, point.y, point.z)).toBeCloseTo(0.72, 8);
+      expect(Math.hypot(point.x, point.y, point.z)).toBeLessThanOrEqual(0.72);
+      expect(point.z).toBeCloseTo(-0.288, 10);
     });
   });
 
-  it("maps manual positions to the same normalized face coordinate system", () => {
-    const face = {
-      latitudeBand: 0,
-      longitudeSector: 3,
-      rotationDegrees: 0,
-    };
-    expect(pointOnPlacementFace(0, 0, face)).toEqual(placementFaceCenter(face));
-    const point = pointOnPlacementFace(0.6, -0.4, face, 0.5);
-    expect(Math.hypot(point.x, point.y, point.z)).toBeCloseTo(0.5, 8);
+  it("maps canvas and 3D points through the same section coordinate system", () => {
+    const section = { plane: "xz" as const, ratio: 0.7 as const };
+    const center = canvasPointOnSection(300, 272, section);
+    expect(center).toEqual({ x: 0, y: 0 });
+    const source = createPlacementTemplatePoints("circle", section)[0];
+    const projected = projectSectionPoint(source, section);
+    expect(projected.x).toBeGreaterThan(300);
+    expect(projected.y).toBeCloseTo(272, 8);
+    expect(projected.distanceFromPlane).toBeCloseTo(0, 8);
   });
 
-  it("rotates only the workbench projection without mutating its point", () => {
-    const point = { x: 1, y: 0.25, z: 0 };
-    const before = structuredClone(point);
-    const front = projectPlacementPoint(point, 0);
-    const side = projectPlacementPoint(point, 90);
-
-    expect(point).toEqual(before);
-    expect(front.x).toBeGreaterThan(500);
-    expect(side.x).toBeCloseTo(300, 8);
-    expect(front.y).toBe(side.y);
-  });
-
-  it("removes individual point controls from parameter-authored layers", () => {
-    const selectedLayer = CHRYSANTHEMUM_PRESET.layers[0];
+  it("renders XY and XZ with five section choices and no legacy face controls", () => {
+    const runtime = ensureFireworkDesignV3(CHRYSANTHEMUM_PRESET);
+    const intent = migrateV3ToV4(runtime);
     const markup = renderIntegratedPlacementWorkbench(
-      CHRYSANTHEMUM_PRESET,
-      selectedLayer,
-      { latitudeBand: 2, longitudeSector: 2, rotationDegrees: 0 },
+      runtime,
+      intent,
+      runtime.layers[0],
+      intent.layers[0],
+      { plane: "xy", ratio: 0.5 },
       "manual",
       0,
-      false,
     );
 
-    expect(markup).toContain("このレイヤーはパラメーターで編集します");
-    expect(markup).not.toContain('data-action="delete-point"');
-    expect(markup).not.toContain('data-action="placement-template"');
+    expect(markup).toContain(">XY<");
+    expect(markup).toContain(">XZ<");
+    [10, 30, 50, 70, 90].forEach((ratio) =>
+      expect(markup).toContain(`>${ratio}%<`),
+    );
+    expect(markup).not.toContain("緯度区画");
+    expect(markup).not.toContain("経度区画");
+    expect(markup).not.toContain("配置面の回転");
     expect(markup).not.toContain('data-point-editable="true"');
   });
 });

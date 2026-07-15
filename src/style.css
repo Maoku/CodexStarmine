@@ -263,31 +263,35 @@
   white-space: nowrap;
 }
 
-.placement-face-controls {
+.section-controls {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(8rem, 0.45fr) minmax(15rem, 1fr);
   gap: 0.45rem;
   padding: 0.5rem 0.65rem 0.35rem;
 }
 
-.placement-face-controls fieldset {
+.section-controls fieldset {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.2rem;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-.placement-face-controls legend {
+.section-controls fieldset:last-child {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.section-controls legend {
   grid-column: 1 / -1;
   margin-bottom: 0.2rem;
   color: #777f84;
   font-size: 0.46rem;
 }
 
-.placement-face-controls button,
+.section-controls button,
 .placement-tool-row button {
   min-width: 0;
   min-height: 1.85rem;
@@ -299,7 +303,7 @@
   font-size: 0.48rem;
 }
 
-.placement-face-controls button.is-active,
+.section-controls button.is-active,
 .placement-tool-row button.is-active {
   border-color: rgb(197 151 93 / 68%);
   background: rgb(197 151 93 / 12%);
@@ -345,30 +349,28 @@
   touch-action: none;
 }
 
-.workbench-shell {
+.workbench-sphere-reference {
+  fill: rgb(10 17 23 / 28%);
+  stroke: rgb(132 116 94 / 20%);
+  stroke-dasharray: 4 8;
+}
+
+.workbench-section-disc {
   fill: url("#workbench-shell-fill");
   stroke: none;
 }
 
-.workbench-shell-edge {
+.workbench-section-edge {
   fill: none;
   stroke: rgb(181 141 91 / 58%);
-  stroke-width: 8;
+  stroke-width: 5;
 }
 
-.workbench-grid {
+.workbench-section-grid {
   fill: none;
   stroke: rgb(201 166 118 / 22%);
   stroke-dasharray: 3 7;
   stroke-width: 1.2;
-}
-
-.workbench-face-marker {
-  fill: rgb(214 167 103 / 8%);
-  stroke: #d0a165;
-  stroke-dasharray: 3 4;
-  stroke-width: 2;
-  filter: drop-shadow(0 0 0.5rem rgb(208 161 101 / 30%));
 }
 
 .workbench-point {
@@ -388,6 +390,10 @@
   stroke: #fff5dd;
   stroke-width: 2.5;
   filter: drop-shadow(0 0 0.45rem var(--point-color));
+}
+
+.workbench-point.is-reference {
+  pointer-events: none;
 }
 
 .workbench-canvas-wrap > p {
@@ -485,32 +491,9 @@
 }
 
 .integrated-transport {
-  grid-template-columns: auto minmax(13rem, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(8rem, 1fr) auto auto;
   min-height: 0;
   padding: 0.45rem 0.65rem;
-}
-
-.surface-rotation {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: auto minmax(8rem, 1fr) auto;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.surface-rotation label {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: auto minmax(6rem, 1fr);
-  align-items: center;
-  gap: 0.55rem;
-  color: #757d82;
-  font-size: 0.5rem;
-}
-
-.surface-rotation input {
-  width: 100%;
-  accent-color: #ad7f49;
 }
 
 .editor-save-state {
@@ -545,7 +528,7 @@
     grid-template-columns: 14rem minmax(27rem, 1fr) 16rem;
   }
 
-  .placement-face-controls {
+  .section-controls {
     grid-template-columns: 1fr;
   }
 }
@@ -689,12 +672,12 @@
     font-size: 0.42rem;
   }
 
-  .placement-face-controls {
+  .section-controls {
     gap: 0.25rem;
     padding: 0.35rem;
   }
 
-  .placement-face-controls button,
+  .section-controls button,
   .placement-tool-row button {
     min-height: 1.65rem;
     padding: 0 0.12rem;
@@ -721,16 +704,10 @@
     padding: 0.35rem;
   }
 
-  .integrated-transport .history-actions,
-  .integrated-transport .surface-rotation {
+  .integrated-transport .history-actions {
     flex: 0 0 auto;
   }
 
-  .surface-rotation {
-    display: flex;
-  }
-
-  .surface-rotation label,
   .editor-save-state {
     display: none;
   }
