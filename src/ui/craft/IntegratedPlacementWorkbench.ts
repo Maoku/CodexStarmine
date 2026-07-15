@@ -295,6 +295,7 @@ export function renderIntegratedPlacementWorkbench(
   face: PlacementFace,
   placementTemplate: PlacementTemplate,
   selectedPointIndex?: number,
+  pointEditingAllowed = true,
 ): string {
   const safeFace = normalizePlacementFace(face);
   const points = workbenchPoints(design, selectedLayer?.id)
@@ -303,7 +304,10 @@ export function renderIntegratedPlacementWorkbench(
         item.point,
         safeFace.rotationDegrees,
       );
-      const selected = item.selectedLayer && item.index === selectedPointIndex;
+      const selected =
+        pointEditingAllowed &&
+        item.selectedLayer &&
+        item.index === selectedPointIndex;
       return `<circle
         cx="${projected.x.toFixed(1)}"
         cy="${projected.y.toFixed(1)}"
@@ -312,7 +316,7 @@ export function renderIntegratedPlacementWorkbench(
         class="workbench-point${item.selectedLayer ? " is-layer-selected" : ""}${selected ? " is-point-selected" : ""}"
         data-layer-id="${item.layerId}"
         data-point-index="${item.index}"
-        data-point-editable="${item.editable}"
+        data-point-editable="${pointEditingAllowed && item.editable}"
       />`;
     })
     .join("");
@@ -331,8 +335,8 @@ export function renderIntegratedPlacementWorkbench(
     </div>
     <div class="placement-tool-row" aria-label="便利な配置">
       <span>便利な配置</span>
-      ${(["circle", "heart", "manual"] as PlacementTemplate[]).map((template) => `<button type="button" data-action="placement-template" data-template="${template}" class="${placementTemplate === template ? "is-active" : ""}" aria-pressed="${placementTemplate === template}">${({ circle: "円形", heart: "ハート", manual: "手動" } as const)[template]}</button>`).join("")}
-      <button type="button" data-action="delete-point" ${selectedPointIndex === undefined ? "disabled" : ""}>選択点を削除</button>
+      ${pointEditingAllowed ? (["circle", "heart", "manual"] as PlacementTemplate[]).map((template) => `<button type="button" data-action="placement-template" data-template="${template}" class="${placementTemplate === template ? "is-active" : ""}" aria-pressed="${placementTemplate === template}">${({ circle: "円形", heart: "ハート", manual: "手動" } as const)[template]}</button>`).join("") : '<span class="placement-permission-note">このレイヤーはパラメーターで編集します</span>'}
+      ${pointEditingAllowed ? `<button type="button" data-action="delete-point" ${selectedPointIndex === undefined ? "disabled" : ""}>選択点を削除</button>` : ""}
     </div>
     <div class="workbench-canvas-wrap">
       <svg viewBox="0 0 600 544" data-workbench-canvas role="img" aria-label="玉皮、4掛ける4の配置面、全レイヤーの仮想星">
@@ -343,7 +347,7 @@ export function renderIntegratedPlacementWorkbench(
         <g class="workbench-points">${points}</g>
         <circle cx="300" cy="272" r="224" class="workbench-shell-edge" />
       </svg>
-      <p>${placementTemplate === "manual" ? "玉面を押して1点追加。点をドラッグして移動できます。" : "選択区画へ配置後も、各点を手動で編集できます。"}</p>
+      <p>${pointEditingAllowed ? (placementTemplate === "manual" ? "玉面を押して1点追加。点をドラッグして移動できます。" : "選択区画へ配置後も、各点を手動で編集できます。") : "生成点は参照表示です。右のパラメーターで調整してください。"}</p>
     </div>
   </section>`;
 }

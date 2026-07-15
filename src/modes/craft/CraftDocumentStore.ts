@@ -1,9 +1,13 @@
 import type {
+  AnyFireworkDesign,
   ChildBurstLayer,
   FireworkDesign,
+  FireworkDesignV4,
   FireworkLayer,
+  LayerIntentV4,
   SphericalStarLayer,
 } from "../../data";
+import { ensureFireworkDesignV4, resolveFireworkDesignV4 } from "../../data";
 import {
   buildEditorDiagnostic,
   type EditorDiagnostic,
@@ -16,7 +20,7 @@ export interface CraftSelection {
 }
 
 interface HistoryEntry {
-  design: FireworkDesign;
+  design: FireworkDesignV4;
   label: string;
 }
 
@@ -26,6 +30,7 @@ export interface CraftDocumentSnapshot {
   diagnostic: EditorDiagnostic;
   dirty: boolean;
   draft: FireworkDesign;
+  intentDraft: FireworkDesignV4;
   selection: CraftSelection;
 }
 
@@ -152,7 +157,7 @@ export function syncCompatibilityFields(design: FireworkDesign): void {
 }
 
 export class CraftDocumentStore {
-  #draft: FireworkDesign;
+  #draft: FireworkDesignV4;
   #listeners = new Set<Listener>();
   #past: HistoryEntry[] = [];
   #future: HistoryEntry[] = [];
@@ -161,17 +166,28 @@ export class CraftDocumentStore {
   #snapshotA?: EditorDiagnostic;
   #snapshotB?: EditorDiagnostic;
 
-  constructor(design: FireworkDesign) {
-    this.#draft = clone(design);
+  constructor(design: AnyFireworkDesign) {
+    this.#draft = ensureFireworkDesignV4(design);
     this.#selection.layerId = this.#draft.layers[0]?.id;
     this.#savedJSON = JSON.stringify(this.#draft);
   }
 
   get draft(): FireworkDesign {
+    return resolveFireworkDesignV4(this.#draft);
+  }
+
+  get intentDraft(): FireworkDesignV4 {
     return clone(this.#draft);
   }
 
   get selectedLayer(): FireworkLayer | undefined {
+    const layer = this.draft.layers.find(
+      (candidate) => candidate.id === this.#selection.layerId,
+    );
+    return layer ? clone(layer) : undefined;
+  }
+
+  get selectedIntentLayer(): LayerIntentV4 | undefined {
     const layer = this.#draft.layers.find(
       (candidate) => candidate.id === this.#selection.layerId,
     );
@@ -188,8 +204,11 @@ export class CraftDocumentStore {
     return () => this.#listeners.delete(listener);
   }
 
-  replace(design: FireworkDesign, options: { unsaved?: boolean } = {}): void {
-    this.#draft = clone(design);
+  replace(
+    design: AnyFireworkDesign,
+    options: { unsaved?: boolean } = {},
+  ): void {
+    this.#draft = ensureFireworkDesignV4(design);
     this.#past = [];
     this.#future = [];
     this.#selection = { layerId: this.#draft.layers[0]?.id };
@@ -201,8 +220,25 @@ export class CraftDocumentStore {
 
   update(label: string, recipe: (draft: FireworkDesign) => void): void {
     const before = clone(this.#draft);
+    const runtimeDraft = resolveFireworkDesignV4(this.#draft);
+    recipe(runtimeDraft);
+    syncCompatibilityFields(runtimeDraft);
+    this.#draft = ensureFireworkDesignV4(runtimeDraft);
+    if (JSON.stringify(before) === JSON.stringify(this.#draft)) return;
+    this.#past.push({ design: before, label });
+    if (this.#past.length > 100) this.#past.shift();
+    this.#future = [];
+    this.#emit();
+  }
+
+  updateIntent(
+    label: string,
+    recipe: (draft: FireworkDesignV4) => void,
+    options: { preserveLegacy?: boolean } = {},
+  ): void {
+    const before = clone(this.#draft);
     recipe(this.#draft);
-    syncCompatibilityFields(this.#draft);
+    if (!options.preserveLegacy) delete this.#draft.legacyIntent;
     if (JSON.stringify(before) === JSON.stringify(this.#draft)) return;
     this.#past.push({ design: before, label });
     if (this.#past.length > 100) this.#past.shift();
@@ -241,13 +277,19 @@ export class CraftDocumentStore {
   }
 
   markSaved(saved: FireworkDesign): void {
+    this.#draft = ensureFireworkDesignV4(saved);
+    this.#savedJSON = JSON.stringify(this.#draft);
+    this.#emit();
+  }
+
+  markIntentSaved(saved: FireworkDesignV4): void {
     this.#draft = clone(saved);
     this.#savedJSON = JSON.stringify(this.#draft);
     this.#emit();
   }
 
   captureSnapshot(slot: "a" | "b"): void {
-    const diagnostic = buildEditorDiagnostic(this.#draft);
+    const diagnostic = buildEditorDiagnostic(this.draft);
     if (slot === "a") this.#snapshotA = diagnostic;
     else this.#snapshotB = diagnostic;
     this.#emit();
@@ -262,14 +304,16 @@ export class CraftDocumentStore {
   }
 
   #createSnapshot(): CraftDocumentSnapshot {
+    const runtimeDraft = resolveFireworkDesignV4(this.#draft);
     return {
       canRedo: this.#future.length > 0,
       canUndo: this.#past.length > 0,
-      diagnostic: buildEditorDiagnostic(this.#draft),
+      diagnostic: buildEditorDiagnostic(runtimeDraft),
       dirty:
         this.#savedJSON === undefined ||
         JSON.stringify(this.#draft) !== this.#savedJSON,
-      draft: clone(this.#draft),
+      draft: runtimeDraft,
+      intentDraft: clone(this.#draft),
       selection: clone(this.#selection),
     };
   }

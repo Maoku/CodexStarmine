@@ -6,7 +6,9 @@ import {
   placementFaceCenter,
   pointOnPlacementFace,
   projectPlacementPoint,
+  renderIntegratedPlacementWorkbench,
 } from "./IntegratedPlacementWorkbench";
+import { CHRYSANTHEMUM_PRESET } from "../../data";
 
 describe("IntegratedPlacementWorkbench", () => {
   it("clamps the 4 by 4 placement face and wraps its rotation", () => {
@@ -61,5 +63,22 @@ describe("IntegratedPlacementWorkbench", () => {
     expect(front.x).toBeGreaterThan(500);
     expect(side.x).toBeCloseTo(300, 8);
     expect(front.y).toBe(side.y);
+  });
+
+  it("removes individual point controls from parameter-authored layers", () => {
+    const selectedLayer = CHRYSANTHEMUM_PRESET.layers[0];
+    const markup = renderIntegratedPlacementWorkbench(
+      CHRYSANTHEMUM_PRESET,
+      selectedLayer,
+      { latitudeBand: 2, longitudeSector: 2, rotationDegrees: 0 },
+      "manual",
+      0,
+      false,
+    );
+
+    expect(markup).toContain("このレイヤーはパラメーターで編集します");
+    expect(markup).not.toContain('data-action="delete-point"');
+    expect(markup).not.toContain('data-action="placement-template"');
+    expect(markup).not.toContain('data-point-editable="true"');
   });
 });

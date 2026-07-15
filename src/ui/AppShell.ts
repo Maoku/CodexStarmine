@@ -14,6 +14,7 @@ import {
   type FreeViewPresetId,
 } from "../modes/viewFree";
 import { IntegratedCraftEditor } from "./craft/IntegratedCraftEditor";
+import { escapeHTML } from "./craft/viewUtils";
 import { FireworkShelfScreen } from "./screens/FireworkShelfScreen";
 import { InitialSetupScreen } from "./screens/InitialSetupScreen";
 import { ModeSelectionScreen } from "./screens/ModeSelectionScreen";
@@ -84,6 +85,11 @@ export class AppShell {
     window.addEventListener("beforeunload", this.#handleBeforeUnload);
     this.#unsubscribeDocument = controller.document.subscribe((snapshot) => {
       this.#flow.setEditorDirty(snapshot.dirty);
+      this.#syncEditorHeader(
+        snapshot.draft.name,
+        snapshot.draft.sizeClass,
+        snapshot.dirty,
+      );
     });
     this.#unsubscribeFlow = this.#flow.subscribe(this.#renderScreen);
 
@@ -222,17 +228,13 @@ export class AppShell {
     element.className = "renewal-editor-screen";
     element.innerHTML = `
       <header class="app-header renewal-editor-header">
-        <div class="screen-context-title">
-          <p>EDITING</p>
-          <h1>編集中の花火</h1>
+        <button class="renewal-back" type="button" data-shell-action="back">← 花火棚へ戻る</button>
+        <div class="editor-work-header" aria-label="編集中の作品">
+          <label><span>作品名</span><input name="editor-design-name" type="text" maxlength="32" value="${escapeHTML(this.#controller.draft.name)}" /></label>
+          <label><span>玉の大きさ</span><select name="editor-size"><option value="small" ${this.#controller.draft.sizeClass === "small" ? "selected" : ""}>小玉</option><option value="medium" ${this.#controller.draft.sizeClass === "medium" ? "selected" : ""}>中玉</option><option value="large" ${this.#controller.draft.sizeClass === "large" ? "selected" : ""}>大玉</option></select></label>
         </div>
-        <button class="renewal-back renewal-back--center" type="button" data-shell-action="back">← 花火棚へ戻る</button>
         <div class="header-status">
-          <div class="sound-control">
-            <label for="sound-delay">音の距離感</label>
-            <input id="sound-delay" name="sound-delay" type="range" min="0" max="100" value="100" />
-            <output for="sound-delay">実距離</output>
-          </div>
+          <strong data-editor-header-save-state>保存済み</strong>
           <p><span>仮想花火</span> 実物の材料・配合・製造条件は扱いません</p>
         </div>
       </header>
@@ -318,6 +320,10 @@ export class AppShell {
         output.value =
           value > 0.8 ? "実距離" : value > 0.25 ? "演出寄り" : "即時";
       }
+    } else if (input.name === "editor-design-name") {
+      this.#controller.updateName(input.value);
+    } else if (input.name === "editor-size") {
+      this.#controller.updateSize(input.value as FireworkDesign["sizeClass"]);
     }
   };
 
@@ -331,5 +337,25 @@ export class AppShell {
     const element = this.element.querySelector<T>(selector);
     if (!element) throw new Error(`UI element not found: ${selector}`);
     return element;
+  }
+
+  #syncEditorHeader(
+    name: string,
+    sizeClass: FireworkDesign["sizeClass"],
+    dirty: boolean,
+  ): void {
+    const nameInput = this.element.querySelector<HTMLInputElement>(
+      "[name='editor-design-name']",
+    );
+    if (nameInput && document.activeElement !== nameInput)
+      nameInput.value = name;
+    const sizeSelect = this.element.querySelector<HTMLSelectElement>(
+      "[name='editor-size']",
+    );
+    if (sizeSelect) sizeSelect.value = sizeClass;
+    const saveState = this.element.querySelector<HTMLElement>(
+      "[data-editor-header-save-state]",
+    );
+    if (saveState) saveState.textContent = dirty ? "未保存" : "保存済み";
   }
 }

@@ -2,9 +2,11 @@ import {
   FIREWORK_PRESETS,
   PEONY_PRESET,
   ensureFireworkDesignV3,
+  resolveFireworkDesignV4,
   type AscentEffect,
   type DesignRepository,
   type FireworkDesign,
+  type FireworkDesignV4,
   type FireworkPattern,
   type SizeClass,
   type SphericalStarLayer,
@@ -40,6 +42,10 @@ export class CraftController {
 
   get draft(): FireworkDesign {
     return this.document.draft;
+  }
+
+  get intentDraft(): FireworkDesignV4 {
+    return this.document.intentDraft;
   }
 
   get savedDesigns(): FireworkDesign[] {
@@ -108,22 +114,30 @@ export class CraftController {
   }
 
   load(id: string): boolean {
-    const design = this.#repository.find(id);
+    const design = this.#repository.findIntent(id);
     if (!design) return false;
     this.document.replace(design);
     return true;
   }
 
   updateName(name: string): void {
-    this.document.update("作品名を変更", (draft) => {
-      draft.name = name;
-    });
+    this.document.updateIntent(
+      "作品名を変更",
+      (draft) => {
+        draft.name = name;
+      },
+      { preserveLegacy: true },
+    );
   }
 
   updateSize(sizeClass: SizeClass): void {
-    this.document.update("号数を変更", (draft) => {
-      draft.sizeClass = sizeClass;
-    });
+    this.document.updateIntent(
+      "号数を変更",
+      (draft) => {
+        draft.sizeClass = sizeClass;
+      },
+      { preserveLegacy: true },
+    );
   }
 
   updateColors(primary: number, secondary: number): void {
@@ -236,9 +250,9 @@ export class CraftController {
   }
 
   save(): FireworkDesign {
-    const saved = this.#repository.save(this.draft);
-    this.document.markSaved(saved);
-    return saved;
+    const savedIntent = this.#repository.saveIntent(this.intentDraft);
+    this.document.markIntentSaved(savedIntent);
+    return resolveFireworkDesignV4(savedIntent);
   }
 
   duplicate(id: string): FireworkDesign | undefined {

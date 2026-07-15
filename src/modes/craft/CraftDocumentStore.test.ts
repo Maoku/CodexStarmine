@@ -62,4 +62,23 @@ describe("CraftDocumentStore", () => {
       definitionBefore,
     );
   });
+
+  it("keeps v4 authoring intent as the editor source of truth", () => {
+    const store = new CraftDocumentStore(CHRYSANTHEMUM_PRESET);
+    const originalName = store.intentDraft.layers[0].name;
+
+    store.updateIntent("既定レイヤー名を変更", (draft) => {
+      draft.layers[0].name = "外周の設計意図";
+    });
+
+    expect(store.intentDraft.schemaVersion).toBe(4);
+    expect(store.intentDraft.layers[0].authoringMode).toBe("preset");
+    expect(store.intentDraft.layers[0].name).toBe("外周の設計意図");
+    expect(store.draft.layers[0].name).toBe("外周の設計意図");
+
+    store.undo();
+    expect(store.intentDraft.layers[0].name).toBe(originalName);
+    store.redo();
+    expect(store.intentDraft.layers[0].name).toBe("外周の設計意図");
+  });
 });

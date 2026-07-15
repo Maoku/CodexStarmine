@@ -1633,6 +1633,52 @@ input[type="range"] {
   gap: 0.35rem;
 }
 
+.renewal-editor-header {
+  grid-template-columns: minmax(9rem, 1fr) minmax(24rem, auto) minmax(9rem, 1fr);
+}
+
+.editor-work-header {
+  display: flex;
+  align-items: end;
+  justify-self: center;
+  gap: 0.75rem;
+}
+
+.editor-work-header label {
+  display: grid;
+  gap: 0.2rem;
+  color: #8a929b;
+  font-size: 0.52rem;
+}
+
+.editor-work-header input,
+.editor-work-header select {
+  min-height: 2.2rem;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 0.35rem;
+  background: rgb(5 10 16 / 82%);
+  color: #e2ddd4;
+  font: inherit;
+}
+
+.editor-work-header input {
+  width: min(26vw, 20rem);
+  padding: 0 0.65rem;
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: 0.82rem;
+}
+
+.editor-work-header select {
+  min-width: 7rem;
+  padding: 0 1.8rem 0 0.55rem;
+}
+
+.header-status > strong {
+  color: #a99780;
+  font-size: 0.56rem;
+  font-weight: 600;
+}
+
 .header-status > p {
   margin: 0;
   color: #6e7782;
@@ -1852,6 +1898,68 @@ input[type="range"] {
   grid-template-columns: repeat(3, 1fr);
   gap: 0.25rem;
   padding: 0 0.4rem 0.42rem;
+}
+
+.preset-layer-menu {
+  position: relative;
+}
+
+.preset-layer-menu summary {
+  display: grid;
+  min-height: 1.8rem;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 0.28rem;
+  background: rgb(255 255 255 / 3%);
+  color: #9099a2;
+  font-size: 0.54rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.preset-layer-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.preset-layer-menu > div {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  display: grid;
+  width: 100%;
+  gap: 0.2rem;
+  padding: 0.3rem;
+  border: 1px solid rgb(203 151 90 / 42%);
+  border-radius: 0.35rem;
+  background: #091016;
+  box-shadow: 0 0.8rem 1.8rem rgb(0 0 0 / 45%);
+}
+
+.layer-lifecycle-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.3rem;
+  padding: 0 0.4rem 0.45rem;
+}
+
+.layer-lifecycle-actions button {
+  min-height: 1.85rem;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 0.28rem;
+  background: rgb(255 255 255 / 3%);
+  color: #a2a8ae;
+  font-size: 0.54rem;
+}
+
+.layer-lifecycle-actions button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.placement-permission-note {
+  color: #8a7a67;
+  font-size: 0.56rem;
 }
 
 .layer-adders button,
@@ -3502,15 +3610,20 @@ input[type="range"] {
   }
 
   .renewal-editor-header {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: auto 1fr;
+    gap: 0.6rem;
   }
 
-  .renewal-editor-header .screen-context-title {
-    justify-self: start;
+  .editor-work-header {
+    justify-self: end;
   }
 
-  .renewal-editor-header .renewal-back--center {
-    grid-column: 2;
+  .editor-work-header input {
+    width: min(42vw, 12rem);
+  }
+
+  .editor-work-header label > span {
+    display: none;
   }
 
   .mode-selection-main {

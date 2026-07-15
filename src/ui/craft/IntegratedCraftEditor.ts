@@ -1,9 +1,11 @@
 import {
   createHeartPoints,
-  type ChildBurstLayer,
   type FireworkDesign,
+  type FireworkDesignV4,
   type FireworkLayer,
-  type SphericalStarLayer,
+  type LayerIntentV4,
+  type PresetLayerIntent,
+  type PresetLayerParameters,
 } from "../../data";
 import type { CraftController, CraftDocumentSnapshot } from "../../modes/craft";
 import {
@@ -26,7 +28,7 @@ import {
   STAR_LONG_PRESS_DELAY_MS,
   StarLongPressGesture,
 } from "./StarLongPressGesture";
-import { escapeHTML, layerKindLabel } from "./viewUtils";
+import { escapeHTML, layerAuthoringLabel } from "./viewUtils";
 
 export interface IntegratedCraftEditorCallbacks {
   onCheck: (design: FireworkDesign) => void;
@@ -149,9 +151,14 @@ export class IntegratedCraftEditor {
     const snapshot = this.#snapshot;
     if (!snapshot) return;
     const design = snapshot.draft;
+    const intentDesign = snapshot.intentDraft;
     const selectedLayer = design.layers.find(
       (layer) => layer.id === snapshot.selection.layerId,
     );
+    const selectedIntent = intentDesign.layers.find(
+      (layer) => layer.id === snapshot.selection.layerId,
+    );
+    const pointEditingAllowed = selectedIntent?.authoringMode === "manual";
     const selectedStarId =
       snapshot.selection.starDefinitionId ?? selectedLayer?.defaultStarId;
     const diagnostic = snapshot.diagnostic;
@@ -174,7 +181,7 @@ export class IntegratedCraftEditor {
 
       <aside class="craft-rail craft-rail--left" aria-label="レイヤーと仮想星">
         <button class="drawer-close" type="button" data-action="close-drawer">閉じる</button>
-        ${renderLayerPanel(design, snapshot.selection.layerId)}
+        ${renderLayerPanel(intentDesign, snapshot.selection.layerId)}
         ${renderStarLibraryPanel(design, selectedStarId, this.#starPreviewId)}
       </aside>
 
@@ -184,7 +191,8 @@ export class IntegratedCraftEditor {
           selectedLayer,
           this.#face,
           this.#placementTemplate,
-          this.#selectedPointIndex,
+          pointEditingAllowed ? this.#selectedPointIndex : undefined,
+          pointEditingAllowed,
         )}
       </main>
 
@@ -197,8 +205,8 @@ export class IntegratedCraftEditor {
           ${warningClass === "is-good" ? "" : `<button type="button" data-action="simplify">自動簡略化</button>`}
         </section>
         <section class="craft-card inspector-card">
-          <header><span>作品と配置</span><strong>${selectedLayer ? layerKindLabel(selectedLayer) : "未選択"}</strong></header>
-          ${this.#renderInspector(design, selectedLayer)}
+          <header><span>選択レイヤー</span><strong>${selectedIntent ? layerAuthoringLabel(selectedIntent) : "未選択"}</strong></header>
+          ${this.#renderInspector(intentDesign, selectedIntent)}
         </section>
         ${renderInlineDiagnosticPreview(
           preview,
@@ -225,8 +233,8 @@ export class IntegratedCraftEditor {
   }
 
   #renderInspector(
-    design: FireworkDesign,
-    selectedLayer: FireworkLayer | undefined,
+    design: FireworkDesignV4,
+    selectedLayer: LayerIntentV4 | undefined,
   ): string {
     const optionsFor = (selectedId: string) =>
       Object.values(design.starDefinitions)
@@ -238,29 +246,29 @@ export class IntegratedCraftEditor {
     let layerFields = `<p class="inspector-empty">左の一覧からレイヤーを選んでください。</p>`;
     if (selectedLayer) {
       let specific = "";
-      if (selectedLayer.kind === "spherical") {
-        specific = `<label><span>仮想星数 <output>${selectedLayer.count}</output></span><input name="layer-count" type="range" min="12" max="900" value="${selectedLayer.count}" aria-label="仮想星数" aria-valuetext="${selectedLayer.count}個" /></label>
-          <label><span>玉内の半径 <output>${Math.round(selectedLayer.radius * 100)}%</output></span><input name="layer-radius" type="range" min="20" max="100" value="${Math.round(selectedLayer.radius * 100)}" aria-label="玉内の半径" aria-valuetext="${Math.round(selectedLayer.radius * 100)}パーセント" /></label>
-          <label><span>空間配色</span><select name="spatial-color"><option value="layer" ${selectedLayer.coloring.mode === "layer" ? "selected" : ""}>レイヤー一括</option><option value="alternating" ${selectedLayer.coloring.mode === "alternating" ? "selected" : ""}>交互色</option><option value="latitude" ${selectedLayer.coloring.mode === "latitude" ? "selected" : ""}>緯度帯</option><option value="longitude" ${selectedLayer.coloring.mode === "longitude" ? "selected" : ""}>経度区画</option></select></label>`;
-      } else if (selectedLayer.kind === "pattern") {
-        specific = `<p class="inspector-note">型物も同じワークベンチ上の点群として編集します。円形・ハート配置後に各点を移動できます。</p>`;
-      } else if (selectedLayer.kind === "child") {
-        specific = `<label><span>子花数 <output>${selectedLayer.count}</output></span><input name="child-count" type="range" min="4" max="48" value="${selectedLayer.count}" aria-label="子花数" aria-valuetext="${selectedLayer.count}個" /></label>`;
+      if (selectedLayer.authoringMode === "preset") {
+        const parameters = selectedLayer.parameters;
+        if (selectedLayer.presetKind === "branch") {
+          specific = `<label><span>枝数 <output>${parameters.branchCount}</output></span><input name="branch-count" type="range" min="5" max="20" value="${parameters.branchCount}" aria-label="枝数" aria-valuetext="${parameters.branchCount}本" /></label>`;
+        } else if (selectedLayer.presetKind === "child") {
+          specific = `<label><span>子花数 <output>${parameters.count}</output></span><input name="child-count" type="range" min="4" max="48" value="${parameters.count}" aria-label="子花数" aria-valuetext="${parameters.count}個" /></label>`;
+        } else {
+          specific = `<label><span>既定配置</span><select name="preset-kind"><option value="outer" ${selectedLayer.presetKind === "outer" ? "selected" : ""}>外周</option><option value="core" ${selectedLayer.presetKind === "core" ? "selected" : ""}>芯</option></select></label>
+            <label><span>仮想星数 <output>${parameters.count}</output></span><input name="layer-count" type="range" min="12" max="900" value="${parameters.count}" aria-label="仮想星数" aria-valuetext="${parameters.count}個" /></label>
+            <label><span>玉内の半径 <output>${Math.round(parameters.radius * 100)}%</output></span><input name="layer-radius" type="range" min="20" max="100" value="${Math.round(parameters.radius * 100)}" aria-label="玉内の半径" aria-valuetext="${Math.round(parameters.radius * 100)}パーセント" /></label>`;
+        }
+      } else if (selectedLayer.authoringMode === "pattern") {
+        specific = `<p class="inspector-note">型物の生成点は個別編集できません。形状、サイズ、密度、回転はワークベンチで調整します。</p>`;
       } else {
-        specific = `<label><span>枝数 <output>${selectedLayer.branchCount}</output></span><input name="branch-count" type="range" min="5" max="20" value="${selectedLayer.branchCount}" aria-label="枝数" aria-valuetext="${selectedLayer.branchCount}本" /></label>`;
+        specific = `<p class="inspector-note">手動レイヤーでは、表示中の断面上にある仮想星を1点ずつ編集できます。</p>`;
       }
-      layerFields = `<div class="inspector-divider"></div><div class="inspector-fields">
+      layerFields = `<div class="inspector-fields">
         <label><span>レイヤー名</span><input name="layer-name" type="text" maxlength="24" value="${escapeHTML(selectedLayer.name)}" /></label>
         <label><span>既定の仮想星</span><select name="layer-star">${optionsFor(selectedLayer.defaultStarId)}</select></label>
         ${specific}
-        <div class="inspector-actions"><button type="button" data-action="duplicate-layer" aria-label="${escapeHTML(selectedLayer.name)}を複製">複製</button><button type="button" data-action="delete-layer" aria-label="${escapeHTML(selectedLayer.name)}を削除">削除</button></div>
       </div>`;
     }
-    return `<div class="inspector-fields">
-      <label><span>作品名</span><input name="design-name" type="text" maxlength="32" value="${escapeHTML(design.name)}" /></label>
-      <label><span>玉の大きさ</span><select name="size"><option value="small" ${design.sizeClass === "small" ? "selected" : ""}>小玉</option><option value="medium" ${design.sizeClass === "medium" ? "selected" : ""}>中玉</option><option value="large" ${design.sizeClass === "large" ? "selected" : ""}>大玉</option></select></label>
-      <p class="inspector-note">速度、発火順、重力、減速は、星種と玉内配置から自動調整されます。</p>
-    </div>${layerFields}`;
+    return layerFields;
   }
 
   readonly #handleClick = (event: Event): void => {
@@ -271,7 +279,7 @@ export class IntegratedCraftEditor {
       return;
     }
     const point = target.closest<SVGCircleElement>("[data-point-index]");
-    if (point) {
+    if (point && this.#selectedIntentLayer()?.authoringMode === "manual") {
       const layerId = point.dataset.layerId;
       if (layerId && layerId !== this.#snapshot?.selection.layerId) {
         this.#controller.document.selectLayer(layerId);
@@ -320,26 +328,32 @@ export class IntegratedCraftEditor {
       this.#controller.document.selectLayer(layerId);
       this.#drawer = undefined;
     } else if (action === "toggle-layer" && layerId) {
-      this.#updateLayer(layerId, "レイヤー表示を変更", (layer) => {
+      this.#updateIntentLayer(layerId, "レイヤー表示を変更", (layer) => {
         layer.visible = !layer.visible;
       });
     } else if (action === "toggle-lock" && layerId) {
-      this.#controller.document.update("レイヤーのロックを変更", (draft) => {
-        const layer = draft.layers.find(
-          (candidate) => candidate.id === layerId,
-        );
-        if (layer) layer.locked = !layer.locked;
-      });
+      this.#controller.document.updateIntent(
+        "レイヤーのロックを変更",
+        (draft) => {
+          const layer = draft.layers.find(
+            (candidate) => candidate.id === layerId,
+          );
+          if (layer) layer.locked = !layer.locked;
+        },
+      );
     } else if (action === "move-layer-up" && layerId) {
       this.#moveLayer(layerId, -1);
     } else if (action === "move-layer-down" && layerId) {
       this.#moveLayer(layerId, 1);
-    } else if (action === "add-core") {
-      this.#addCore();
+    } else if (action === "add-preset") {
+      this.#addPreset(
+        (button.dataset.presetKind ?? "outer") as
+          "outer" | "core" | "child" | "branch",
+      );
     } else if (action === "add-pattern") {
       this.#addPattern();
-    } else if (action === "add-child") {
-      this.#addChild();
+    } else if (action === "add-manual") {
+      this.#addManual();
     } else if (action === "duplicate-layer" && layerId) {
       this.#duplicateLayer(layerId);
     } else if (action === "delete-layer" && layerId) {
@@ -400,11 +414,7 @@ export class IntegratedCraftEditor {
   readonly #handleChange = (event: Event): void => {
     const input = event.target as HTMLInputElement | HTMLSelectElement;
     if (!this.#snapshot) return;
-    if (input.name === "design-name") {
-      this.#controller.updateName(input.value);
-    } else if (input.name === "size") {
-      this.#controller.updateSize(input.value as FireworkDesign["sizeClass"]);
-    } else if (input.name === "surface-rotation") {
+    if (input.name === "surface-rotation") {
       this.#face.rotationDegrees = Number(input.value);
       this.#render();
     } else if (input.name) {
@@ -470,7 +480,8 @@ export class IntegratedCraftEditor {
     const point = target.closest<SVGCircleElement>(
       "[data-point-index][data-point-editable='true']",
     );
-    if (!point) return;
+    if (!point || this.#selectedIntentLayer()?.authoringMode !== "manual")
+      return;
     const canvas = point.closest<SVGSVGElement>("[data-workbench-canvas]");
     if (!canvas || !point.dataset.layerId) return;
     const local = this.#canvasLocalPoint(event.clientX, event.clientY, canvas);
@@ -715,6 +726,25 @@ export class IntegratedCraftEditor {
     return this.#snapshot?.draft.layers.find((layer) => layer.id === layerId);
   }
 
+  #selectedIntentLayer(): LayerIntentV4 | undefined {
+    const layerId = this.#snapshot?.selection.layerId;
+    return this.#snapshot?.intentDraft.layers.find(
+      (layer) => layer.id === layerId,
+    );
+  }
+
+  #updateIntentLayer(
+    layerId: string,
+    label: string,
+    recipe: (layer: LayerIntentV4) => void,
+  ): void {
+    this.#controller.document.updateIntent(label, (draft) => {
+      const layer = draft.layers.find((candidate) => candidate.id === layerId);
+      if (!layer || layer.locked) return;
+      recipe(layer);
+    });
+  }
+
   #updateLayer(
     layerId: string,
     label: string,
@@ -728,7 +758,7 @@ export class IntegratedCraftEditor {
   }
 
   #moveLayer(layerId: string, offset: number): void {
-    this.#controller.document.update("レイヤーを並べ替え", (draft) => {
+    this.#controller.document.updateIntent("レイヤーを並べ替え", (draft) => {
       const index = draft.layers.findIndex((layer) => layer.id === layerId);
       const target = index + offset;
       if (index < 0 || target < 0 || target >= draft.layers.length) return;
@@ -737,100 +767,109 @@ export class IntegratedCraftEditor {
     });
   }
 
-  #addCore(): void {
-    const draft = this.#controller.document.draft;
-    const coreCount = draft.layers.filter(
-      (layer) => layer.kind === "spherical" && layer.name.startsWith("芯"),
+  #addPreset(kind: PresetLayerIntent["presetKind"]): void {
+    const draft = this.#controller.document.intentDraft;
+    const sameKindCount = draft.layers.filter(
+      (layer) => layer.authoringMode === "preset" && layer.presetKind === kind,
     ).length;
-    if (coreCount >= 2) {
-      this.#callbacks.onToast("芯は2層まで追加できます");
-      return;
-    }
-    const id = `layer-core-${coreCount + 1}-${draft.assemblySeed}`;
-    this.#controller.document.update("芯レイヤーを追加", (next) => {
-      const layer: SphericalStarLayer = {
-        coloring: { mode: "layer" },
-        count: 42 + coreCount * 18,
-        defaultStarId: coreCount === 0 ? "star-gold" : "star-change-blue",
-        id,
-        ignitionOffset: 0,
-        jitter: 0.01,
-        kind: "spherical",
-        locked: false,
-        missingRate: 0,
-        name: `芯 ${coreCount + 1}`,
-        overrides: [],
-        placement: "fibonacci",
-        placementSeed: next.assemblySeed + 400 + coreCount,
-        radialSpeedScale: coreCount === 0 ? 0.38 : 0.66,
-        radius: coreCount === 0 ? 0.38 : 0.66,
-        visible: true,
-      };
-      next.layers.splice(Math.min(coreCount + 1, next.layers.length), 0, layer);
-    });
-    this.#controller.document.selectLayer(id);
-  }
-
-  #addPattern(): void {
-    const draft = this.#controller.document.draft;
-    const id = `layer-pattern-${draft.layers.length + 1}`;
-    this.#controller.document.update("型物レイヤーを追加", (next) => {
+    const number = sameKindCount + 1;
+    const id = `layer-${kind}-${number}-${draft.layers.length}`;
+    const names = {
+      branch: "枝",
+      child: "子花",
+      core: "芯",
+      outer: "外周",
+    } as const;
+    const parameters: PresetLayerParameters = {
+      branchCount: 8,
+      childDelay: 0.58,
+      childPlacement: "sphere",
+      childScale: 0.32,
+      childWaveDelay: 0.018,
+      coloring: { mode: "layer" },
+      count: kind === "child" ? 12 : kind === "core" ? 48 : 180,
+      jitter: kind === "outer" ? 0.02 : 0.01,
+      missingRate: 0,
+      placement: "fibonacci",
+      placementSeed: draft.assemblySeed + draft.layers.length * 37,
+      radius: kind === "core" ? 0.48 : 1,
+      starsPerBranch: 18,
+      thickness: 0.08,
+      upwardBias: 0.72,
+    };
+    this.#controller.document.updateIntent("既定レイヤーを追加", (next) => {
       next.layers.push({
-        allowedAngle: 35,
-        defaultStarId: "star-solid-red",
-        depth: 0.04,
-        facingPolicy: "audience",
-        groups: defaultPatternGroups(),
+        authoringMode: "preset",
+        defaultStarId:
+          kind === "child"
+            ? "star-child"
+            : kind === "core"
+              ? "star-gold"
+              : "star-solid-red",
         id,
         ignitionOffset: 0,
-        kind: "pattern",
         locked: false,
-        name: "ハート型物",
-        orientationDegrees: 0,
-        points: createHeartPoints(72),
-        radialSpeedScale: 0.88,
-        rotationJitter: 8,
-        template: "heart",
+        name: `${names[kind]} ${number}`,
+        parameters,
+        presetKind: kind,
+        radialSpeedScale: kind === "core" ? 0.48 : 1,
         visible: true,
       });
     });
     this.#controller.document.selectLayer(id);
   }
 
-  #addChild(): void {
-    const draft = this.#controller.document.draft;
-    const childCount = draft.layers.filter(
-      (layer) => layer.kind === "child",
-    ).length;
-    const id = `layer-child-${childCount + 1}`;
-    this.#controller.document.update("子花レイヤーを追加", (next) => {
-      const layer: ChildBurstLayer = {
-        count: 12,
-        defaultStarId: "star-child",
-        delay: 0.58,
+  #addPattern(): void {
+    const draft = this.#controller.document.intentDraft;
+    const id = `layer-pattern-${draft.layers.length + 1}`;
+    this.#controller.document.updateIntent("型物レイヤーを追加", (next) => {
+      next.layers.push({
+        authoringMode: "pattern",
+        defaultStarId: "star-solid-red",
         id,
         ignitionOffset: 0,
-        kind: "child",
         locked: false,
-        name: "時間差を持つ子花",
-        placement: "sphere",
-        radialSpeedScale: 1,
-        scale: 0.32,
+        name: `型物 ${draft.layers.length + 1}`,
+        pattern: {
+          density: 48,
+          rotationDegrees: 0,
+          scale: 0.72,
+          section: { plane: "xy", ratio: 0.5 },
+          template: "circle",
+        },
+        radialSpeedScale: 0.88,
         visible: true,
-        waveDelay: 0.018,
-      };
-      next.layers.push(layer);
+      });
+    });
+    this.#controller.document.selectLayer(id);
+  }
+
+  #addManual(): void {
+    const draft = this.#controller.document.intentDraft;
+    const id = `layer-manual-${draft.layers.length + 1}`;
+    this.#controller.document.updateIntent("手動レイヤーを追加", (next) => {
+      next.layers.push({
+        authoringMode: "manual",
+        defaultStarId: "star-child",
+        id,
+        ignitionOffset: 0,
+        locked: false,
+        name: `手動 ${draft.layers.length + 1}`,
+        points: [],
+        radialSpeedScale: 1,
+        visible: true,
+      });
     });
     this.#controller.document.selectLayer(id);
   }
 
   #duplicateLayer(layerId: string): void {
-    const source = this.#controller.document.draft.layers.find(
+    const source = this.#controller.document.intentDraft.layers.find(
       (layer) => layer.id === layerId,
     );
     if (!source) return;
-    const id = `${source.id}-copy-${this.#controller.document.draft.layers.length}`;
-    this.#controller.document.update("レイヤーを複製", (draft) => {
+    const id = `${source.id}-copy-${this.#controller.document.intentDraft.layers.length}`;
+    this.#controller.document.updateIntent("レイヤーを複製", (draft) => {
       const index = draft.layers.findIndex((layer) => layer.id === layerId);
       draft.layers.splice(index + 1, 0, {
         ...structuredClone(source),
@@ -843,7 +882,7 @@ export class IntegratedCraftEditor {
   }
 
   #deleteLayer(layerId: string): void {
-    const draft = this.#controller.document.draft;
+    const draft = this.#controller.document.intentDraft;
     const layer = draft.layers.find((candidate) => candidate.id === layerId);
     if (!layer || layer.locked) return;
     if (draft.layers.length <= 1) {
@@ -851,7 +890,7 @@ export class IntegratedCraftEditor {
       return;
     }
     this.#selectedPointIndex = undefined;
-    this.#controller.document.update("レイヤーを削除", (next) => {
+    this.#controller.document.updateIntent("レイヤーを削除", (next) => {
       next.layers = next.layers.filter((candidate) => candidate.id !== layerId);
     });
   }
@@ -861,33 +900,25 @@ export class IntegratedCraftEditor {
     if (!layerId) return;
     this.#starPreviewId = undefined;
     this.#controller.document.selectStarDefinition(starId);
-    this.#updateLayer(layerId, "仮想星を配置", (layer) => {
+    let replacedPoint = false;
+    this.#updateIntentLayer(layerId, "仮想星を配置", (layer) => {
       if (
-        this.#selectedPointIndex !== undefined &&
-        layer.kind === "spherical"
-      ) {
-        const override = layer.overrides.find(
-          (item) => item.index === this.#selectedPointIndex,
-        );
-        if (override) override.starId = starId;
-        else layer.overrides.push({ index: this.#selectedPointIndex, starId });
-      } else if (
-        this.#selectedPointIndex !== undefined &&
-        layer.kind === "pattern"
+        layer.authoringMode === "manual" &&
+        this.#selectedPointIndex !== undefined
       ) {
         const point = layer.points[this.#selectedPointIndex];
-        const group = layer.groups.find(
-          (candidate) => candidate.id === point?.groupId,
-        );
-        if (group) group.starId = starId;
-      } else {
-        layer.defaultStarId = starId;
+        if (point) {
+          point.starId = starId;
+          replacedPoint = true;
+        }
+        return;
       }
+      layer.defaultStarId = starId;
     });
     this.#callbacks.onToast(
-      this.#selectedPointIndex === undefined
-        ? "選択レイヤーの仮想星を変更しました"
-        : "選択した配置点の仮想星を変更しました",
+      replacedPoint
+        ? "選択した配置点の仮想星を変更しました"
+        : "選択レイヤーの仮想星を変更しました",
     );
   }
 
@@ -950,7 +981,13 @@ export class IntegratedCraftEditor {
   ): void {
     const layerId = this.#snapshot?.selection.layerId;
     const selectedLayer = this.#selectedLayer();
-    if (!layerId || !selectedLayer || selectedLayer.locked) return;
+    if (
+      !layerId ||
+      !selectedLayer ||
+      selectedLayer.locked ||
+      this.#selectedIntentLayer()?.authoringMode !== "manual"
+    )
+      return;
     const local = this.#canvasLocalPoint(event.clientX, event.clientY, canvas);
     let addedIndex: number | undefined;
     this.#updateLayer(layerId, "配置点を追加", (layer) => {
@@ -1000,7 +1037,12 @@ export class IntegratedCraftEditor {
   #deleteSelectedPoint(): void {
     const layerId = this.#snapshot?.selection.layerId;
     const index = this.#selectedPointIndex;
-    if (!layerId || index === undefined) return;
+    if (
+      !layerId ||
+      index === undefined ||
+      this.#selectedIntentLayer()?.authoringMode !== "manual"
+    )
+      return;
     this.#updateLayer(layerId, "配置点を削除", (layer) => {
       if (layer.kind === "spherical") {
         const override = layer.overrides.find((item) => item.index === index);
@@ -1017,37 +1059,37 @@ export class IntegratedCraftEditor {
   #changeSelectedLayer(name: string, value: string): void {
     const layerId = this.#snapshot?.selection.layerId;
     if (!layerId) return;
-    this.#updateLayer(layerId, "配置属性を変更", (layer) => {
+    this.#updateIntentLayer(layerId, "配置属性を変更", (layer) => {
       if (name === "layer-name") layer.name = value;
       else if (name === "layer-star") layer.defaultStarId = value;
-      else if (layer.kind === "spherical") {
+      else if (layer.authoringMode === "preset") {
         if (name === "layer-count") {
-          layer.count = Number(value);
-          layer.overrides = layer.overrides.filter(
-            (item) => item.index < layer.count,
-          );
+          layer.parameters.count = Number(value);
         } else if (name === "layer-radius") {
-          layer.radius = Number(value) / 100;
-          layer.radialSpeedScale = layer.radius;
-        } else if (name === "spatial-color") {
-          layer.coloring.mode = value as SphericalStarLayer["coloring"]["mode"];
+          layer.parameters.radius = Number(value) / 100;
+          layer.radialSpeedScale = layer.parameters.radius;
+        } else if (name === "preset-kind") {
+          layer.presetKind = value === "core" ? "core" : "outer";
+        } else if (name === "child-count") {
+          layer.parameters.count = Number(value);
+        } else if (name === "branch-count") {
+          layer.parameters.branchCount = Number(value);
         }
-      } else if (layer.kind === "child" && name === "child-count") {
-        layer.count = Number(value);
-      } else if (layer.kind === "branch" && name === "branch-count") {
-        layer.branchCount = Number(value);
       }
     });
   }
 
   #simplify(): void {
-    this.#controller.document.update("描画負荷を自動簡略化", (draft) => {
+    this.#controller.document.updateIntent("描画負荷を自動簡略化", (draft) => {
       draft.layers.forEach((layer) => {
-        if (layer.kind === "spherical")
-          layer.count = Math.min(layer.count, 520);
-        if (layer.kind === "child") layer.count = Math.min(layer.count, 24);
-        if (layer.kind === "branch") {
-          layer.starsPerBranch = Math.min(layer.starsPerBranch, 28);
+        if (layer.authoringMode === "preset") {
+          layer.parameters.count = Math.min(layer.parameters.count, 520);
+          layer.parameters.starsPerBranch = Math.min(
+            layer.parameters.starsPerBranch,
+            28,
+          );
+        } else if (layer.authoringMode === "pattern") {
+          layer.pattern.density = Math.min(layer.pattern.density, 180);
         }
       });
     });
@@ -1062,12 +1104,6 @@ export class IntegratedCraftEditor {
         "実行上限を超えています。先に自動簡略化してください",
       );
       return;
-    }
-    const visibleName = this.element.querySelector<HTMLInputElement>(
-      "input[name='design-name']",
-    )?.value;
-    if (visibleName !== undefined && visibleName !== snapshot.draft.name) {
-      this.#controller.updateName(visibleName);
     }
     const saved = this.#controller.save();
     this.#callbacks.onDesignLibraryChange(this.#controller.savedDesigns);
