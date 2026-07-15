@@ -42,6 +42,14 @@ export class ShowTimelinePlayer {
     if (!this.isComplete) this.#isRunning = true;
   }
 
+  stop(): void {
+    this.#cursor = 0;
+    this.#cues = [];
+    this.#duration = 0;
+    this.#isRunning = false;
+    this.#time = 0;
+  }
+
   update(deltaSeconds: number): ShowCue[] {
     if (!this.#isRunning) return [];
     const delta = Number.isFinite(deltaSeconds) ? Math.max(deltaSeconds, 0) : 0;

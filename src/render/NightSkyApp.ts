@@ -16,6 +16,7 @@ import { Vector2 } from "three";
 import { FireworkAudio } from "../audio";
 import { clampPixelRatio } from "../core/env";
 import { DesignRepository, FIREWORK_PRESETS, resolveSizePreset } from "../data";
+import { SingleLoopCheckController } from "../modes/check";
 import { CraftController } from "../modes/craft";
 import {
   FreeShowController,
@@ -29,6 +30,7 @@ import { createNightSkyScene } from "./scene/createNightSkyScene";
 export class NightSkyApp {
   readonly #audio: FireworkAudio;
   readonly #camera: PerspectiveCamera;
+  readonly #check: SingleLoopCheckController;
   readonly #composer: EffectComposer;
   readonly #fireworks: FireworkSystem;
   readonly #freeShow: FreeShowController;
@@ -108,6 +110,17 @@ export class NightSkyApp {
     const repository = new DesignRepository(storage);
     const craft = new CraftController(repository);
     const getDesigns = () => [...FIREWORK_PRESETS, ...repository.list()];
+    this.#check = new SingleLoopCheckController({
+      onLaunch: (design, seed) => {
+        this.#fireworks.launch(design, {
+          lane: 0,
+          launchAngle: 0,
+          seed,
+          targetHeight: resolveSizePreset(design.sizeClass).targetHeight,
+        });
+      },
+      onState: (state) => this.#ui.setCheckState(state),
+    });
     this.#freeShow = new FreeShowController({
       getDesigns,
       onCue: (cue) => {
@@ -126,26 +139,31 @@ export class NightSkyApp {
         );
       },
       onState: (state) => {
-        this.#ui.setFreeState(state.running, state.title, state.detail);
+        this.#ui.setFreeState(state);
       },
     });
     this.#ui = new AppShell(craft, {
       onAudioPhysicality: (value) => {
         this.#audio.physicality = value;
       },
+      onCheckLoopChange: (enabled) => this.#check.setLoopEnabled(enabled),
+      onCheckToggle: () => this.#check.toggle(),
       onDesignLibraryChange: () => undefined,
       onFreeDensityChange: (value) => this.#freeShow.setDensity(value),
-      onModeChange: (mode) => {
-        const isFree = mode === "free";
-        this.#freeView.setEnabled(isFree);
-        if (isFree) {
+      onViewerContextChange: (context, design) => {
+        this.#freeView.setEnabled(context === "free");
+        this.#fireworks.clear();
+        if (context === "free") {
+          this.#check.stop();
           this.#freeShow.start();
+        } else if (context === "check" && design) {
+          this.#freeShow.stop();
+          this.#freeView.reset();
+          this.#check.start(design);
         } else {
-          this.#freeShow.pause();
+          this.#freeShow.stop();
+          this.#check.stop();
         }
-      },
-      onLaunch: (design) => {
-        this.#fireworks.launch(design, { lane: 0, seed: Date.now() });
       },
       onFreeToggle: () => this.#freeShow.toggle(),
       onFreeViewPresetChange: (presetId) => {
@@ -177,6 +195,8 @@ export class NightSkyApp {
     window.removeEventListener("keydown", this.#unlockAudio);
     void this.#audio.dispose();
     this.#timer.dispose();
+    this.#check.stop();
+    this.#freeShow.stop();
     this.#ui.destroy();
     this.#freeView.dispose();
     this.#fireworks.dispose();
@@ -195,6 +215,7 @@ export class NightSkyApp {
     this.#timer.update(timestamp);
     const delta = Math.min(this.#timer.getDelta(), 0.05);
     const elapsed = this.#timer.getElapsed();
+    this.#check.update(delta);
     this.#freeShow.update(delta);
     this.#fireworks.update(delta);
     this.#updateScene(elapsed);

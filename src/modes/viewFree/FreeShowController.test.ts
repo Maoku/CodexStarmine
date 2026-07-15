@@ -28,5 +28,10 @@ describe("FreeShowController renewal regression", () => {
     expect(controller.isRunning).toBe(true);
     expect(cues.length).toBeGreaterThan(1);
     expect(states.at(-1)?.title.length).toBeGreaterThan(0);
+
+    controller.stop();
+    controller.update(30);
+    expect(controller.isRunning).toBe(false);
+    expect(states.at(-1)?.detail).toBe("演目を終了しました");
   });
 });

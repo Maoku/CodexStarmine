@@ -19,6 +19,7 @@ import {
   type BallisticParticle,
   type Vector3Value,
 } from "../../core/particle";
+import { createSeededRandom } from "../../core/random";
 import { resolveSizePreset, type FireworkDesign } from "../../data";
 import { WATER_LEVEL } from "../scene/createNightSkyScene";
 
@@ -72,9 +73,44 @@ export interface LaunchOptions {
   targetHeight?: number;
 }
 
+export interface LaunchKinematics {
+  position: Vector3Value;
+  seed: number;
+  targetHeight: number;
+  velocity: Vector3Value;
+}
+
 export interface FireworkSystemCallbacks {
   onBurst?: (position: Vector3Value, design: FireworkDesign) => void;
   onLaunch?: (design: FireworkDesign) => void;
+}
+
+export function deriveLaunchKinematics(
+  design: FireworkDesign,
+  options: LaunchOptions = {},
+): LaunchKinematics {
+  const lane = Math.min(Math.max(options.lane ?? 0, -1), 1);
+  const size = resolveSizePreset(design.sizeClass);
+  const seed = options.seed ?? Math.floor(Math.random() * 1_000_000);
+  const random = createSeededRandom(seed ^ 0x6a09_e667);
+  const targetHeight =
+    options.targetHeight ?? size.targetHeight * random.range(0.97, 1.03);
+  const position = {
+    x: lane * 42 + random.signed() * 0.9,
+    y: 2.2,
+    z: -112,
+  };
+  return {
+    position,
+    seed,
+    targetHeight,
+    velocity: {
+      x: lane * -1.8 + (options.launchAngle ?? 0) * 18 + random.signed() * 0.7,
+      y:
+        Math.sqrt(2 * GRAVITY * Math.max(targetHeight - position.y, 1)) * 1.025,
+      z: -2.6,
+    },
+  };
 }
 
 function createStarMaterial(reflection = false): ShaderMaterial {
@@ -258,16 +294,10 @@ export class FireworkSystem {
   }
 
   launch(design: FireworkDesign, options: LaunchOptions = {}): void {
-    const lane = Math.min(Math.max(options.lane ?? 0, -1), 1);
-    const size = resolveSizePreset(design.sizeClass);
-    const targetHeight =
-      options.targetHeight ?? size.targetHeight * (0.97 + Math.random() * 0.06);
-    const seed = options.seed ?? Math.floor(Math.random() * 1_000_000);
-    const position = {
-      x: lane * 42 + (Math.random() - 0.5) * 1.8,
-      y: 2.2,
-      z: -112,
-    };
+    const { position, seed, targetHeight, velocity } = deriveLaunchKinematics(
+      design,
+      options,
+    );
     this.#shells.push({
       age: 0,
       design,
@@ -279,19 +309,20 @@ export class FireworkSystem {
       smokeTimer: 0,
       targetHeight,
       trail: [clonePosition(position)],
-      velocity: {
-        x:
-          lane * -1.8 +
-          (options.launchAngle ?? 0) * 18 +
-          (Math.random() - 0.5) * 1.4,
-        y:
-          Math.sqrt(2 * GRAVITY * Math.max(targetHeight - position.y, 1)) *
-          1.025,
-        z: -2.6,
-      },
+      velocity,
       windResponse: 0.12,
     });
     this.#callbacks.onLaunch?.(design);
+  }
+
+  clear(): void {
+    this.#delayedBursts = [];
+    this.#shells = [];
+    this.#smoke = [];
+    this.#stars = [];
+    this.#writePointBuffers();
+    this.#writeTrailBuffers();
+    this.#writeSmokeBuffers();
   }
 
   update(deltaSeconds: number): void {

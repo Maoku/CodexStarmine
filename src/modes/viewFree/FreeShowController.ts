@@ -33,6 +33,16 @@ export class FreeShowController {
     this.#startNextPlan();
   }
 
+  stop(): void {
+    this.#timeline.stop();
+    this.#plan = undefined;
+    this.#options.onState({
+      detail: "演目を終了しました",
+      running: false,
+      title: "湖畔の演目",
+    });
+  }
+
   pause(): void {
     this.#timeline.pause();
     this.#emitState();

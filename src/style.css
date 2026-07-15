@@ -4389,3 +4389,219 @@ input[type="range"] {
     padding: 0.35rem;
   }
 }
+
+/* Renewal Phase 5: shared lake viewer */
+
+.viewing-stage {
+  background: linear-gradient(90deg, rgb(1 4 10 / 14%), transparent 46%);
+}
+
+.viewing-stage__toolbar {
+  pointer-events: auto;
+}
+
+.viewing-panel {
+  width: min(24rem, calc(100vw - 2rem));
+  min-height: min(37rem, calc(100vh - 8rem));
+  max-height: calc(100vh - 8rem);
+  overflow-y: auto;
+  border-color: rgb(218 226 238 / 14%);
+  border-radius: 0.7rem;
+  background:
+    linear-gradient(145deg, rgb(10 15 23 / 94%), rgb(4 8 13 / 91%)),
+    rgb(5 9 15 / 92%);
+  scrollbar-color: rgb(255 255 255 / 17%) transparent;
+  scrollbar-width: thin;
+}
+
+.viewing-panel--check {
+  border-color: rgb(197 151 93 / 30%);
+}
+
+.viewer-context-copy {
+  padding: 1.05rem 1.15rem 0.7rem;
+}
+
+.viewer-context-copy > p {
+  margin: 0;
+  color: #929aa6;
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: 0.74rem;
+  line-height: 1.85;
+}
+
+.viewer-context-copy .show-template {
+  margin-top: 0.85rem;
+}
+
+.check-design-card,
+.check-timing,
+.check-loop-control {
+  margin: 0.65rem 1.15rem;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0.45rem;
+  background: rgb(255 255 255 / 2.5%);
+}
+
+.check-design-card {
+  padding: 1rem;
+}
+
+.check-design-card > span,
+.check-timing span {
+  display: block;
+  color: #737d88;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.52rem;
+  letter-spacing: 0.13em;
+}
+
+.check-design-card > strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 0.42rem;
+  color: #e4d9c9;
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: 1.15rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.check-design-card > p {
+  margin: 0.4rem 0 0;
+  color: #786d60;
+  font-size: 0.57rem;
+}
+
+.check-timing {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+}
+
+.check-timing > div {
+  padding: 0.85rem 1rem;
+}
+
+.check-timing > div + div {
+  border-left: 1px solid rgb(255 255 255 / 8%);
+}
+
+.check-timing strong {
+  display: block;
+  margin-top: 0.32rem;
+  color: #d4b184;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.check-loop-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+}
+
+.check-loop-control input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #c49359;
+}
+
+.check-loop-control span,
+.check-loop-control strong,
+.check-loop-control small {
+  display: block;
+}
+
+.check-loop-control strong {
+  color: #cfc7bb;
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.check-loop-control small {
+  margin-top: 0.2rem;
+  color: #747d86;
+  font-size: 0.53rem;
+  line-height: 1.45;
+}
+
+.viewer-primary-toggle {
+  align-self: stretch;
+  margin: auto 1.15rem 1.15rem;
+  flex: 0 0 auto;
+}
+
+.viewing-stage--check .scene-caption {
+  color: #746b60;
+}
+
+.viewing-stage--check .scene-caption strong {
+  color: #c1a47f;
+}
+
+@media (max-width: 900px) {
+  .viewing-panel {
+    right: 1rem;
+    bottom: 1rem;
+    max-height: calc(100vh - 8rem);
+  }
+}
+
+@media (max-width: 620px) {
+  .viewing-stage__toolbar {
+    grid-template-columns: auto 1fr;
+  }
+
+  .viewing-stage__toolbar .brand-block {
+    justify-self: end;
+  }
+
+  .viewing-panel {
+    top: auto;
+    right: 0.6rem;
+    bottom: 0.6rem;
+    left: 0.6rem;
+    width: auto;
+    min-height: 0;
+    max-height: min(27rem, calc(100vh - 6rem));
+  }
+
+  .viewing-panel--check {
+    max-height: min(24rem, calc(100vh - 6rem));
+  }
+
+  .viewing-panel .panel-heading {
+    min-height: 3.8rem;
+    padding: 0.72rem 0.85rem;
+  }
+
+  .viewer-context-copy {
+    padding: 0.75rem 0.85rem 0.35rem;
+  }
+
+  .viewer-context-copy > p {
+    font-size: 0.63rem;
+  }
+
+  .check-design-card,
+  .check-timing,
+  .check-loop-control {
+    margin-right: 0.85rem;
+    margin-left: 0.85rem;
+  }
+
+  .viewer-primary-toggle {
+    margin-right: 0.85rem;
+    margin-bottom: 0.85rem;
+    margin-left: 0.85rem;
+  }
+
+  .viewing-stage .scene-caption {
+    display: none;
+  }
+}

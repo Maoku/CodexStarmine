@@ -4,41 +4,39 @@ import {
   type AppScreen,
 } from "../app/AppFlowController";
 import type { FireworkDesign } from "../data";
+import type { SingleLoopCheckState } from "../modes/check";
 import type { CraftController } from "../modes/craft";
 import {
-  FREE_VIEW_PRESET_IDS,
-  FREE_VIEW_PRESETS,
   HOME_FREE_VIEW_PRESET_ID,
-  isFreeViewPresetId,
+  type FreeShowState,
   type FreeViewPresetId,
 } from "../modes/viewFree";
 import { IntegratedCraftEditor } from "./craft/IntegratedCraftEditor";
 import { FireworkShelfScreen } from "./screens/FireworkShelfScreen";
 import { InitialSetupScreen } from "./screens/InitialSetupScreen";
 import { ModeSelectionScreen } from "./screens/ModeSelectionScreen";
+import { ViewingStage, type ViewerContext } from "./viewer";
 
 export type AppMode = "craft" | "free";
 
 export interface AppShellCallbacks {
   onAudioPhysicality: (value: number) => void;
+  onCheckLoopChange?: (enabled: boolean) => void;
+  onCheckToggle?: () => void;
   onDesignLibraryChange: (designs: FireworkDesign[]) => void;
   onFreeDensityChange?: (value: number) => void;
   onFreeToggle?: () => void;
   onFreeViewPresetChange?: (presetId: FreeViewPresetId) => void;
   onFreeViewReset?: () => void;
-  onLaunch: (design: FireworkDesign) => void;
-  onModeChange: (mode: AppMode) => void;
+  onViewerContextChange: (
+    context: ViewerContext | undefined,
+    design?: FireworkDesign,
+  ) => void;
 }
 
 interface MountedScreen {
   destroy: () => void;
   element: HTMLElement;
-}
-
-interface FreeViewerState {
-  detail: string;
-  running: boolean;
-  title: string;
 }
 
 export class AppShell {
@@ -48,7 +46,17 @@ export class AppShell {
   readonly #flow: AppFlowController;
   readonly #unsubscribeDocument: () => void;
   readonly #unsubscribeFlow: () => void;
-  #freeState: FreeViewerState = {
+  #activeViewerContext?: ViewerContext;
+  #checkState: SingleLoopCheckState = {
+    active: false,
+    designName: "編集中の花火",
+    loopEnabled: true,
+    running: true,
+    secondsUntilLaunch: 0,
+    shotCount: 0,
+  };
+  #freeDensity = 1;
+  #freeState: FreeShowState = {
     detail: "演目を準備しています",
     running: true,
     title: "湖畔の序章",
@@ -56,7 +64,7 @@ export class AppShell {
   #freeViewPresetId = HOME_FREE_VIEW_PRESET_ID;
   #screenMount?: MountedScreen;
   #toastTimer = 0;
-  #viewerFreeActive = false;
+  #viewingStage?: ViewingStage;
 
   constructor(controller: CraftController, callbacks: AppShellCallbacks) {
     this.#callbacks = callbacks;
@@ -71,7 +79,6 @@ export class AppShell {
       <div class="toast" role="status" aria-live="polite" data-toast></div>`;
     this.element.addEventListener("click", this.#handleClick);
     this.element.addEventListener("input", this.#handleInput);
-    this.element.addEventListener("change", this.#handleChange);
     window.addEventListener("beforeunload", this.#handleBeforeUnload);
     this.#unsubscribeDocument = controller.document.subscribe((snapshot) => {
       this.#flow.setEditorDirty(snapshot.dirty);
@@ -86,32 +93,22 @@ export class AppShell {
   }
 
   get mode(): AppMode {
-    return this.#viewerFreeActive ? "free" : "craft";
+    return this.#activeViewerContext === "free" ? "free" : "craft";
   }
 
-  setFreeState(running: boolean, title: string, detail: string): void {
-    this.#freeState = { detail, running, title };
-    const button = this.#queryOptional<HTMLButtonElement>(
-      "[data-action='free-toggle']",
-    );
-    if (button) button.textContent = running ? "一時停止" : "演目を再開";
-    const titleElement = this.#queryOptional<HTMLElement>("[data-show-title]");
-    if (titleElement) titleElement.textContent = title;
-    const detailElement = this.#queryOptional<HTMLElement>(
-      "[data-show-progress]",
-    );
-    if (detailElement) detailElement.textContent = detail;
-    this.element.classList.toggle("is-show-paused", !running);
+  setCheckState(state: SingleLoopCheckState): void {
+    this.#checkState = state;
+    this.#viewingStage?.setCheckState(state);
+  }
+
+  setFreeState(state: FreeShowState): void {
+    this.#freeState = state;
+    this.#viewingStage?.setFreeState(state);
   }
 
   setFreeViewPreset(presetId: FreeViewPresetId): void {
     this.#freeViewPresetId = presetId;
-    const select = this.#queryOptional<HTMLSelectElement>(
-      "[name='free-view-preset']",
-    );
-    if (select) select.value = presetId;
-    const label = this.#queryOptional<HTMLElement>("[data-view-label]");
-    if (label) label.textContent = FREE_VIEW_PRESETS[presetId].label;
+    this.#viewingStage?.setFreeViewPreset(presetId);
   }
 
   showToast(message: string): void {
@@ -134,7 +131,6 @@ export class AppShell {
     this.#screenMount?.destroy();
     this.element.removeEventListener("click", this.#handleClick);
     this.element.removeEventListener("input", this.#handleInput);
-    this.element.removeEventListener("change", this.#handleChange);
     this.element.remove();
   }
 
@@ -149,11 +145,13 @@ export class AppShell {
     this.#screenMount = mount;
     this.element.dataset.screen = appScreenKind(screen);
 
-    const viewerFreeActive =
-      screen.kind === "viewer" && screen.context === "free";
-    if (viewerFreeActive !== this.#viewerFreeActive) {
-      this.#viewerFreeActive = viewerFreeActive;
-      this.#callbacks.onModeChange(viewerFreeActive ? "free" : "craft");
+    const viewerContext = screen.kind === "viewer" ? screen.context : undefined;
+    if (viewerContext !== this.#activeViewerContext) {
+      this.#activeViewerContext = viewerContext;
+      this.#callbacks.onViewerContextChange(
+        viewerContext,
+        viewerContext === "check" ? this.#controller.draft : undefined,
+      );
     }
 
     window.setTimeout(() => {
@@ -208,11 +206,7 @@ export class AppShell {
       });
     }
     if (screen.kind === "editor") return this.#createEditorScreen(screen);
-    if (screen.context === "free") return this.#createFreeViewerScreen();
-    return this.#createPendingScreen(
-      "湖面で確認",
-      "編集中の一発だけを繰り返し確認する湖面画面を準備しています。",
-    );
+    return this.#createViewerScreen(screen.context);
   }
 
   #createEditorScreen(
@@ -262,96 +256,54 @@ export class AppShell {
     };
   }
 
-  #createFreeViewerScreen(): MountedScreen {
-    const element = document.createElement("section");
-    const viewPresetOptions = FREE_VIEW_PRESET_IDS.map(
-      (presetId) =>
-        `<option value="${presetId}">${FREE_VIEW_PRESETS[presetId].label}</option>`,
-    ).join("");
-    element.className = "renewal-viewer-screen";
-    element.setAttribute("aria-labelledby", "free-view-heading-title");
-    element.innerHTML = `
-      <header class="renewal-viewer-toolbar">
-        <button class="renewal-back" type="button" data-shell-action="back">← モード選択</button>
-        <div class="brand-block">
-          <p class="brand-block__eyebrow">VIRTUAL FIREWORK ATELIER</p>
-          <h1>星見<span>煙火店</span></h1>
-        </div>
-        <div class="sound-control">
-          <label for="viewer-sound-delay">音の距離感</label>
-          <input id="viewer-sound-delay" name="sound-delay" type="range" min="0" max="100" value="100" />
-          <output for="viewer-sound-delay">実距離</output>
-        </div>
-      </header>
-      <aside class="control-panel free-panel" aria-label="フリー鑑賞パネル">
-        <div class="panel-heading">
-          <div><p class="panel-heading__step">VIEW / FREE</p><h2 id="free-view-heading-title">湖畔に委ねる</h2></div>
-          <span class="live-indicator"><i></i> LIVE</span>
-        </div>
-        <div class="free-copy">
-          <p>小さな一発から始まり、左右へ広がり、間を置いて大玉で締める。煙と余韻を読みながら、自動で演目を紡ぎます。</p>
-          <div class="show-template"><span>導入</span><i></i><span>展開</span><i></i><span>静寂</span><i></i><span>終幕</span></div>
-        </div>
-        <label class="field range-field density-control">
-          <span>演出密度 <output data-output="free-density">標準</output></span>
-          <input name="free-density" type="range" min="0" max="2" step="1" value="1" />
-        </label>
-        <section class="free-view-control" aria-labelledby="free-view-heading">
-          <div class="free-view-heading"><span id="free-view-heading">視点を動かす</span><b>FREE CAMERA</b></div>
-          <div class="free-view-row">
-            <label class="free-view-select">
-              <span>プリセット視点</span>
-              <select name="free-view-preset">${viewPresetOptions}</select>
-            </label>
-            <button class="secondary-action free-view-reset" type="button" data-action="free-view-reset">元の位置に戻る</button>
-          </div>
-          <p>ドラッグ／1本指で見回す · 右ドラッグ／2本指で移動 · ホイール／ピンチで接近</p>
-          <p class="free-view-keys"><kbd>WASD / 矢印</kbd> 前後左右 · <kbd>Q / E</kbd> 上下 · <kbd>Shift</kbd> 高速</p>
-        </section>
-        <div class="show-now"><p>NOW PLAYING</p><strong data-show-title>${this.#freeState.title}</strong><span data-show-progress>${this.#freeState.detail}</span></div>
-        <button class="primary-action free-toggle" type="button" data-action="free-toggle">${this.#freeState.running ? "一時停止" : "演目を再開"}</button>
-      </aside>
-      <div class="scene-caption" aria-live="polite"><span>WIND</span><strong>東 1.3 m/s</strong><i></i><span>VIEW</span><strong data-view-label>${FREE_VIEW_PRESETS[this.#freeViewPresetId].label}</strong></div>`;
-    const select = element.querySelector<HTMLSelectElement>(
-      "[name='free-view-preset']",
-    );
-    if (select) select.value = this.#freeViewPresetId;
+  #createViewerScreen(context: ViewerContext): MountedScreen {
+    const stage = new ViewingStage({
+      callbacks: {
+        onAudioPhysicality: this.#callbacks.onAudioPhysicality,
+        onBack: () => this.#flow.back(),
+        onCheckLoopChange: (enabled) =>
+          this.#callbacks.onCheckLoopChange?.(enabled),
+        onCheckToggle: () => this.#callbacks.onCheckToggle?.(),
+        onFreeDensityChange: (value) => {
+          this.#freeDensity = value;
+          this.#callbacks.onFreeDensityChange?.(value);
+        },
+        onFreeToggle: () => this.#callbacks.onFreeToggle?.(),
+        onFreeViewPresetChange: (presetId) => {
+          this.#freeViewPresetId = presetId;
+          this.#callbacks.onFreeViewPresetChange?.(presetId);
+        },
+        onFreeViewReset: () => {
+          this.setFreeViewPreset(HOME_FREE_VIEW_PRESET_ID);
+          this.#callbacks.onFreeViewReset?.();
+        },
+        onToast: (message) => this.showToast(message),
+      },
+      checkState:
+        context === "check"
+          ? { ...this.#checkState, designName: this.#controller.draft.name }
+          : this.#checkState,
+      context,
+      freeDensity: this.#freeDensity,
+      freeState: this.#freeState,
+      freeViewPresetId: this.#freeViewPresetId,
+    });
+    this.#viewingStage = stage;
     return {
-      element,
-      destroy: () => element.remove(),
-    };
-  }
-
-  #createPendingScreen(title: string, detail: string): MountedScreen {
-    const element = document.createElement("section");
-    element.className = "renewal-screen renewal-pending-screen";
-    element.innerHTML = `
-      <header class="renewal-brand renewal-brand--toolbar">
-        <button class="renewal-back" type="button" data-shell-action="back">← 戻る</button>
-        <div class="brand-block"><p class="brand-block__eyebrow">VIRTUAL FIREWORK ATELIER</p><h1>星見<span>煙火店</span></h1></div>
-        <span></span>
-      </header>
-      <main><p class="renewal-kicker">WORK IN PROGRESS</p><h2>${title}</h2><p>${detail}</p><button class="primary-action" type="button" data-shell-action="back">前の画面へ戻る</button></main>`;
-    return {
-      element,
-      destroy: () => element.remove(),
+      element: stage.element,
+      destroy: () => {
+        if (this.#viewingStage === stage) this.#viewingStage = undefined;
+        stage.destroy();
+      },
     };
   }
 
   readonly #handleClick = (event: Event): void => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
-      "button[data-shell-action], button[data-action='free-toggle'], button[data-action='free-view-reset']",
+      "button[data-shell-action]",
     );
     if (!button) return;
-    if (button.dataset.shellAction === "back") {
-      this.#flow.back();
-    } else if (button.dataset.action === "free-toggle") {
-      this.#callbacks.onFreeToggle?.();
-    } else if (button.dataset.action === "free-view-reset") {
-      this.setFreeViewPreset(HOME_FREE_VIEW_PRESET_ID);
-      this.#callbacks.onFreeViewReset?.();
-      this.showToast("視点を湖畔固定席へ戻しました");
-    }
+    if (button.dataset.shellAction === "back") this.#flow.back();
   };
 
   readonly #handleInput = (event: Event): void => {
@@ -366,29 +318,7 @@ export class AppShell {
         output.value =
           value > 0.8 ? "実距離" : value > 0.25 ? "演出寄り" : "即時";
       }
-    } else if (input.name === "free-density") {
-      const value = Number(input.value);
-      this.#callbacks.onFreeDensityChange?.(value);
-      const output = this.#queryOptional<HTMLOutputElement>(
-        "[data-output='free-density']",
-      );
-      if (output) output.value = ["静か", "標準", "華やか"][value] ?? "標準";
     }
-  };
-
-  readonly #handleChange = (event: Event): void => {
-    const select = event.target as HTMLSelectElement;
-    if (
-      select.name !== "free-view-preset" ||
-      !isFreeViewPresetId(select.value)
-    ) {
-      return;
-    }
-    this.setFreeViewPreset(select.value);
-    this.#callbacks.onFreeViewPresetChange?.(select.value);
-    this.showToast(
-      `視点を「${FREE_VIEW_PRESETS[select.value].label}」へ移動しました`,
-    );
   };
 
   readonly #handleBeforeUnload = (event: BeforeUnloadEvent): void => {
@@ -401,9 +331,5 @@ export class AppShell {
     const element = this.element.querySelector<T>(selector);
     if (!element) throw new Error(`UI element not found: ${selector}`);
     return element;
-  }
-
-  #queryOptional<T extends Element>(selector: string): T | null {
-    return this.element.querySelector<T>(selector);
   }
 }

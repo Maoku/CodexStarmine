@@ -1,7 +1,7 @@
 # 画面遷移・編集体験リニューアル 改修計画書
 
 - 作成日: 2026-07-15
-- ステータス: 実装中（Renewal Phase 4 完了）
+- ステータス: 実装中（Renewal Phase 5 完了）
 - 基準資料: [RENEWAL_PLAN.md](RENEWAL_PLAN.md)
 - 関連資料: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 - 対象: モード選択、作品棚、初期設定、製作エディター、確認、フリー鑑賞、保存データ
@@ -471,17 +471,26 @@ NightSkyApp
 - 実ブラウザで1280 × 720、1024 × 768、390 × 844を確認し、全寸法で `scrollWidth = innerWidth`、旧 `.process-card` と `.bench-tabs` は0件、ブラウザコンソールのwarning/errorは0件だった。円形／ハート、手動1点追加、点ドラッグ、Undo、キーボード星プレビュー、小窓の停止／再開、左右ドロワーを操作確認した。
 - `rtk npm run lint`、`rtk npm run test:run`（23ファイル、83件成功）、`rtk npm run build`、`rtk npm run format:check` が成功した。production buildには既存の550 kB超chunk警告が残る。
 
-### Renewal Phase 5: 共通湖面画面
+### Renewal Phase 5: 共通湖面画面（完了: 2026-07-16）
 
-- [ ] `ViewingStage` とcheck/free controllerを実装する。
-- [ ] `SingleLoopCheckController` で同一作品を1周期1発だけ発射する。
-- [ ] check seed、ループ間隔、再生／停止、次回発射までの表示を実装する。
-- [ ] checkでも湖面、音、煙、反射を含む実際の `FireworkSystem` 再生を行う。
-- [ ] 既存フリー鑑賞、密度、停止、視点操作をfree controllerへ移す。
-- [ ] checkとfreeの待機cueを排他的に破棄する。
-- [ ] context別の戻り先、ラベル、再生操作を実装する。
+- [x] `ViewingStage` とcheck/free controllerを実装する。
+- [x] `SingleLoopCheckController` で同一作品を1周期1発だけ発射する。
+- [x] check seed、ループ間隔、再生／停止、次回発射までの表示を実装する。
+- [x] checkでも湖面、音、煙、反射を含む実際の `FireworkSystem` 再生を行う。
+- [x] 既存フリー鑑賞、密度、停止、視点操作をfree controllerへ移す。
+- [x] checkとfreeの待機cueを排他的に破棄する。
+- [x] context別の戻り先、ラベル、再生操作を実装する。
 
 完了基準: 1つの湖面画面でcheckとfreeを切り替えられ、checkでは編集中の1作品だけが一定間隔で単発ループ再生される。
+
+**完了確認**:
+
+- `src/ui/viewer/ViewingStage.ts` に湖面上の共通ツールバー、音の距離感、context別パネル、戻る操作を実装した。checkでは作品名、次回発射まで、発射数、単発ループ、再生／停止を表示し、freeでは既存の演出密度、演目状態、視点プリセット、停止／再開を同じ画面シェルへ移した。
+- `src/modes/check/SingleLoopCheckController.ts` に固定check seed `50226`、8秒間隔、1周期1発、停止／再開、ループ解除時の手動1発、画面離脱時の予約破棄を実装した。コントローラーは編集中の1作品だけを複製保持し、各周期で同じseedを渡す。
+- `src/render/fx/FireworkSystem.ts` の打上初期位置、目標高度、初速度を指定seedから決定的に導出するようにし、checkの再発射で開花条件が変わらないようにした。`clear()` も追加し、check／free／非viewerの切替時に前contextの砲弾、星、煙、遅延開花を残さない。
+- `NightSkyApp` はcheck開始時にfree演目を停止し、free開始時にcheck予約を停止する排他的な構成へ変更した。checkは既存と同じ `FireworkSystem`、夜景、煙、音、湖面反射を使い、freeだけで自由視点を有効化する。
+- 実ブラウザで、固定作品の単発ループ、停止中に発射数が増えないこと、ループ解除後に `もう一度発射` で1発だけ増えること、同じ編集作品へ戻ること、freeの停止／再開と視点変更を確認した。1280 × 720、1024 × 768、390 × 844で `scrollWidth = innerWidth`、ブラウザコンソールのwarning/errorは0件だった。
+- `rtk npm run lint`、`rtk npm run test:run`（25ファイル、88件成功）、`rtk npm run build`、`rtk git diff --check` が成功した。production buildには既存の550 kB超chunk警告が残る。
 
 ### Renewal Phase 6: 仕上げと受け入れ
 
