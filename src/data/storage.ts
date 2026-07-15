@@ -74,10 +74,9 @@ export class DesignRepository {
       (candidate) => candidate.id === saved.id,
     );
     if (existingIndex >= 0) {
-      designs[existingIndex] = saved;
-    } else {
-      designs.unshift(saved);
+      designs.splice(existingIndex, 1);
     }
+    designs.unshift(saved);
     this.#write(designs);
     return cloneDesign(saved);
   }

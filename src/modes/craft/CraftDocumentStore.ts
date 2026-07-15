@@ -99,7 +99,7 @@ export class CraftDocumentStore {
   #past: HistoryEntry[] = [];
   #future: HistoryEntry[] = [];
   #selection: CraftSelection = {};
-  #savedJSON: string;
+  #savedJSON?: string;
   #snapshotA?: EditorDiagnostic;
   #snapshotB?: EditorDiagnostic;
 
@@ -130,12 +130,12 @@ export class CraftDocumentStore {
     return () => this.#listeners.delete(listener);
   }
 
-  replace(design: FireworkDesign): void {
+  replace(design: FireworkDesign, options: { unsaved?: boolean } = {}): void {
     this.#draft = clone(design);
     this.#past = [];
     this.#future = [];
     this.#selection = { layerId: this.#draft.layers[0]?.id };
-    this.#savedJSON = JSON.stringify(this.#draft);
+    this.#savedJSON = options.unsaved ? undefined : JSON.stringify(this.#draft);
     this.#snapshotA = undefined;
     this.#snapshotB = undefined;
     this.#emit();
@@ -208,7 +208,9 @@ export class CraftDocumentStore {
       canRedo: this.#future.length > 0,
       canUndo: this.#past.length > 0,
       diagnostic: buildEditorDiagnostic(this.#draft),
-      dirty: JSON.stringify(this.#draft) !== this.#savedJSON,
+      dirty:
+        this.#savedJSON === undefined ||
+        JSON.stringify(this.#draft) !== this.#savedJSON,
       draft: clone(this.#draft),
       selection: clone(this.#selection),
     };

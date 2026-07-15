@@ -32,10 +32,18 @@ describe("renewal acceptance contracts", () => {
       ),
     ).toMatchObject({ from: "viewer-check", to: "editor" });
     expect(
-      RENEWAL_SCREEN_TRANSITIONS.find(
+      RENEWAL_SCREEN_TRANSITIONS.filter(
         ({ action }) => action === "back-to-mode-select",
       ),
-    ).toMatchObject({ from: "viewer-free", to: "mode-select" });
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ from: "library", to: "mode-select" }),
+        expect.objectContaining({
+          from: "viewer-free",
+          to: "mode-select",
+        }),
+      ]),
+    );
     expect(
       RENEWAL_SCREEN_TRANSITIONS.find(
         ({ action }) => action === "back-to-library",

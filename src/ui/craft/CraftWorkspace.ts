@@ -204,28 +204,6 @@ export class CraftWorkspace {
               )
               .join("")}
           </div>
-          <div class="workspace-library">
-            <header><span>保存した花火</span><button type="button" data-action="new-design">一から作る</button></header>
-            <div>${
-              this.#controller.savedDesigns.length === 0
-                ? `<p>制作確定した作品はまだありません</p>`
-                : this.#controller.savedDesigns
-                    .map(
-                      (saved) =>
-                        `<article data-design-id="${saved.id}"><span class="library-section-thumbnail" role="img" aria-label="${escapeHTML(saved.name)}の内部断面">${saved.layers
-                          .filter((layer) => layer.visible)
-                          .slice(0, 3)
-                          .map(
-                            (layer, index) =>
-                              `<i style="--ring:${layerColor(saved, layer)};--ring-size:${1.05 - index * 0.24}rem"></i>`,
-                          )
-                          .join(
-                            "",
-                          )}</span><span>${escapeHTML(saved.name)}</span><button type="button" data-action="library-load">読込</button><button type="button" data-action="library-duplicate">複製</button><button type="button" data-action="library-delete">削除</button></article>`,
-                    )
-                    .join("")
-            }</div>
-          </div>
         </section>
       </aside>
 
@@ -514,30 +492,6 @@ export class CraftWorkspace {
       this.#removeStarStage(Number(button.dataset.stage));
     } else if (action === "duplicate-star") {
       this.#duplicateStar();
-    } else if (action === "library-load") {
-      const id =
-        button.closest<HTMLElement>("[data-design-id]")?.dataset.designId;
-      if (id && this.#controller.load(id)) {
-        this.#callbacks.onToast("保存作品を内部配置へ読み込みました");
-      }
-    } else if (action === "library-duplicate") {
-      const id =
-        button.closest<HTMLElement>("[data-design-id]")?.dataset.designId;
-      if (id) {
-        this.#controller.duplicate(id);
-        this.#callbacks.onDesignLibraryChange(this.#controller.savedDesigns);
-        this.#render();
-      }
-    } else if (action === "library-delete") {
-      const id =
-        button.closest<HTMLElement>("[data-design-id]")?.dataset.designId;
-      if (id) {
-        this.#controller.remove(id);
-        this.#callbacks.onDesignLibraryChange(this.#controller.savedDesigns);
-        this.#render();
-      }
-    } else if (action === "new-design") {
-      this.#controller.startBlank();
     }
   }
 

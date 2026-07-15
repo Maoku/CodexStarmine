@@ -104,6 +104,12 @@ export const RENEWAL_SCREEN_TRANSITIONS = [
   {
     action: "back-to-mode-select",
     dirtyGuard: false,
+    from: "library",
+    to: "mode-select",
+  },
+  {
+    action: "back-to-mode-select",
+    dirtyGuard: false,
     from: "viewer-free",
     to: "mode-select",
   },

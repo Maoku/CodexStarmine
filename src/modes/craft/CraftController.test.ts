@@ -14,6 +14,49 @@ function memoryStorage(): StorageLike {
 }
 
 describe("CraftController renewal regression", () => {
+  it("creates an unsaved initial-setup draft without writing the library", () => {
+    const repository = new DesignRepository(memoryStorage(), () => "new-draft");
+    const controller = new CraftController(repository);
+    let dirty = false;
+    const unsubscribe = controller.document.subscribe((snapshot) => {
+      dirty = snapshot.dirty;
+    });
+
+    controller.startNewDraft("large", "peony");
+
+    expect(controller.draft).toMatchObject({
+      id: "draft-new",
+      name: "新しい牡丹",
+      pattern: "peony",
+      sizeClass: "large",
+    });
+    expect(dirty).toBe(true);
+    expect(controller.savedDesigns).toEqual([]);
+
+    const saved = controller.save();
+    expect(saved.id).toBe("custom-new-draft");
+    expect(controller.savedDesigns).toEqual([saved]);
+    expect(dirty).toBe(false);
+    unsubscribe();
+  });
+
+  it("starts a blank setup draft with only the minimum outer layer", () => {
+    const controller = new CraftController(
+      new DesignRepository(memoryStorage()),
+    );
+
+    controller.startNewDraft("small", "blank");
+
+    expect(controller.draft).toMatchObject({
+      id: "draft-new",
+      name: "無題の花火",
+      sizeClass: "small",
+    });
+    expect(controller.draft.layers).toHaveLength(1);
+    expect(controller.draft.childBursts).toEqual([]);
+    expect(controller.draft.coreLayers).toEqual([]);
+  });
+
   it("keeps the current craft, save, load, completed launch, and delete flow", () => {
     const storage = memoryStorage();
     const controller = new CraftController(

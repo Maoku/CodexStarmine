@@ -55,14 +55,45 @@ export class CraftController {
     );
     if (!preset) return;
     const sizeClass = this.draft.sizeClass;
-    this.document.replace({
-      ...cloneDesign(preset),
-      id: `draft-${pattern}`,
-      sizeClass,
-    });
+    this.document.replace(
+      {
+        ...cloneDesign(preset),
+        id: `draft-${pattern}`,
+        sizeClass,
+      },
+      { unsaved: true },
+    );
   }
 
   startBlank(): void {
+    this.document.replace(this.#createBlankDesign(), { unsaved: true });
+  }
+
+  startNewDraft(
+    sizeClass: SizeClass,
+    template: "chrysanthemum" | "peony" | "blank",
+  ): void {
+    const source =
+      template === "chrysanthemum"
+        ? this.#presets.find(
+            (candidate) => candidate.pattern === "chrysanthemum",
+          )
+        : template === "peony"
+          ? this.#presets.find((candidate) => candidate.pattern === "peony")
+          : undefined;
+    const draft = source ? cloneDesign(source) : this.#createBlankDesign();
+    draft.id = "draft-new";
+    draft.name =
+      template === "chrysanthemum"
+        ? "新しい菊"
+        : template === "peony"
+          ? "新しい牡丹"
+          : "無題の花火";
+    draft.sizeClass = sizeClass;
+    this.document.replace(draft, { unsaved: true });
+  }
+
+  #createBlankDesign(): FireworkDesign {
     const blank = cloneDesign(PEONY_PRESET);
     blank.ascentEffect = "none";
     blank.childBursts = [];
@@ -70,7 +101,7 @@ export class CraftController {
     blank.id = "draft-new";
     blank.name = "無題の花火";
     blank.layers = blank.layers.filter((_, index) => index === 0);
-    this.document.replace(blank);
+    return blank;
   }
 
   load(id: string): boolean {
@@ -213,7 +244,9 @@ export class CraftController {
 
   remove(id: string): boolean {
     const removed = this.#repository.remove(id);
-    if (removed && this.draft.id === id) this.startBlank();
+    if (removed && this.draft.id === id) {
+      this.document.replace(this.#createBlankDesign());
+    }
     return removed;
   }
 }

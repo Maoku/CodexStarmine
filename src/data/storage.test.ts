@@ -36,6 +36,23 @@ describe("DesignRepository", () => {
     expect(repository.list()[0].name).toBe("更新後");
   });
 
+  it("moves the last saved design to the front for updated-order shelves", () => {
+    let id = 0;
+    const repository = new DesignRepository(memoryStorage(), () => `${++id}`);
+    const first = repository.save({
+      ...CHRYSANTHEMUM_PRESET,
+      name: "先に保存",
+    });
+    repository.save({ ...CHRYSANTHEMUM_PRESET, name: "後に保存" });
+
+    repository.save({ ...first, name: "最後に更新" });
+
+    expect(repository.list().map((design) => design.name)).toEqual([
+      "最後に更新",
+      "後に保存",
+    ]);
+  });
+
   it("duplicates and removes custom designs", () => {
     let id = 0;
     const repository = new DesignRepository(memoryStorage(), () => `${++id}`);
