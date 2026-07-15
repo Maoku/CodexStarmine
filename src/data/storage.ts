@@ -15,9 +15,10 @@ interface StoredLibraryV1 {
   version: 1;
 }
 
-interface StoredLibraryV2 {
-  designs: FireworkDesign[];
-  version: 2;
+/** Frozen schema v2 storage envelope retained for non-destructive migration. */
+export interface StoredLibraryV2 {
+  readonly designs: readonly FireworkDesign[];
+  readonly version: 2;
 }
 
 function cloneDesign(design: FireworkDesign): FireworkDesign {

@@ -1,7 +1,7 @@
 # 画面遷移・編集体験リニューアル 改修計画書
 
 - 作成日: 2026-07-15
-- ステータス: 実装前
+- ステータス: 実装中（Renewal Phase 0 完了）
 - 基準資料: [RENEWAL_PLAN.md](RENEWAL_PLAN.md)
 - 関連資料: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 - 対象: モード選択、作品棚、初期設定、製作エディター、確認、フリー鑑賞、保存データ
@@ -366,14 +366,22 @@ NightSkyApp
 
 ## 8. フェーズ計画
 
-### Renewal Phase 0: 契約固定と回帰基準
+### Renewal Phase 0: 契約固定と回帰基準（完了: 2026-07-15）
 
-- [ ] 現行6プリセットと保存作品fixtureを固定seedで保存する。
-- [ ] 現行の製作、保存、読込、削除、確定打上、フリー鑑賞の回帰テストを追加する。
-- [ ] `FireworkDesignV2` とストレージv2を読み取り専用の互換契約として固定する。
-- [ ] 5画面の遷移表と、簡易確認／確認／フリー鑑賞の責務分離をテスト項目へ落とす。
+- [x] 現行6プリセットと保存作品fixtureを固定seedで保存する。
+- [x] 現行の製作、保存、読込、削除、確定打上、フリー鑑賞の回帰テストを追加する。
+- [x] `FireworkDesignV2` とストレージv2を読み取り専用の互換契約として固定する。
+- [x] 5画面の遷移表と、簡易確認／確認／フリー鑑賞の責務分離をテスト項目へ落とす。
 
 完了基準: リニューアル前の作品と打上結果を比較できる自動fixtureがある。
+
+**完了確認**:
+
+- `src/test/fixtures/renewalBaseline.ts` に固定seed `424242` の6プリセット、v2保存作品、フリー演目の基準ハッシュと粒子集計を保存した。
+- `src/test/renewalBaseline.test.ts` でプリセット、`CompiledBurstPlan`、v2保存・再読込、フリー演目を比較可能にした。
+- `src/modes/craft/CraftController.test.ts` と `src/modes/viewFree/FreeShowController.test.ts` で現行の製作、保存、読込、削除、完成打上、フリー鑑賞の操作回帰を固定した。
+- `src/app/renewalContracts.ts` に5画面とviewerの2コンテキストの遷移表、未保存ガード、抽象確認と本番描画の責務表を定義した。
+- `rtk npm run lint`、`rtk npm run test:run`（16ファイル、50件成功）、`rtk npm run build` が成功した。production buildには既存の550 kB超chunk警告が残る。
 
 ### Renewal Phase 1: 画面状態と共通シェル
 

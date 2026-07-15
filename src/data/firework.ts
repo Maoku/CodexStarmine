@@ -5,6 +5,8 @@ export type SizeClass = "small" | "medium" | "large";
 export type BurstShape = "sphere" | "palm" | "heart" | "children";
 export type AscentEffect = "gold" | "silver" | "none";
 
+export const FIREWORK_DESIGN_V2_SCHEMA_VERSION = 2 as const;
+
 export interface ColorStage {
   color: number;
   intensity: number;
@@ -202,10 +204,27 @@ export interface FireworkDesignV2 extends FireworkDesignV1 {
   launchVariation: LaunchVariation;
   layers: FireworkLayer[];
   realism: DesignRealism;
-  schemaVersion: 2;
+  schemaVersion: typeof FIREWORK_DESIGN_V2_SCHEMA_VERSION;
   starDefinitions: Record<string, VirtualStarPreset>;
   themeColors: number[];
 }
+
+type DeepReadonly<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends readonly (infer Item)[]
+    ? readonly DeepReadonly<Item>[]
+    : T extends object
+      ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+      : T;
+
+/**
+ * Read-only compatibility view of the schema v2 persistence contract.
+ *
+ * Renewal code may read and migrate this shape, but new editing features must
+ * not add fields to it. Runtime editing continues to use `FireworkDesign`
+ * until the v3 intent document is introduced.
+ */
+export type FireworkDesignV2Compatibility = DeepReadonly<FireworkDesignV2>;
 
 export type FireworkDesign = FireworkDesignV2;
 
