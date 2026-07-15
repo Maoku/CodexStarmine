@@ -1,0 +1,1016 @@
+import {
+  createHeartPoints,
+  type ChildBurstLayer,
+  type FireworkDesign,
+  type FireworkLayer,
+  type SphericalStarLayer,
+} from "../../data";
+import type { CraftController, CraftDocumentSnapshot } from "../../modes/craft";
+import {
+  buildApproximateSpreadModel,
+  type ApproximateSpreadModel,
+} from "../../render/preview/ApproximateSpreadRenderer";
+import { renderInlineDiagnosticPreview } from "./InlineDiagnosticPreview";
+import {
+  createPlacementTemplatePoints,
+  pointOnPlacementFace,
+  projectPlacementPoint,
+  renderIntegratedPlacementWorkbench,
+  type NormalizedPlacementPoint,
+  type PlacementFace,
+  type PlacementTemplate,
+} from "./IntegratedPlacementWorkbench";
+import { renderLayerPanel } from "./LayerPanel";
+import { renderStarLibraryPanel } from "./StarLibraryPanel";
+import {
+  STAR_LONG_PRESS_DELAY_MS,
+  StarLongPressGesture,
+} from "./StarLongPressGesture";
+import { escapeHTML, layerKindLabel } from "./viewUtils";
+
+export interface IntegratedCraftEditorCallbacks {
+  onCheck: (design: FireworkDesign) => void;
+  onDesignLibraryChange: (designs: FireworkDesign[]) => void;
+  onSaveToLibrary: (design: FireworkDesign) => void;
+  onToast: (message: string) => void;
+}
+
+interface PointDrag {
+  index: number;
+  layerId: string;
+  localX: number;
+  localY: number;
+  moved: boolean;
+  normalized: NormalizedPlacementPoint;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  target: SVGCircleElement;
+}
+
+type MobileDrawer = "layers" | "inspector";
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function circlePatternPoints(count = 44) {
+  return Array.from({ length: count }, (_, index) => {
+    const angle = (index / count) * Math.PI * 2;
+    return {
+      groupId: "outline",
+      x: Math.cos(angle) * 0.84,
+      y: Math.sin(angle) * 0.84,
+    };
+  });
+}
+
+function defaultPatternGroups() {
+  return [
+    { id: "left", name: "左輪郭", starId: "star-solid-red" },
+    { id: "right", name: "右輪郭", starId: "star-change-blue" },
+  ];
+}
+
+export class IntegratedCraftEditor {
+  readonly element = document.createElement("section");
+  readonly #callbacks: IntegratedCraftEditorCallbacks;
+  readonly #controller: CraftController;
+  readonly #starLongPress = new StarLongPressGesture();
+  #drawer?: MobileDrawer;
+  #face: PlacementFace = {
+    latitudeBand: 2,
+    longitudeSector: 2,
+    rotationDegrees: 0,
+  };
+  #placementTemplate: PlacementTemplate = "manual";
+  #pointDrag?: PointDrag;
+  #previewModel?: ApproximateSpreadModel;
+  #previewRevision = 0;
+  #previewRunning = true;
+  #previewSignature = "";
+  #previewTimer = 0;
+  #selectedPointIndex?: number;
+  #snapshot?: CraftDocumentSnapshot;
+  #starPressTimer = 0;
+  #starPreviewId?: string;
+  #suppressStarClickId?: string;
+  #unsubscribe: () => void;
+
+  constructor(
+    controller: CraftController,
+    callbacks: IntegratedCraftEditorCallbacks,
+  ) {
+    this.#controller = controller;
+    this.#callbacks = callbacks;
+    this.element.className = "craft-workspace integrated-craft-editor";
+    this.element.addEventListener("click", this.#handleClick);
+    this.element.addEventListener("change", this.#handleChange);
+    this.element.addEventListener("dragstart", this.#handleDragStart);
+    this.element.addEventListener("dragover", this.#handleDragOver);
+    this.element.addEventListener("drop", this.#handleDrop);
+    this.element.addEventListener("pointerdown", this.#handlePointerDown);
+    window.addEventListener("pointermove", this.#handlePointerMove);
+    window.addEventListener("pointerup", this.#handlePointerEnd);
+    window.addEventListener("pointercancel", this.#handlePointerEnd);
+    window.addEventListener("keydown", this.#handleKeyDown);
+    this.#unsubscribe = this.#controller.document.subscribe((snapshot) => {
+      this.#snapshot = snapshot;
+      this.#schedulePreview(snapshot.draft);
+      this.#render();
+    });
+  }
+
+  destroy(): void {
+    window.clearTimeout(this.#previewTimer);
+    this.#cancelStarPress();
+    this.#unsubscribe();
+    this.element.removeEventListener("click", this.#handleClick);
+    this.element.removeEventListener("change", this.#handleChange);
+    this.element.removeEventListener("dragstart", this.#handleDragStart);
+    this.element.removeEventListener("dragover", this.#handleDragOver);
+    this.element.removeEventListener("drop", this.#handleDrop);
+    this.element.removeEventListener("pointerdown", this.#handlePointerDown);
+    window.removeEventListener("pointermove", this.#handlePointerMove);
+    window.removeEventListener("pointerup", this.#handlePointerEnd);
+    window.removeEventListener("pointercancel", this.#handlePointerEnd);
+    window.removeEventListener("keydown", this.#handleKeyDown);
+    this.element.remove();
+  }
+
+  #render(): void {
+    const snapshot = this.#snapshot;
+    if (!snapshot) return;
+    const design = snapshot.draft;
+    const selectedLayer = design.layers.find(
+      (layer) => layer.id === snapshot.selection.layerId,
+    );
+    const selectedStarId =
+      snapshot.selection.starDefinitionId ?? selectedLayer?.defaultStarId;
+    const diagnostic = snapshot.diagnostic;
+    const warningClass =
+      diagnostic.estimatedCost.maximumParticles > 6_000
+        ? "is-overload"
+        : diagnostic.estimatedCost.maximumParticles > 2_000
+          ? "is-warning"
+          : "is-good";
+    const preview =
+      this.#previewModel ?? buildApproximateSpreadModel(snapshot.draft);
+    this.element.dataset.mobileDrawer = this.#drawer ?? "closed";
+    this.element.innerHTML = `
+      <nav class="editor-mobile-toolbar" aria-label="編集パネル">
+        <button type="button" data-action="toggle-drawer" data-drawer="layers" aria-expanded="${this.#drawer === "layers"}">レイヤーと星</button>
+        <strong>${escapeHTML(selectedLayer?.name ?? "未選択")}</strong>
+        <button type="button" data-action="toggle-drawer" data-drawer="inspector" aria-expanded="${this.#drawer === "inspector"}">設定と確認</button>
+      </nav>
+      <button class="editor-drawer-backdrop" type="button" data-action="close-drawer" aria-label="パネルを閉じる"></button>
+
+      <aside class="craft-rail craft-rail--left" aria-label="レイヤーと仮想星">
+        <button class="drawer-close" type="button" data-action="close-drawer">閉じる</button>
+        ${renderLayerPanel(design, snapshot.selection.layerId)}
+        ${renderStarLibraryPanel(design, selectedStarId, this.#starPreviewId)}
+      </aside>
+
+      <main class="craft-bench integrated-craft-bench">
+        ${renderIntegratedPlacementWorkbench(
+          design,
+          selectedLayer,
+          this.#face,
+          this.#placementTemplate,
+          this.#selectedPointIndex,
+        )}
+      </main>
+
+      <aside class="craft-rail craft-rail--right" aria-label="作品と配置の設定">
+        <button class="drawer-close" type="button" data-action="close-drawer">閉じる</button>
+        <section class="craft-card performance-card ${warningClass}">
+          <header><span>描画負荷</span><strong>${warningClass === "is-good" ? "● 良好" : warningClass === "is-warning" ? "▲ 注意" : "× 超過"}</strong></header>
+          <p><span>最大粒子</span><b>${diagnostic.estimatedCost.maximumParticles.toLocaleString()} / 6,000</b></p>
+          <meter min="0" max="6000" low="2000" high="5500" optimum="1200" value="${diagnostic.estimatedCost.maximumParticles}"></meter>
+          ${warningClass === "is-good" ? "" : `<button type="button" data-action="simplify">自動簡略化</button>`}
+        </section>
+        <section class="craft-card inspector-card">
+          <header><span>作品と配置</span><strong>${selectedLayer ? layerKindLabel(selectedLayer) : "未選択"}</strong></header>
+          ${this.#renderInspector(design, selectedLayer)}
+        </section>
+        ${renderInlineDiagnosticPreview(
+          preview,
+          this.#previewRunning,
+          this.#previewRevision,
+        )}
+      </aside>
+
+      <footer class="craft-transport integrated-transport">
+        <div class="history-actions">
+          <button type="button" data-action="undo" ${snapshot.canUndo ? "" : "disabled"}>Undo</button>
+          <button type="button" data-action="redo" ${snapshot.canRedo ? "" : "disabled"}>Redo</button>
+        </div>
+        <div class="surface-rotation" aria-label="配置面の回転">
+          <button type="button" data-action="rotate-surface" data-step="-15" aria-label="配置面を左へ15度回転">↶</button>
+          <label><span>配置面 ${this.#face.rotationDegrees}°</span><input name="surface-rotation" type="range" min="0" max="345" step="15" value="${this.#face.rotationDegrees}" /></label>
+          <button type="button" data-action="rotate-surface" data-step="15" aria-label="配置面を右へ15度回転">↷</button>
+        </div>
+        <span class="editor-save-state">${snapshot.dirty ? "未保存の変更あり" : "保存済み"}</span>
+        <button type="button" data-action="save" class="secondary-save">保存して棚へ</button>
+        <button type="button" data-action="check" class="confirm-craft">湖面で確認</button>
+      </footer>`;
+  }
+
+  #renderInspector(
+    design: FireworkDesign,
+    selectedLayer: FireworkLayer | undefined,
+  ): string {
+    const optionsFor = (selectedId: string) =>
+      Object.values(design.starDefinitions)
+        .map(
+          (star) =>
+            `<option value="${star.id}" ${star.id === selectedId ? "selected" : ""}>${escapeHTML(star.displayName)}</option>`,
+        )
+        .join("");
+    let layerFields = `<p class="inspector-empty">左の一覧からレイヤーを選んでください。</p>`;
+    if (selectedLayer) {
+      let specific = "";
+      if (selectedLayer.kind === "spherical") {
+        specific = `<label><span>仮想星数 <output>${selectedLayer.count}</output></span><input name="layer-count" type="range" min="12" max="900" value="${selectedLayer.count}" /></label>
+          <label><span>玉内の半径 <output>${Math.round(selectedLayer.radius * 100)}%</output></span><input name="layer-radius" type="range" min="20" max="100" value="${Math.round(selectedLayer.radius * 100)}" /></label>
+          <label><span>空間配色</span><select name="spatial-color"><option value="layer" ${selectedLayer.coloring.mode === "layer" ? "selected" : ""}>レイヤー一括</option><option value="alternating" ${selectedLayer.coloring.mode === "alternating" ? "selected" : ""}>交互色</option><option value="latitude" ${selectedLayer.coloring.mode === "latitude" ? "selected" : ""}>緯度帯</option><option value="longitude" ${selectedLayer.coloring.mode === "longitude" ? "selected" : ""}>経度区画</option></select></label>`;
+      } else if (selectedLayer.kind === "pattern") {
+        specific = `<p class="inspector-note">型物も同じワークベンチ上の点群として編集します。円形・ハート配置後に各点を移動できます。</p>`;
+      } else if (selectedLayer.kind === "child") {
+        specific = `<label><span>子花数 <output>${selectedLayer.count}</output></span><input name="child-count" type="range" min="4" max="48" value="${selectedLayer.count}" /></label>`;
+      } else {
+        specific = `<label><span>枝数 <output>${selectedLayer.branchCount}</output></span><input name="branch-count" type="range" min="5" max="20" value="${selectedLayer.branchCount}" /></label>`;
+      }
+      layerFields = `<div class="inspector-divider"></div><div class="inspector-fields">
+        <label><span>レイヤー名</span><input name="layer-name" type="text" maxlength="24" value="${escapeHTML(selectedLayer.name)}" /></label>
+        <label><span>既定の仮想星</span><select name="layer-star">${optionsFor(selectedLayer.defaultStarId)}</select></label>
+        ${specific}
+        <div class="inspector-actions"><button type="button" data-action="duplicate-layer">複製</button><button type="button" data-action="delete-layer">削除</button></div>
+      </div>`;
+    }
+    return `<div class="inspector-fields">
+      <label><span>作品名</span><input name="design-name" type="text" maxlength="32" value="${escapeHTML(design.name)}" /></label>
+      <label><span>玉の大きさ</span><select name="size"><option value="small" ${design.sizeClass === "small" ? "selected" : ""}>小玉</option><option value="medium" ${design.sizeClass === "medium" ? "selected" : ""}>中玉</option><option value="large" ${design.sizeClass === "large" ? "selected" : ""}>大玉</option></select></label>
+      <p class="inspector-note">速度、発火順、重力、減速は、星種と玉内配置から自動調整されます。</p>
+    </div>${layerFields}`;
+  }
+
+  readonly #handleClick = (event: Event): void => {
+    const target = event.target as HTMLElement;
+    const button = target.closest<HTMLButtonElement>("button[data-action]");
+    if (button) {
+      this.#runAction(button.dataset.action ?? "", button);
+      return;
+    }
+    const point = target.closest<SVGCircleElement>("[data-point-index]");
+    if (point) {
+      const layerId = point.dataset.layerId;
+      if (layerId && layerId !== this.#snapshot?.selection.layerId) {
+        this.#controller.document.selectLayer(layerId);
+      }
+      this.#selectedPointIndex = Number(point.dataset.pointIndex);
+      this.#render();
+      return;
+    }
+    const canvas = target.closest<SVGSVGElement>("[data-workbench-canvas]");
+    if (canvas && this.#placementTemplate === "manual") {
+      this.#addManualPoint(event as MouseEvent, canvas);
+      return;
+    }
+    if (this.#starPreviewId) {
+      this.#starPreviewId = undefined;
+      this.#render();
+    }
+  };
+
+  #runAction(action: string, button: HTMLButtonElement): void {
+    const snapshot = this.#snapshot;
+    if (!snapshot) return;
+    const layerId =
+      button.closest<HTMLElement>("[data-layer-id]")?.dataset.layerId ??
+      snapshot.selection.layerId;
+    if (action === "toggle-drawer") {
+      const drawer = button.dataset.drawer as MobileDrawer;
+      this.#drawer = this.#drawer === drawer ? undefined : drawer;
+      this.#render();
+    } else if (action === "close-drawer") {
+      this.#drawer = undefined;
+      this.#render();
+    } else if (action === "select-layer" && layerId) {
+      this.#selectedPointIndex = undefined;
+      this.#controller.document.selectLayer(layerId);
+      this.#drawer = undefined;
+    } else if (action === "toggle-layer" && layerId) {
+      this.#updateLayer(layerId, "レイヤー表示を変更", (layer) => {
+        layer.visible = !layer.visible;
+      });
+    } else if (action === "toggle-lock" && layerId) {
+      this.#controller.document.update("レイヤーのロックを変更", (draft) => {
+        const layer = draft.layers.find(
+          (candidate) => candidate.id === layerId,
+        );
+        if (layer) layer.locked = !layer.locked;
+      });
+    } else if (action === "move-layer-up" && layerId) {
+      this.#moveLayer(layerId, -1);
+    } else if (action === "move-layer-down" && layerId) {
+      this.#moveLayer(layerId, 1);
+    } else if (action === "add-core") {
+      this.#addCore();
+    } else if (action === "add-pattern") {
+      this.#addPattern();
+    } else if (action === "add-child") {
+      this.#addChild();
+    } else if (action === "duplicate-layer" && layerId) {
+      this.#duplicateLayer(layerId);
+    } else if (action === "delete-layer" && layerId) {
+      this.#deleteLayer(layerId);
+    } else if (action === "assign-star") {
+      const starId = button.dataset.starId;
+      if (!starId) return;
+      if (this.#suppressStarClickId === starId) {
+        this.#suppressStarClickId = undefined;
+        return;
+      }
+      this.#assignStar(starId);
+    } else if (action === "preview-star") {
+      this.#openStarPreview(button.dataset.starId);
+    } else if (action === "select-latitude") {
+      this.#face.latitudeBand = Number(button.dataset.index);
+      this.#render();
+    } else if (action === "select-longitude") {
+      this.#face.longitudeSector = Number(button.dataset.index);
+      this.#render();
+    } else if (action === "placement-template") {
+      const template = button.dataset.template as PlacementTemplate;
+      this.#placementTemplate = template;
+      this.#selectedPointIndex = undefined;
+      if (template === "circle" || template === "heart") {
+        this.#applyPlacementTemplate(template);
+      } else {
+        this.#render();
+      }
+    } else if (action === "delete-point") {
+      this.#deleteSelectedPoint();
+    } else if (action === "rotate-surface") {
+      this.#face.rotationDegrees =
+        (this.#face.rotationDegrees + Number(button.dataset.step) + 360) % 360;
+      this.#render();
+    } else if (action === "undo") {
+      this.#selectedPointIndex = undefined;
+      this.#controller.document.undo();
+    } else if (action === "redo") {
+      this.#selectedPointIndex = undefined;
+      this.#controller.document.redo();
+    } else if (action === "simplify") {
+      this.#simplify();
+    } else if (action === "toggle-preview") {
+      this.#previewRunning = !this.#previewRunning;
+      this.#render();
+    } else if (action === "reset-preview") {
+      this.#previewRunning = true;
+      this.#previewRevision += 1;
+      this.#render();
+    } else if (action === "save") {
+      this.#save(true);
+    } else if (action === "check") {
+      this.#callbacks.onCheck(snapshot.draft);
+    }
+  }
+
+  readonly #handleChange = (event: Event): void => {
+    const input = event.target as HTMLInputElement | HTMLSelectElement;
+    if (!this.#snapshot) return;
+    if (input.name === "design-name") {
+      this.#controller.updateName(input.value);
+    } else if (input.name === "size") {
+      this.#controller.updateSize(input.value as FireworkDesign["sizeClass"]);
+    } else if (input.name === "surface-rotation") {
+      this.#face.rotationDegrees = Number(input.value);
+      this.#render();
+    } else if (input.name) {
+      this.#changeSelectedLayer(input.name, input.value);
+    }
+  };
+
+  readonly #handleDragStart = (event: DragEvent): void => {
+    const button = (event.target as HTMLElement).closest<HTMLElement>(
+      "[data-action='assign-star']",
+    );
+    if (!button?.dataset.starId || !event.dataTransfer) return;
+    this.#cancelStarPress();
+    event.dataTransfer.setData("text/x-codex-star", button.dataset.starId);
+    event.dataTransfer.effectAllowed = "copy";
+  };
+
+  readonly #handleDragOver = (event: DragEvent): void => {
+    if (!(event.target as HTMLElement).closest("[data-workbench-canvas]"))
+      return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  };
+
+  readonly #handleDrop = (event: DragEvent): void => {
+    const canvas = (event.target as HTMLElement).closest<SVGSVGElement>(
+      "[data-workbench-canvas]",
+    );
+    if (!canvas) return;
+    event.preventDefault();
+    const starId = event.dataTransfer?.getData("text/x-codex-star");
+    if (!starId) return;
+    this.#addManualPoint(event, canvas, starId);
+  };
+
+  readonly #handlePointerDown = (event: PointerEvent): void => {
+    const target = event.target as HTMLElement;
+    const starButton = target.closest<HTMLButtonElement>(
+      "button[data-action='assign-star']",
+    );
+    if (starButton?.dataset.starId) {
+      this.#cancelStarPress();
+      const startedAt = performance.now();
+      this.#starLongPress.begin(
+        starButton.dataset.starId,
+        event.pointerId,
+        event.clientX,
+        event.clientY,
+        startedAt,
+      );
+      this.#starPressTimer = window.setTimeout(() => {
+        const starId = this.#starLongPress.activate(
+          event.pointerId,
+          startedAt + STAR_LONG_PRESS_DELAY_MS,
+        );
+        if (!starId) return;
+        this.#suppressStarClickId = starId;
+        this.#starPreviewId = starId;
+        this.#render();
+      }, STAR_LONG_PRESS_DELAY_MS);
+      return;
+    }
+    const point = target.closest<SVGCircleElement>(
+      "[data-point-index][data-point-editable='true']",
+    );
+    if (!point) return;
+    const canvas = point.closest<SVGSVGElement>("[data-workbench-canvas]");
+    if (!canvas || !point.dataset.layerId) return;
+    const local = this.#canvasLocalPoint(event.clientX, event.clientY, canvas);
+    const selectedLayer = this.#selectedLayer();
+    const radius =
+      selectedLayer?.kind === "spherical" ? selectedLayer.radius : 1;
+    this.#pointDrag = {
+      index: Number(point.dataset.pointIndex),
+      layerId: point.dataset.layerId,
+      localX: local.x,
+      localY: local.y,
+      moved: false,
+      normalized: pointOnPlacementFace(local.x, local.y, this.#face, radius),
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      target: point,
+    };
+    event.preventDefault();
+  };
+
+  readonly #handlePointerMove = (event: PointerEvent): void => {
+    if (
+      this.#starLongPress.move(event.pointerId, event.clientX, event.clientY)
+    ) {
+      window.clearTimeout(this.#starPressTimer);
+      this.#starPressTimer = 0;
+    }
+    const drag = this.#pointDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const canvas = drag.target.closest<SVGSVGElement>(
+      "[data-workbench-canvas]",
+    );
+    if (!canvas) return;
+    const local = this.#canvasLocalPoint(event.clientX, event.clientY, canvas);
+    const selectedLayer = this.#snapshot?.draft.layers.find(
+      (layer) => layer.id === drag.layerId,
+    );
+    const radius =
+      selectedLayer?.kind === "spherical" ? selectedLayer.radius : 1;
+    drag.localX = local.x;
+    drag.localY = local.y;
+    drag.normalized = pointOnPlacementFace(
+      local.x,
+      local.y,
+      this.#face,
+      radius,
+    );
+    drag.moved ||=
+      Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 3;
+    const projected = projectPlacementPoint(
+      drag.normalized,
+      this.#face.rotationDegrees,
+    );
+    drag.target.setAttribute("cx", projected.x.toFixed(1));
+    drag.target.setAttribute("cy", projected.y.toFixed(1));
+    event.preventDefault();
+  };
+
+  readonly #handlePointerEnd = (event: PointerEvent): void => {
+    const openedId = this.#starLongPress.end(event.pointerId);
+    window.clearTimeout(this.#starPressTimer);
+    this.#starPressTimer = 0;
+    if (openedId) {
+      this.#starPreviewId = undefined;
+      this.#render();
+    }
+    const drag = this.#pointDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    this.#pointDrag = undefined;
+    this.#selectedPointIndex = drag.index;
+    if (!drag.moved) {
+      this.#render();
+      return;
+    }
+    this.#controller.document.update("配置点を移動", (draft) => {
+      const layer = draft.layers.find(
+        (candidate) => candidate.id === drag.layerId,
+      );
+      if (!layer || layer.locked) return;
+      if (layer.kind === "spherical") {
+        const override = layer.overrides.find(
+          (item) => item.index === drag.index,
+        );
+        if (override) override.position = drag.normalized;
+        else
+          layer.overrides.push({
+            index: drag.index,
+            position: drag.normalized,
+          });
+        layer.placement = "manual";
+      } else if (layer.kind === "pattern") {
+        const point = layer.points[drag.index];
+        if (point) {
+          point.x = clamp(drag.localX, -1, 1);
+          point.y = clamp(drag.localY, -1, 1);
+          layer.template = "custom";
+        }
+      }
+    });
+  };
+
+  readonly #handleKeyDown = (event: KeyboardEvent): void => {
+    const target = event.target as HTMLElement;
+    const starButton = target.closest<HTMLButtonElement>(
+      "button[data-action='assign-star']",
+    );
+    if (starButton?.dataset.starId && event.key === " ") {
+      event.preventDefault();
+      this.#openStarPreview(starButton.dataset.starId);
+      return;
+    }
+    const command = event.metaKey || event.ctrlKey;
+    if (command && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      this.#selectedPointIndex = undefined;
+      if (event.shiftKey) this.#controller.document.redo();
+      else this.#controller.document.undo();
+    } else if (event.key === "Escape") {
+      if (this.#starPreviewId || this.#drawer) {
+        this.#starPreviewId = undefined;
+        this.#drawer = undefined;
+        this.#render();
+      }
+    } else if (
+      event.key === "Delete" &&
+      !(event.target instanceof HTMLInputElement) &&
+      !(event.target instanceof HTMLSelectElement)
+    ) {
+      event.preventDefault();
+      this.#deleteSelectedPoint();
+    }
+  };
+
+  #schedulePreview(design: FireworkDesign): void {
+    const signature = JSON.stringify(
+      design.layers.map((layer) => [
+        layer.id,
+        layer.visible,
+        layer.defaultStarId,
+        layer.kind === "pattern"
+          ? layer.points.length
+          : "count" in layer
+            ? layer.count
+            : layer.branchCount,
+      ]),
+    );
+    if (!this.#previewModel) {
+      this.#previewModel = buildApproximateSpreadModel(design);
+      this.#previewSignature = signature;
+      return;
+    }
+    if (signature === this.#previewSignature) return;
+    window.clearTimeout(this.#previewTimer);
+    this.#previewTimer = window.setTimeout(() => {
+      this.#previewModel = buildApproximateSpreadModel(
+        this.#controller.document.draft,
+      );
+      this.#previewSignature = signature;
+      this.#previewRevision += 1;
+      this.#render();
+    }, 150);
+  }
+
+  #openStarPreview(starId: string | undefined): void {
+    if (!starId || !this.#snapshot?.draft.starDefinitions[starId]) return;
+    this.#starPreviewId = starId;
+    this.#render();
+    window.setTimeout(() => {
+      this.element
+        .querySelector<HTMLButtonElement>(
+          `[data-action="preview-star"][data-star-id="${CSS.escape(starId)}"]`,
+        )
+        ?.focus();
+    });
+  }
+
+  #cancelStarPress(): void {
+    window.clearTimeout(this.#starPressTimer);
+    this.#starPressTimer = 0;
+    this.#starLongPress.cancel();
+  }
+
+  #canvasLocalPoint(
+    clientX: number,
+    clientY: number,
+    canvas: SVGSVGElement,
+  ): { x: number; y: number } {
+    const bounds = canvas.getBoundingClientRect();
+    const svgX = ((clientX - bounds.left) / bounds.width) * 600;
+    const svgY = ((clientY - bounds.top) / bounds.height) * 544;
+    return {
+      x: clamp((svgX - 300) / 214, -1, 1),
+      y: clamp((272 - svgY) / 214, -1, 1),
+    };
+  }
+
+  #selectedLayer(): FireworkLayer | undefined {
+    const layerId = this.#snapshot?.selection.layerId;
+    return this.#snapshot?.draft.layers.find((layer) => layer.id === layerId);
+  }
+
+  #updateLayer(
+    layerId: string,
+    label: string,
+    recipe: (layer: FireworkLayer) => void,
+  ): void {
+    this.#controller.document.update(label, (draft) => {
+      const layer = draft.layers.find((candidate) => candidate.id === layerId);
+      if (!layer || layer.locked) return;
+      recipe(layer);
+    });
+  }
+
+  #moveLayer(layerId: string, offset: number): void {
+    this.#controller.document.update("レイヤーを並べ替え", (draft) => {
+      const index = draft.layers.findIndex((layer) => layer.id === layerId);
+      const target = index + offset;
+      if (index < 0 || target < 0 || target >= draft.layers.length) return;
+      const [layer] = draft.layers.splice(index, 1);
+      draft.layers.splice(target, 0, layer);
+    });
+  }
+
+  #addCore(): void {
+    const draft = this.#controller.document.draft;
+    const coreCount = draft.layers.filter(
+      (layer) => layer.kind === "spherical" && layer.name.startsWith("芯"),
+    ).length;
+    if (coreCount >= 2) {
+      this.#callbacks.onToast("芯は2層まで追加できます");
+      return;
+    }
+    const id = `layer-core-${coreCount + 1}-${draft.assemblySeed}`;
+    this.#controller.document.update("芯レイヤーを追加", (next) => {
+      const layer: SphericalStarLayer = {
+        coloring: { mode: "layer" },
+        count: 42 + coreCount * 18,
+        defaultStarId: coreCount === 0 ? "star-gold" : "star-change-blue",
+        id,
+        ignitionOffset: 0,
+        jitter: 0.01,
+        kind: "spherical",
+        locked: false,
+        missingRate: 0,
+        name: `芯 ${coreCount + 1}`,
+        overrides: [],
+        placement: "fibonacci",
+        placementSeed: next.assemblySeed + 400 + coreCount,
+        radialSpeedScale: coreCount === 0 ? 0.38 : 0.66,
+        radius: coreCount === 0 ? 0.38 : 0.66,
+        visible: true,
+      };
+      next.layers.splice(Math.min(coreCount + 1, next.layers.length), 0, layer);
+    });
+    this.#controller.document.selectLayer(id);
+  }
+
+  #addPattern(): void {
+    const draft = this.#controller.document.draft;
+    const id = `layer-pattern-${draft.layers.length + 1}`;
+    this.#controller.document.update("型物レイヤーを追加", (next) => {
+      next.layers.push({
+        allowedAngle: 35,
+        defaultStarId: "star-solid-red",
+        depth: 0.04,
+        facingPolicy: "audience",
+        groups: defaultPatternGroups(),
+        id,
+        ignitionOffset: 0,
+        kind: "pattern",
+        locked: false,
+        name: "ハート型物",
+        orientationDegrees: 0,
+        points: createHeartPoints(72),
+        radialSpeedScale: 0.88,
+        rotationJitter: 8,
+        template: "heart",
+        visible: true,
+      });
+    });
+    this.#controller.document.selectLayer(id);
+  }
+
+  #addChild(): void {
+    const draft = this.#controller.document.draft;
+    const childCount = draft.layers.filter(
+      (layer) => layer.kind === "child",
+    ).length;
+    const id = `layer-child-${childCount + 1}`;
+    this.#controller.document.update("子花レイヤーを追加", (next) => {
+      const layer: ChildBurstLayer = {
+        count: 12,
+        defaultStarId: "star-child",
+        delay: 0.58,
+        id,
+        ignitionOffset: 0,
+        kind: "child",
+        locked: false,
+        name: "時間差を持つ子花",
+        placement: "sphere",
+        radialSpeedScale: 1,
+        scale: 0.32,
+        visible: true,
+        waveDelay: 0.018,
+      };
+      next.layers.push(layer);
+    });
+    this.#controller.document.selectLayer(id);
+  }
+
+  #duplicateLayer(layerId: string): void {
+    const source = this.#controller.document.draft.layers.find(
+      (layer) => layer.id === layerId,
+    );
+    if (!source) return;
+    const id = `${source.id}-copy-${this.#controller.document.draft.layers.length}`;
+    this.#controller.document.update("レイヤーを複製", (draft) => {
+      const index = draft.layers.findIndex((layer) => layer.id === layerId);
+      draft.layers.splice(index + 1, 0, {
+        ...structuredClone(source),
+        id,
+        locked: false,
+        name: `${source.name} 複製`,
+      });
+    });
+    this.#controller.document.selectLayer(id);
+  }
+
+  #deleteLayer(layerId: string): void {
+    const draft = this.#controller.document.draft;
+    const layer = draft.layers.find((candidate) => candidate.id === layerId);
+    if (!layer || layer.locked) return;
+    if (draft.layers.length <= 1) {
+      this.#callbacks.onToast("外周レイヤーは残してください");
+      return;
+    }
+    this.#selectedPointIndex = undefined;
+    this.#controller.document.update("レイヤーを削除", (next) => {
+      next.layers = next.layers.filter((candidate) => candidate.id !== layerId);
+    });
+  }
+
+  #assignStar(starId: string): void {
+    const layerId = this.#snapshot?.selection.layerId;
+    if (!layerId) return;
+    this.#starPreviewId = undefined;
+    this.#controller.document.selectStarDefinition(starId);
+    this.#updateLayer(layerId, "仮想星を配置", (layer) => {
+      if (
+        this.#selectedPointIndex !== undefined &&
+        layer.kind === "spherical"
+      ) {
+        const override = layer.overrides.find(
+          (item) => item.index === this.#selectedPointIndex,
+        );
+        if (override) override.starId = starId;
+        else layer.overrides.push({ index: this.#selectedPointIndex, starId });
+      } else if (
+        this.#selectedPointIndex !== undefined &&
+        layer.kind === "pattern"
+      ) {
+        const point = layer.points[this.#selectedPointIndex];
+        const group = layer.groups.find(
+          (candidate) => candidate.id === point?.groupId,
+        );
+        if (group) group.starId = starId;
+      } else {
+        layer.defaultStarId = starId;
+      }
+    });
+    this.#callbacks.onToast(
+      this.#selectedPointIndex === undefined
+        ? "選択レイヤーの仮想星を変更しました"
+        : "選択した配置点の仮想星を変更しました",
+    );
+  }
+
+  #applyPlacementTemplate(
+    template: Exclude<PlacementTemplate, "manual">,
+  ): void {
+    const layerId = this.#snapshot?.selection.layerId;
+    if (!layerId) return;
+    const selectedStarId = this.#snapshot?.selection.starDefinitionId;
+    let applied = false;
+    this.#updateLayer(
+      layerId,
+      `${template === "circle" ? "円形" : "ハート"}配置`,
+      (layer) => {
+        if (layer.kind === "spherical") {
+          const points = createPlacementTemplatePoints(
+            template,
+            this.#face,
+            layer.radius,
+          );
+          layer.count = points.length;
+          layer.placement = "manual";
+          layer.overrides = points.map((position, index) => ({
+            index,
+            position,
+            starId: selectedStarId,
+          }));
+          applied = true;
+        } else if (layer.kind === "pattern") {
+          layer.points =
+            template === "heart"
+              ? createHeartPoints(72)
+              : circlePatternPoints();
+          layer.groups =
+            template === "heart"
+              ? defaultPatternGroups()
+              : [
+                  {
+                    id: "outline",
+                    name: "輪郭",
+                    starId: selectedStarId ?? layer.defaultStarId,
+                  },
+                ];
+          layer.template = template;
+          applied = true;
+        }
+      },
+    );
+    this.#callbacks.onToast(
+      applied
+        ? `選択区画へ${template === "circle" ? "円形" : "ハート"}を配置しました`
+        : "球面または型物レイヤーを選んでください",
+    );
+  }
+
+  #addManualPoint(
+    event: MouseEvent | DragEvent,
+    canvas: SVGSVGElement,
+    starId?: string,
+  ): void {
+    const layerId = this.#snapshot?.selection.layerId;
+    const selectedLayer = this.#selectedLayer();
+    if (!layerId || !selectedLayer || selectedLayer.locked) return;
+    const local = this.#canvasLocalPoint(event.clientX, event.clientY, canvas);
+    let addedIndex: number | undefined;
+    this.#updateLayer(layerId, "配置点を追加", (layer) => {
+      if (layer.kind === "spherical") {
+        addedIndex = layer.count;
+        layer.count += 1;
+        layer.placement = "manual";
+        layer.overrides.push({
+          index: addedIndex,
+          position: pointOnPlacementFace(
+            local.x,
+            local.y,
+            this.#face,
+            layer.radius,
+          ),
+          starId,
+        });
+      } else if (layer.kind === "pattern") {
+        let group = layer.groups.find((candidate) => candidate.id === "manual");
+        if (!group) {
+          group = {
+            id: "manual",
+            name: "手動配置",
+            starId: starId ?? layer.defaultStarId,
+          };
+          layer.groups.push(group);
+        }
+        if (starId) group.starId = starId;
+        addedIndex = layer.points.length;
+        layer.points.push({
+          groupId: group.id,
+          x: local.x,
+          y: local.y,
+        });
+        layer.template = "custom";
+      }
+    });
+    if (addedIndex === undefined) {
+      if (starId) this.#assignStar(starId);
+      else this.#callbacks.onToast("球面または型物レイヤーを選んでください");
+      return;
+    }
+    this.#placementTemplate = "manual";
+    this.#selectedPointIndex = addedIndex;
+  }
+
+  #deleteSelectedPoint(): void {
+    const layerId = this.#snapshot?.selection.layerId;
+    const index = this.#selectedPointIndex;
+    if (!layerId || index === undefined) return;
+    this.#updateLayer(layerId, "配置点を削除", (layer) => {
+      if (layer.kind === "spherical") {
+        const override = layer.overrides.find((item) => item.index === index);
+        if (override) override.removed = true;
+        else layer.overrides.push({ index, removed: true });
+      } else if (layer.kind === "pattern") {
+        layer.points.splice(index, 1);
+        layer.template = "custom";
+      }
+    });
+    this.#selectedPointIndex = undefined;
+  }
+
+  #changeSelectedLayer(name: string, value: string): void {
+    const layerId = this.#snapshot?.selection.layerId;
+    if (!layerId) return;
+    this.#updateLayer(layerId, "配置属性を変更", (layer) => {
+      if (name === "layer-name") layer.name = value;
+      else if (name === "layer-star") layer.defaultStarId = value;
+      else if (layer.kind === "spherical") {
+        if (name === "layer-count") {
+          layer.count = Number(value);
+          layer.overrides = layer.overrides.filter(
+            (item) => item.index < layer.count,
+          );
+        } else if (name === "layer-radius") {
+          layer.radius = Number(value) / 100;
+          layer.radialSpeedScale = layer.radius;
+        } else if (name === "spatial-color") {
+          layer.coloring.mode = value as SphericalStarLayer["coloring"]["mode"];
+        }
+      } else if (layer.kind === "child" && name === "child-count") {
+        layer.count = Number(value);
+      } else if (layer.kind === "branch" && name === "branch-count") {
+        layer.branchCount = Number(value);
+      }
+    });
+  }
+
+  #simplify(): void {
+    this.#controller.document.update("描画負荷を自動簡略化", (draft) => {
+      draft.layers.forEach((layer) => {
+        if (layer.kind === "spherical")
+          layer.count = Math.min(layer.count, 520);
+        if (layer.kind === "child") layer.count = Math.min(layer.count, 24);
+        if (layer.kind === "branch") {
+          layer.starsPerBranch = Math.min(layer.starsPerBranch, 28);
+        }
+      });
+    });
+    this.#callbacks.onToast("層構成を保ったまま星数を簡略化しました");
+  }
+
+  #save(toLibrary: boolean): void {
+    const snapshot = this.#snapshot;
+    if (!snapshot) return;
+    if (snapshot.diagnostic.estimatedCost.maximumParticles > 6_000) {
+      this.#callbacks.onToast(
+        "実行上限を超えています。先に自動簡略化してください",
+      );
+      return;
+    }
+    const visibleName = this.element.querySelector<HTMLInputElement>(
+      "input[name='design-name']",
+    )?.value;
+    if (visibleName !== undefined && visibleName !== snapshot.draft.name) {
+      this.#controller.updateName(visibleName);
+    }
+    const saved = this.#controller.save();
+    this.#callbacks.onDesignLibraryChange(this.#controller.savedDesigns);
+    this.#callbacks.onToast(`「${saved.name}」を保存しました`);
+    if (toLibrary) this.#callbacks.onSaveToLibrary(saved);
+  }
+}

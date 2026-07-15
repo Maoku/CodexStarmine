@@ -12,7 +12,7 @@ import {
   isFreeViewPresetId,
   type FreeViewPresetId,
 } from "../modes/viewFree";
-import { CraftWorkspace } from "./craft/CraftWorkspace";
+import { IntegratedCraftEditor } from "./craft/IntegratedCraftEditor";
 import { FireworkShelfScreen } from "./screens/FireworkShelfScreen";
 import { InitialSetupScreen } from "./screens/InitialSetupScreen";
 import { ModeSelectionScreen } from "./screens/ModeSelectionScreen";
@@ -243,9 +243,11 @@ export class AppShell {
         </div>
       </header>
       <div class="craft-host" data-editor-host></div>`;
-    const workspace = new CraftWorkspace(this.#controller, {
+    const workspace = new IntegratedCraftEditor(this.#controller, {
+      onCheck: () => this.#flow.navigate("check-on-lake"),
       onDesignLibraryChange: this.#callbacks.onDesignLibraryChange,
-      onLaunch: this.#callbacks.onLaunch,
+      onSaveToLibrary: (design) =>
+        this.#flow.navigate("save-to-library", { designId: design.id }),
       onToast: (message) => this.showToast(message),
     });
     const host = element.querySelector<HTMLElement>("[data-editor-host]");

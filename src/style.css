@@ -12,6 +12,762 @@
   --accent-bright: #ffc47d;
 }
 
+/* Renewal Phase 4: integrated craft workbench */
+
+.integrated-craft-editor {
+  grid-template-columns: minmax(15rem, 17rem) minmax(30rem, 1fr) minmax(
+      17rem,
+      19rem
+    );
+  grid-template-rows: minmax(0, 1fr) 4.5rem;
+  overflow: hidden;
+}
+
+.editor-mobile-toolbar,
+.editor-drawer-backdrop,
+.drawer-close {
+  display: none;
+}
+
+.integrated-craft-editor .craft-rail--left,
+.integrated-craft-editor .craft-rail--right {
+  border: 1px solid rgb(122 91 60 / 54%);
+  border-radius: 0.42rem;
+  background:
+    linear-gradient(100deg, rgb(49 32 21 / 38%), transparent 42%),
+    rgb(5 10 14 / 92%);
+  box-shadow: 0 1rem 2.8rem rgb(0 0 0 / 24%);
+}
+
+.integrated-craft-editor .craft-card,
+.integrated-craft-editor .craft-bench,
+.integrated-craft-editor .craft-transport {
+  border-color: rgb(132 99 65 / 56%);
+  border-radius: 0.35rem;
+  background: linear-gradient(145deg, rgb(10 16 19 / 97%), rgb(4 10 14 / 96%));
+  box-shadow: 0 0.8rem 2.2rem rgb(0 0 0 / 20%);
+  backdrop-filter: none;
+}
+
+.integrated-craft-editor .craft-card > header {
+  border-bottom-color: rgb(153 117 76 / 26%);
+  color: #c9b08e;
+}
+
+.integrated-layer-card {
+  min-height: 13rem;
+  flex: 1 1 48%;
+}
+
+.integrated-star-library {
+  min-height: 15rem;
+  flex: 1 1 52%;
+  overflow: visible;
+}
+
+.integrated-star-library .star-tray {
+  position: relative;
+  align-content: start;
+}
+
+.star-part {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 0.28rem;
+  background: rgb(255 255 255 / 2.5%);
+}
+
+.star-part.is-selected {
+  border-color: rgb(199 154 95 / 72%);
+  box-shadow: inset 0 0 0 1px rgb(199 154 95 / 20%);
+}
+
+.star-part > button[data-action="assign-star"] {
+  display: grid;
+  min-width: 0;
+  min-height: 2.8rem;
+  grid-template-columns: 1.55rem minmax(0, 1fr);
+  grid-template-rows: 1fr 1fr;
+  align-items: center;
+  padding: 0.3rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  touch-action: none;
+}
+
+.star-part > button[data-action="assign-star"] i {
+  grid-row: 1 / 3;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 1px solid rgb(255 255 255 / 28%);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, #fff7, transparent 24%), var(--star);
+  box-shadow: 0 0 0.5rem color-mix(in srgb, var(--star) 48%, transparent);
+}
+
+.star-part > button[data-action="assign-star"] span {
+  align-self: end;
+  overflow: hidden;
+  color: #d0ccc4;
+  font-size: 0.52rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.star-part > button[data-action="assign-star"] small {
+  align-self: start;
+  color: #6c747b;
+  font-size: 0.44rem;
+}
+
+.star-part > button[data-action="preview-star"] {
+  min-height: 1.45rem;
+  border: 0;
+  border-top: 1px solid rgb(255 255 255 / 6%);
+  background: rgb(255 255 255 / 2%);
+  color: #7d858b;
+  font-size: 0.46rem;
+}
+
+.star-spread-balloon {
+  position: absolute;
+  right: -0.35rem;
+  bottom: calc(100% + 0.55rem);
+  z-index: 30;
+  display: grid;
+  width: 13rem;
+  padding: 0.7rem;
+  border: 1px solid rgb(199 154 95 / 64%);
+  border-radius: 0.45rem;
+  background: rgb(8 13 17 / 98%);
+  box-shadow: 0 1rem 2.4rem #000b;
+}
+
+.star-spread-balloon::after {
+  position: absolute;
+  right: 1.1rem;
+  bottom: -0.36rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-right: 1px solid rgb(199 154 95 / 64%);
+  border-bottom: 1px solid rgb(199 154 95 / 64%);
+  background: #080d11;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.star-spread-balloon strong {
+  color: #ddd5ca;
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.star-spread-balloon svg {
+  width: 100%;
+  height: 6.5rem;
+}
+
+.star-spread-balloon svg line {
+  stroke: var(--ray);
+  stroke-linecap: round;
+  stroke-width: 2;
+  opacity: 0.7;
+}
+
+.star-spread-balloon svg circle {
+  fill: var(--star);
+  filter: drop-shadow(0 0 0.4rem var(--star));
+}
+
+.star-spread-balloon > div {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.star-spread-balloon > div i {
+  display: grid;
+  width: 1rem;
+  height: 1rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--stage);
+  color: #091014;
+  font-size: 0.42rem;
+  font-style: normal;
+}
+
+.star-spread-balloon p {
+  margin: 0.45rem 0 0;
+  color: #777f85;
+  font-size: 0.48rem;
+  text-align: center;
+}
+
+.integrated-craft-bench {
+  background:
+    linear-gradient(rgb(255 255 255 / 1.5%), transparent),
+    radial-gradient(circle at 50% 42%, rgb(93 68 43 / 19%), transparent 58%),
+    #071017;
+}
+
+.integrated-workbench {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.workbench-heading {
+  display: flex;
+  min-height: 3.4rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid rgb(153 117 76 / 22%);
+}
+
+.workbench-heading p,
+.workbench-heading h2 {
+  margin: 0;
+}
+
+.workbench-heading p {
+  color: #716759;
+  font:
+    0.46rem ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  letter-spacing: 0.17em;
+}
+
+.workbench-heading h2 {
+  margin-top: 0.18rem;
+  color: #d7d0c6;
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.workbench-heading > span {
+  max-width: 48%;
+  overflow: hidden;
+  color: #a28d72;
+  font-size: 0.56rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.placement-face-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  padding: 0.5rem 0.65rem 0.35rem;
+}
+
+.placement-face-controls fieldset {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.placement-face-controls legend {
+  grid-column: 1 / -1;
+  margin-bottom: 0.2rem;
+  color: #777f84;
+  font-size: 0.46rem;
+}
+
+.placement-face-controls button,
+.placement-tool-row button {
+  min-width: 0;
+  min-height: 1.85rem;
+  padding: 0 0.3rem;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0.2rem;
+  background: rgb(255 255 255 / 2.5%);
+  color: #7f878c;
+  font-size: 0.48rem;
+}
+
+.placement-face-controls button.is-active,
+.placement-tool-row button.is-active {
+  border-color: rgb(197 151 93 / 68%);
+  background: rgb(197 151 93 / 12%);
+  box-shadow: inset 0 -2px #b8874e;
+  color: #e0c49f;
+}
+
+.placement-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.35rem 0.65rem;
+  border-top: 1px solid rgb(255 255 255 / 4%);
+  border-bottom: 1px solid rgb(153 117 76 / 18%);
+}
+
+.placement-tool-row > span {
+  margin-right: 0.25rem;
+  color: #9a8d7c;
+  font-size: 0.5rem;
+}
+
+.placement-tool-row button:last-child {
+  margin-left: auto;
+}
+
+.placement-tool-row button:disabled {
+  color: #40474b;
+  cursor: default;
+}
+
+.workbench-canvas-wrap {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workbench-canvas-wrap svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 20rem;
+  touch-action: none;
+}
+
+.workbench-shell {
+  fill: url("#workbench-shell-fill");
+  stroke: none;
+}
+
+.workbench-shell-edge {
+  fill: none;
+  stroke: rgb(181 141 91 / 58%);
+  stroke-width: 8;
+}
+
+.workbench-grid {
+  fill: none;
+  stroke: rgb(201 166 118 / 22%);
+  stroke-dasharray: 3 7;
+  stroke-width: 1.2;
+}
+
+.workbench-face-marker {
+  fill: rgb(214 167 103 / 8%);
+  stroke: #d0a165;
+  stroke-dasharray: 3 4;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 0.5rem rgb(208 161 101 / 30%));
+}
+
+.workbench-point {
+  fill: var(--point-color);
+  opacity: var(--point-depth);
+  stroke: rgb(255 255 255 / 20%);
+  stroke-width: 0.6;
+}
+
+.workbench-point.is-layer-selected {
+  stroke: #f6e7cd;
+  stroke-width: 1.25;
+  cursor: grab;
+}
+
+.workbench-point.is-point-selected {
+  stroke: #fff5dd;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 0.45rem var(--point-color));
+}
+
+.workbench-canvas-wrap > p {
+  position: absolute;
+  right: 0.7rem;
+  bottom: 0.45rem;
+  left: 0.7rem;
+  margin: 0;
+  color: #687176;
+  font-size: 0.5rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.inline-diagnostic-preview {
+  min-height: 13rem;
+}
+
+.inline-preview-canvas {
+  height: min(13.5rem, 28vh);
+  min-height: 9.5rem;
+  background:
+    radial-gradient(circle at center, rgb(25 47 61 / 34%), transparent 60%),
+    #050b0f;
+}
+
+.approximate-spread {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.approximate-spread-guide {
+  fill: none;
+  stroke: rgb(255 255 255 / 8%);
+  stroke-dasharray: 2 5;
+}
+
+.approximate-spread-band circle {
+  fill: var(--spread-color);
+  opacity: calc(var(--spread-strength) * 0.9);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.approximate-spread.is-running .approximate-spread-band circle {
+  animation: approximate-spread-pulse 2.4s ease-out infinite;
+  animation-delay: var(--spread-delay);
+}
+
+.approximate-spread.is-paused .approximate-spread-band circle {
+  animation-play-state: paused;
+}
+
+@keyframes approximate-spread-pulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.25);
+  }
+  18% {
+    opacity: var(--spread-strength);
+  }
+  72% {
+    opacity: calc(var(--spread-strength) * 0.6);
+    transform: scale(calc(0.72 + var(--spread-radius) * 0.52));
+  }
+  100% {
+    opacity: 0;
+    transform: scale(calc(0.86 + var(--spread-radius) * 0.68));
+  }
+}
+
+.inline-diagnostic-preview > footer {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 0.3rem;
+  align-items: center;
+  padding: 0.45rem;
+}
+
+.inline-diagnostic-preview > footer button {
+  min-height: 1.8rem;
+  padding: 0 0.55rem;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 0.2rem;
+  background: rgb(255 255 255 / 3%);
+  color: #92999d;
+  font-size: 0.5rem;
+}
+
+.inline-diagnostic-preview > footer span {
+  color: #676f74;
+  font-size: 0.48rem;
+  text-align: right;
+}
+
+.integrated-transport {
+  grid-template-columns: auto minmax(13rem, 1fr) auto auto auto;
+  min-height: 0;
+  padding: 0.45rem 0.65rem;
+}
+
+.surface-rotation {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(8rem, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.surface-rotation label {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(6rem, 1fr);
+  align-items: center;
+  gap: 0.55rem;
+  color: #757d82;
+  font-size: 0.5rem;
+}
+
+.surface-rotation input {
+  width: 100%;
+  accent-color: #ad7f49;
+}
+
+.editor-save-state {
+  color: #747b7f;
+  font-size: 0.52rem;
+}
+
+.integrated-transport .secondary-save {
+  border-color: rgb(255 255 255 / 14%);
+  color: #c2c0b9;
+}
+
+.integrated-transport .confirm-craft {
+  min-width: 10rem;
+  min-height: 3.35rem;
+  border-color: #c8a26e;
+  background: linear-gradient(135deg, #8a653e, #b58a53 52%, #76512e);
+  box-shadow: inset 0 0 0 2px rgb(46 25 7 / 35%);
+  color: #171009;
+  font-size: 0.82rem;
+}
+
+.integrated-craft-editor .inspector-empty {
+  margin: 0;
+  padding: 1rem;
+  color: #737b80;
+  font-size: 0.58rem;
+}
+
+@media (max-width: 1180px) {
+  .integrated-craft-editor {
+    grid-template-columns: 14rem minmax(27rem, 1fr) 16rem;
+  }
+
+  .placement-face-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .integrated-craft-editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 3rem minmax(0, 1fr) 4.5rem;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .editor-mobile-toolbar {
+    z-index: 8;
+    display: grid;
+    grid-column: 1;
+    grid-row: 1;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem;
+    border: 1px solid rgb(132 99 65 / 56%);
+    border-radius: 0.35rem;
+    background: rgb(7 12 15 / 96%);
+  }
+
+  .editor-mobile-toolbar button,
+  .drawer-close {
+    min-height: 2.2rem;
+    padding: 0 0.65rem;
+    border: 1px solid rgb(255 255 255 / 11%);
+    border-radius: 0.25rem;
+    background: rgb(255 255 255 / 3%);
+    color: #b9b6ae;
+    font-size: 0.54rem;
+  }
+
+  .editor-mobile-toolbar strong {
+    overflow: hidden;
+    color: #8f8475;
+    font-size: 0.54rem;
+    font-weight: 500;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .integrated-craft-editor .craft-bench {
+    grid-column: 1;
+    grid-row: 2;
+    width: auto;
+    min-height: 0;
+    margin: 0;
+  }
+
+  .integrated-craft-editor .craft-rail {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 20;
+    display: flex;
+    width: min(22rem, calc(100% - 1.25rem));
+    max-width: 100%;
+    margin: 0;
+    padding: 0.45rem;
+    overflow: auto;
+    transition: transform 180ms ease;
+  }
+
+  .integrated-craft-editor .craft-rail--left {
+    left: 0;
+    transform: translateX(calc(-100% - 1rem));
+  }
+
+  .integrated-craft-editor .craft-rail--right {
+    right: 0;
+    transform: translateX(calc(100% + 1rem));
+  }
+
+  .integrated-craft-editor[data-mobile-drawer="layers"] .craft-rail--left,
+  .integrated-craft-editor[data-mobile-drawer="inspector"] .craft-rail--right {
+    transform: translateX(0);
+  }
+
+  .integrated-craft-editor[data-mobile-drawer="layers"] .editor-drawer-backdrop,
+  .integrated-craft-editor[data-mobile-drawer="inspector"]
+    .editor-drawer-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    display: block;
+    border: 0;
+    background: rgb(0 0 0 / 62%);
+  }
+
+  .drawer-close {
+    display: block;
+    flex: 0 0 auto;
+  }
+
+  .integrated-craft-editor .craft-transport {
+    position: relative;
+    bottom: auto;
+    z-index: 7;
+    grid-column: 1;
+    grid-row: 3;
+    width: auto;
+    margin: 0;
+  }
+
+  .star-spread-balloon {
+    position: fixed;
+    right: 1rem;
+    bottom: 5.5rem;
+    left: 1rem;
+    width: auto;
+  }
+
+  .star-spread-balloon::after {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .integrated-craft-editor {
+    inset: 5.85rem 0.35rem 0.35rem;
+    grid-template-rows: 3rem minmax(0, 1fr) 4.2rem;
+  }
+
+  .workbench-heading {
+    min-height: 2.8rem;
+  }
+
+  .workbench-heading h2 {
+    font-size: 0.72rem;
+  }
+
+  .workbench-heading p,
+  .workbench-heading > span {
+    font-size: 0.42rem;
+  }
+
+  .placement-face-controls {
+    gap: 0.25rem;
+    padding: 0.35rem;
+  }
+
+  .placement-face-controls button,
+  .placement-tool-row button {
+    min-height: 1.65rem;
+    padding: 0 0.12rem;
+    font-size: 0.42rem;
+  }
+
+  .placement-tool-row {
+    gap: 0.18rem;
+    overflow-x: auto;
+    padding: 0.3rem 0.35rem;
+  }
+
+  .placement-tool-row > span {
+    display: none;
+  }
+
+  .workbench-canvas-wrap svg {
+    min-height: 17rem;
+  }
+
+  .integrated-transport {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.35rem;
+  }
+
+  .integrated-transport .history-actions,
+  .integrated-transport .surface-rotation {
+    flex: 0 0 auto;
+  }
+
+  .surface-rotation {
+    display: flex;
+  }
+
+  .surface-rotation label,
+  .editor-save-state {
+    display: none;
+  }
+
+  .integrated-transport button {
+    min-height: 2.6rem;
+    padding: 0 0.45rem;
+    font-size: 0.52rem;
+  }
+
+  .integrated-transport .secondary-save {
+    flex: 0 0 5rem;
+    margin-left: auto;
+  }
+
+  .integrated-transport .confirm-craft {
+    flex: 0 0 6.8rem;
+    min-width: 6.8rem;
+    min-height: 2.9rem;
+    font-size: 0.62rem;
+  }
+
+  .integrated-craft-editor .star-tray {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .approximate-spread.is-running .approximate-spread-band circle {
+    animation: none;
+  }
+
+  .integrated-craft-editor .craft-rail {
+    transition: none;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -3525,5 +4281,111 @@ input[type="range"] {
     min-width: 0;
     flex: 1;
     padding: 0 0.6rem;
+  }
+}
+
+/* Keep Phase 4 layout rules last so legacy workspace breakpoints cannot win. */
+
+.craft-workspace.integrated-craft-editor {
+  display: grid;
+  grid-template-columns: minmax(15rem, 17rem) minmax(30rem, 1fr) minmax(
+      17rem,
+      19rem
+    );
+  grid-template-rows: minmax(0, 1fr) 4.5rem;
+  overflow: hidden;
+}
+
+.craft-bench.integrated-craft-bench {
+  min-height: 0;
+  background:
+    linear-gradient(rgb(255 255 255 / 1.5%), transparent),
+    radial-gradient(circle at 50% 42%, rgb(93 68 43 / 19%), transparent 58%),
+    #071017;
+}
+
+@media (max-width: 1180px) {
+  .craft-workspace.integrated-craft-editor {
+    grid-template-columns: 14rem minmax(27rem, 1fr) 16rem;
+  }
+}
+
+@media (max-width: 900px) {
+  .craft-workspace.integrated-craft-editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 3rem minmax(0, 1fr) 4.5rem;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .integrated-craft-editor .editor-mobile-toolbar {
+    display: grid;
+  }
+
+  .integrated-craft-editor .craft-bench.integrated-craft-bench {
+    grid-column: 1;
+    grid-row: 2;
+    width: auto;
+    min-height: 0;
+    margin: 0;
+  }
+
+  .integrated-craft-editor .craft-rail.craft-rail--left,
+  .integrated-craft-editor .craft-rail.craft-rail--right {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 20;
+    display: flex;
+    width: min(22rem, calc(100% - 1.25rem));
+    max-width: 100%;
+    margin: 0;
+    padding: 0.45rem;
+    overflow: auto;
+  }
+
+  .integrated-craft-editor .craft-rail.craft-rail--left {
+    left: 0;
+    transform: translateX(calc(-100% - 1rem));
+  }
+
+  .integrated-craft-editor .craft-rail.craft-rail--right {
+    right: 0;
+    transform: translateX(calc(100% + 1rem));
+  }
+
+  .integrated-craft-editor[data-mobile-drawer="layers"]
+    .craft-rail.craft-rail--left,
+  .integrated-craft-editor[data-mobile-drawer="inspector"]
+    .craft-rail.craft-rail--right {
+    transform: translateX(0);
+  }
+
+  .integrated-craft-editor .craft-transport.integrated-transport {
+    position: relative;
+    bottom: auto;
+    z-index: 7;
+    display: grid;
+    grid-column: 1;
+    grid-row: 3;
+    width: auto;
+    margin: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .craft-workspace.integrated-craft-editor {
+    inset: 5.85rem 0.35rem 0.35rem;
+    display: grid;
+    grid-template-rows: 3rem minmax(0, 1fr) 4.2rem;
+    padding: 0;
+  }
+
+  .integrated-craft-editor .craft-transport.integrated-transport {
+    display: flex;
+    width: auto;
+    margin: 0;
+    padding: 0.35rem;
   }
 }
