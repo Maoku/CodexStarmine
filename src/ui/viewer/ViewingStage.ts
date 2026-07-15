@@ -60,9 +60,9 @@ export class ViewingStage {
     this.element.innerHTML = `
       <header class="renewal-viewer-toolbar viewing-stage__toolbar">
         <button class="renewal-back" type="button" data-viewer-action="back">← ${this.#context === "check" ? "編集に戻る" : "モード選択"}</button>
-        <div class="brand-block">
-          <p class="brand-block__eyebrow">VIRTUAL FIREWORK ATELIER</p>
-          <h1>星見<span>煙火店</span></h1>
+        <div class="screen-context-title">
+          <p>${this.#context === "check" ? "CHECK" : "FREE VIEW"}</p>
+          <h1>${this.#context === "check" ? "確認" : "フリー鑑賞"}</h1>
         </div>
         <div class="sound-control">
           <label for="viewer-sound-delay">音の距離感</label>

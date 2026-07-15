@@ -59,9 +59,9 @@ export class InitialSetupScreen {
     this.element.innerHTML = `
       <header class="renewal-brand renewal-brand--toolbar">
         <button class="renewal-back" type="button" data-action="back">← 花火棚へ戻る</button>
-        <div class="brand-block">
-          <p class="brand-block__eyebrow">VIRTUAL FIREWORK ATELIER</p>
-          <h1>星見<span>煙火店</span></h1>
+        <div class="screen-context-title">
+          <p>NEW FIREWORK</p>
+          <h1>新しい花火</h1>
         </div>
         <p><span>新規</span> 開始条件だけを選択</p>
       </header>

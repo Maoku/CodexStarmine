@@ -2985,6 +2985,16 @@ input[type="range"] {
 
 /* Renewal Phase 1: screen flow and shared shell */
 
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  clip-path: inset(50%) !important;
+}
+
 .renewal-screen-host,
 .renewal-screen,
 .renewal-editor-screen,
@@ -3045,6 +3055,28 @@ input[type="range"] {
   justify-self: end;
 }
 
+.screen-context-title {
+  justify-self: center;
+  text-align: center;
+}
+
+.screen-context-title p {
+  margin: 0 0 0.22rem;
+  color: #8b765e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.screen-context-title h1 {
+  margin: 0;
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: clamp(1.05rem, 1.8vw, 1.42rem);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+
 .renewal-back {
   justify-self: start;
   min-height: 2.45rem;
@@ -3077,19 +3109,18 @@ input[type="range"] {
 
 .mode-selection-screen {
   background:
-    linear-gradient(90deg, rgb(1 4 10 / 82%), rgb(1 4 10 / 36%)),
+    linear-gradient(180deg, rgb(1 4 10 / 58%), rgb(1 4 10 / 74%)),
+    linear-gradient(90deg, rgb(1 4 10 / 62%), rgb(1 4 10 / 28%)),
     radial-gradient(circle at 72% 42%, rgb(35 79 112 / 20%), transparent 35%);
 }
 
 .mode-selection-main {
   display: grid;
-  width: min(72rem, calc(100% - 3rem));
-  height: calc(100% - 9.3rem);
+  width: min(46rem, calc(100% - 3rem));
+  height: 100%;
   min-height: 0;
   margin: 0 auto;
-  grid-template-columns: minmax(16rem, 0.75fr) minmax(29rem, 1.25fr);
-  align-items: center;
-  gap: clamp(2rem, 6vw, 6rem);
+  place-items: center;
 }
 
 .mode-selection-copy h2,
@@ -3113,6 +3144,7 @@ input[type="range"] {
 
 .mode-choice-grid {
   display: grid;
+  width: 100%;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
 }
@@ -3203,6 +3235,19 @@ input[type="range"] {
   bottom: 1.2rem;
   color: #666f7a;
   font-size: 0.58rem;
+}
+
+.mode-safety-note {
+  position: absolute;
+  top: 1.2rem;
+  right: clamp(1.25rem, 3vw, 3rem);
+  margin: 0;
+  color: #6f7883;
+  font-size: 0.58rem;
+}
+
+.mode-safety-note span {
+  color: #b89061;
 }
 
 .firework-shelf-screen {
@@ -3405,13 +3450,7 @@ input[type="range"] {
 
 @media (max-width: 900px) {
   .mode-selection-main {
-    grid-template-columns: 1fr;
-    align-content: center;
-    gap: 2rem;
-  }
-
-  .mode-selection-copy {
-    max-width: 35rem;
+    width: min(38rem, calc(100% - 2rem));
   }
 
   .mode-choice {
@@ -3450,7 +3489,9 @@ input[type="range"] {
   }
 
   .renewal-brand--toolbar .brand-block,
-  .renewal-viewer-toolbar .brand-block {
+  .renewal-viewer-toolbar .brand-block,
+  .renewal-brand--toolbar .screen-context-title,
+  .renewal-viewer-toolbar .screen-context-title {
     justify-self: end;
   }
 
@@ -3464,8 +3505,8 @@ input[type="range"] {
     grid-template-columns: 1fr auto;
   }
 
-  .renewal-editor-header .brand-block {
-    display: none;
+  .renewal-editor-header .screen-context-title {
+    justify-self: start;
   }
 
   .renewal-editor-header .renewal-back--center {
@@ -3474,8 +3515,7 @@ input[type="range"] {
 
   .mode-selection-main {
     width: calc(100% - 1.2rem);
-    height: calc(100% - 6rem);
-    gap: 1rem;
+    height: 100%;
   }
 
   .mode-selection-copy h2 {
@@ -3512,6 +3552,12 @@ input[type="range"] {
 
   .renewal-screen-note {
     display: none;
+  }
+
+  .mode-safety-note {
+    top: 0.7rem;
+    right: 0.7rem;
+    font-size: 0.5rem;
   }
 
   .shelf-main {
@@ -4563,7 +4609,7 @@ input[type="range"] {
     grid-template-columns: auto 1fr;
   }
 
-  .viewing-stage__toolbar .brand-block {
+  .viewing-stage__toolbar .screen-context-title {
     justify-self: end;
   }
 

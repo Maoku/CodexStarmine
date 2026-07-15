@@ -12,19 +12,8 @@ export class ModeSelectionScreen {
     this.element.className = "renewal-screen mode-selection-screen";
     this.element.setAttribute("aria-labelledby", "mode-selection-heading");
     this.element.innerHTML = `
-      <header class="renewal-brand">
-        <div class="brand-block">
-          <p class="brand-block__eyebrow">VIRTUAL FIREWORK ATELIER</p>
-          <h1>星見<span>煙火店</span></h1>
-        </div>
-        <p><span>仮想花火</span> 実物の材料・配合・製造条件は扱いません</p>
-      </header>
       <main class="mode-selection-main">
-        <div class="mode-selection-copy">
-          <p class="renewal-kicker">湖畔の花火工房</p>
-          <h2 id="mode-selection-heading">今夜は、何をしますか</h2>
-          <p>仮想星を組み立てて一発を仕立てるか、湖畔で自動演目を眺めるかを選んでください。</p>
-        </div>
+        <h1 class="visually-hidden" id="mode-selection-heading">仮想花火の操作を選ぶ</h1>
         <div class="mode-choice-grid">
           <button class="mode-choice mode-choice--craft" type="button" data-choice="craft" autofocus>
             <span class="mode-choice__number">01 / CRAFT</span>
@@ -40,7 +29,8 @@ export class ModeSelectionScreen {
           </button>
         </div>
       </main>
-      <footer class="renewal-screen-note">音は鑑賞画面で調整できます</footer>`;
+      <p class="mode-safety-note"><span>仮想花火</span> 実物の材料・配合・製造条件は扱いません</p>
+      <footer class="renewal-screen-note">タイトルデモは無音です · 音は鑑賞画面で調整できます</footer>`;
     this.element.addEventListener("click", this.#handleClick);
   }
 

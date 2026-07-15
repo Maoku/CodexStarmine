@@ -3,6 +3,8 @@ import {
   appScreenKind,
   type AppScreen,
 } from "../app/AppFlowController";
+import { RENEWAL2_BACKGROUND_RUNTIME_BY_SCREEN } from "../app/renewalContracts";
+import type { BackgroundRuntime } from "../app/renewalContracts";
 import type { FireworkDesign } from "../data";
 import type { SingleLoopCheckState } from "../modes/check";
 import type { CraftController } from "../modes/craft";
@@ -28,8 +30,8 @@ export interface AppShellCallbacks {
   onFreeToggle?: () => void;
   onFreeViewPresetChange?: (presetId: FreeViewPresetId) => void;
   onFreeViewReset?: () => void;
-  onViewerContextChange: (
-    context: ViewerContext | undefined,
+  onBackgroundRuntimeChange: (
+    runtime: BackgroundRuntime,
     design?: FireworkDesign,
   ) => void;
 }
@@ -146,13 +148,11 @@ export class AppShell {
     this.element.dataset.screen = appScreenKind(screen);
 
     const viewerContext = screen.kind === "viewer" ? screen.context : undefined;
-    if (viewerContext !== this.#activeViewerContext) {
-      this.#activeViewerContext = viewerContext;
-      this.#callbacks.onViewerContextChange(
-        viewerContext,
-        viewerContext === "check" ? this.#controller.draft : undefined,
-      );
-    }
+    this.#activeViewerContext = viewerContext;
+    this.#callbacks.onBackgroundRuntimeChange(
+      RENEWAL2_BACKGROUND_RUNTIME_BY_SCREEN[appScreenKind(screen)],
+      viewerContext === "check" ? this.#controller.draft : undefined,
+    );
 
     window.setTimeout(() => {
       mount.element
@@ -222,9 +222,9 @@ export class AppShell {
     element.className = "renewal-editor-screen";
     element.innerHTML = `
       <header class="app-header renewal-editor-header">
-        <div class="brand-block">
-          <p class="brand-block__eyebrow">VIRTUAL FIREWORK ATELIER</p>
-          <h1>星見<span>煙火店</span></h1>
+        <div class="screen-context-title">
+          <p>EDITING</p>
+          <h1>編集中の花火</h1>
         </div>
         <button class="renewal-back renewal-back--center" type="button" data-shell-action="back">← 花火棚へ戻る</button>
         <div class="header-status">

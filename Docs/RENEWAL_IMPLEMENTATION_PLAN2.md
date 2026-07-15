@@ -1,7 +1,7 @@
 # 編集体験リニューアル2 改修計画書
 
 - 作成日: 2026-07-16
-- ステータス: Renewal2 Phase 0 完了・Phase 1 着手前
+- ステータス: Renewal2 Phase 1 完了・Phase 2 着手前
 - 基準資料: [RENEWAL_PLAN2.md](RENEWAL_PLAN2.md)
 - 先行計画: [RENEWAL_IMPLEMENTATION_PLAN.md](RENEWAL_IMPLEMENTATION_PLAN.md)
 - 関連資料: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RESEARCH.md](RESEARCH.md)
@@ -620,3 +620,12 @@ rtk npm run test:e2e
 - 現行画面を `images/renewal2/baseline/` の1440×900、1280×720、390×844で記録した。
 - 現時点で `test:e2e` スクリプトは未導入。ブラウザ検証は `rtk npm run dev -- --host 127.0.0.1` で起動し、Codex in-app browserで実施する。自動回帰は `npm run test:run`、`npm run lint`、`npm run build` を必須とする。
 - 基準結果: 25 test files / 89 tests成功、lint成功、build成功。1280×720では簡易確認が右ペイン下へ押し出され、390×844では3ペインが縮小されたままになる現行差分を確認した。
+
+### Renewal2 Phase 1
+
+- 完了日: 2026-07-16
+- タイトルを2つの主操作だけが前面にある構成へ変更し、全画面から `星見煙火店`、タイトルから `今夜は、何をしますか` を削除した。
+- `AdvertiseDemoController` を追加し、フリー鑑賞のcue生成を間引いて再利用する低密度・無音のタイトルデモを実装した。
+- `AdvertiseCameraController` を追加し、4つの安全な視点を28秒で巡回する決定的な自動カメラを実装した。reduced motion時は固定視点になる。
+- タブ非表示中はデモ時間とcue発射を停止する。タイトル、確認、フリー鑑賞は `BackgroundRuntimeController` の `stop → clear → start` で排他遷移する。
+- ブラウザでタイトルDOMの削除文言0件、2.5秒間の描画変化、制作遷移後の非インタラクティブ背景、フリー鑑賞遷移後の自由カメラ有効化を確認した。

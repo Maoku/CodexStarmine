@@ -109,9 +109,9 @@ export class FireworkShelfScreen {
     this.element.innerHTML = `
       <header class="renewal-brand renewal-brand--toolbar">
         <button class="renewal-back" type="button" data-action="back">← モード選択</button>
-        <div class="brand-block">
-          <p class="brand-block__eyebrow">VIRTUAL FIREWORK ATELIER</p>
-          <h1>星見<span>煙火店</span></h1>
+        <div class="screen-context-title">
+          <p>FIREWORK SHELF</p>
+          <h1>花火棚</h1>
         </div>
         <p><span data-shelf-count>${this.#designs.length}</span> 作品を保管中</p>
       </header>
