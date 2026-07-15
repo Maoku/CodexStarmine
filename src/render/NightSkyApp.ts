@@ -17,8 +17,12 @@ import { FireworkAudio } from "../audio";
 import { clampPixelRatio } from "../core/env";
 import { DesignRepository, FIREWORK_PRESETS, resolveSizePreset } from "../data";
 import { CraftController } from "../modes/craft";
-import { FreeShowController } from "../modes/viewFree";
+import {
+  FreeShowController,
+  HOME_FREE_VIEW_PRESET_ID,
+} from "../modes/viewFree";
 import { AppShell } from "../ui/AppShell";
+import { FreeViewCameraController } from "./camera";
 import { FireworkSystem } from "./fx";
 import { createNightSkyScene } from "./scene/createNightSkyScene";
 
@@ -28,6 +32,7 @@ export class NightSkyApp {
   readonly #composer: EffectComposer;
   readonly #fireworks: FireworkSystem;
   readonly #freeShow: FreeShowController;
+  readonly #freeView: FreeViewCameraController;
   readonly #host: HTMLElement;
   readonly #renderer: WebGLRenderer;
   readonly #scene: Scene;
@@ -69,13 +74,17 @@ export class NightSkyApp {
     this.#renderer.domElement.setAttribute("role", "img");
     this.#renderer.domElement.setAttribute(
       "aria-label",
-      "月明かりの湖畔で自作花火を鑑賞するシーン",
+      "月明かりの湖畔で自作花火を鑑賞するシーン。フリー鑑賞ではWASDまたは矢印キーで移動できます",
     );
     this.#renderer.outputColorSpace = SRGBColorSpace;
     this.#renderer.toneMapping = ACESFilmicToneMapping;
     this.#renderer.toneMappingExposure = 0.9;
     this.#renderer.setPixelRatio(clampPixelRatio(window.devicePixelRatio));
     this.#renderer.setSize(size.width, size.height, false);
+    this.#freeView = new FreeViewCameraController(
+      this.#camera,
+      this.#renderer.domElement,
+    );
 
     this.#composer = new EffectComposer(this.#renderer);
     this.#composer.setPixelRatio(clampPixelRatio(window.devicePixelRatio));
@@ -127,16 +136,25 @@ export class NightSkyApp {
       onDesignLibraryChange: () => undefined,
       onFreeDensityChange: (value) => this.#freeShow.setDensity(value),
       onModeChange: (mode) => {
-        if (mode === "free") {
+        const isFree = mode === "free";
+        this.#freeView.setEnabled(isFree);
+        if (isFree) {
           this.#freeShow.start();
         } else {
           this.#freeShow.pause();
         }
       },
-      onPreview: (design) => {
+      onLaunch: (design) => {
         this.#fireworks.launch(design, { lane: 0, seed: Date.now() });
       },
       onFreeToggle: () => this.#freeShow.toggle(),
+      onFreeViewPresetChange: (presetId) => {
+        this.#freeView.applyPreset(presetId);
+      },
+      onFreeViewReset: () => {
+        this.#freeView.reset();
+        this.#ui.setFreeViewPreset(HOME_FREE_VIEW_PRESET_ID);
+      },
     });
     this.#host.replaceChildren(this.#renderer.domElement, this.#ui.element);
   }
@@ -160,6 +178,7 @@ export class NightSkyApp {
     void this.#audio.dispose();
     this.#timer.dispose();
     this.#ui.destroy();
+    this.#freeView.dispose();
     this.#fireworks.dispose();
     this.#composer.dispose();
     this.#renderer.dispose();
@@ -179,6 +198,7 @@ export class NightSkyApp {
     this.#freeShow.update(delta);
     this.#fireworks.update(delta);
     this.#updateScene(elapsed);
+    this.#freeView.update(delta);
     this.#composer.render(delta);
     this.#animationFrame = window.requestAnimationFrame(this.#render);
   };

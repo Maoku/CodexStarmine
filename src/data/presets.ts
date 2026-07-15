@@ -1,6 +1,7 @@
-import type { FireworkDesign } from "./firework";
+import type { FireworkDesign, FireworkDesignV1 } from "./firework";
+import { migrateV1ToV2 } from "./migrations/v1ToV2";
 
-export const CHRYSANTHEMUM_PRESET: FireworkDesign = {
+export const CHRYSANTHEMUM_PRESET: FireworkDesign = migrateV1ToV2({
   ascentEffect: "gold",
   id: "preset-chrysanthemum",
   name: "変化菊",
@@ -46,9 +47,9 @@ export const CHRYSANTHEMUM_PRESET: FireworkDesign = {
   windResponse: 0.62,
   soundProfile: { volume: 0.76, lowEnd: 0.68, crackle: 0.58 },
   smokeProfile: { amount: 0.58, lifetime: 8 },
-};
+} satisfies FireworkDesignV1);
 
-export const PEONY_PRESET: FireworkDesign = {
+export const PEONY_PRESET: FireworkDesign = migrateV1ToV2({
   ascentEffect: "silver",
   id: "preset-peony",
   name: "紅青牡丹",
@@ -94,9 +95,9 @@ export const PEONY_PRESET: FireworkDesign = {
   windResponse: 0.42,
   soundProfile: { volume: 0.72, lowEnd: 0.74, crackle: 0.18 },
   smokeProfile: { amount: 0.48, lifetime: 7 },
-};
+} satisfies FireworkDesignV1);
 
-export const CROWN_PRESET: FireworkDesign = {
+export const CROWN_PRESET: FireworkDesign = migrateV1ToV2({
   ascentEffect: "gold",
   id: "preset-crown",
   name: "錦冠",
@@ -139,9 +140,9 @@ export const CROWN_PRESET: FireworkDesign = {
   windResponse: 0.86,
   soundProfile: { volume: 0.84, lowEnd: 0.88, crackle: 0.46 },
   smokeProfile: { amount: 0.76, lifetime: 10 },
-};
+} satisfies FireworkDesignV1);
 
-export const PALM_PRESET: FireworkDesign = {
+export const PALM_PRESET: FireworkDesign = migrateV1ToV2({
   ascentEffect: "silver",
   id: "preset-palm",
   name: "銀椰子",
@@ -181,9 +182,9 @@ export const PALM_PRESET: FireworkDesign = {
   windResponse: 0.68,
   soundProfile: { volume: 0.8, lowEnd: 0.78, crackle: 0.62 },
   smokeProfile: { amount: 0.7, lifetime: 9 },
-};
+} satisfies FireworkDesignV1);
 
-export const SENRIN_PRESET: FireworkDesign = {
+export const SENRIN_PRESET: FireworkDesign = migrateV1ToV2({
   ascentEffect: "gold",
   id: "preset-senrin",
   name: "彩色千輪",
@@ -229,9 +230,9 @@ export const SENRIN_PRESET: FireworkDesign = {
   windResponse: 0.4,
   soundProfile: { volume: 0.76, lowEnd: 0.64, crackle: 0.7 },
   smokeProfile: { amount: 0.78, lifetime: 9 },
-};
+} satisfies FireworkDesignV1);
 
-export const HEART_PRESET: FireworkDesign = {
+export const HEART_PRESET: FireworkDesign = migrateV1ToV2({
   ascentEffect: "silver",
   id: "preset-heart",
   name: "紅恋花",
@@ -277,7 +278,7 @@ export const HEART_PRESET: FireworkDesign = {
   windResponse: 0.35,
   soundProfile: { volume: 0.68, lowEnd: 0.58, crackle: 0.22 },
   smokeProfile: { amount: 0.46, lifetime: 7 },
-};
+} satisfies FireworkDesignV1);
 
 export const FIREWORK_PRESETS: FireworkDesign[] = [
   CHRYSANTHEMUM_PRESET,

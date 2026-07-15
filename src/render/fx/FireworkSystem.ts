@@ -12,23 +12,14 @@ import {
   ShaderMaterial,
 } from "three";
 
-import {
-  generateHeartBurst,
-  generatePalmBurst,
-  generateSphereBurst,
-  type BurstDirection,
-} from "../../core/burst";
+import { compileFireworkDesign, type CompiledStar } from "../../core/burst";
 import {
   evaluateColorStages,
   integrateParticle,
   type BallisticParticle,
   type Vector3Value,
 } from "../../core/particle";
-import {
-  resolveSizePreset,
-  type ColorStage,
-  type FireworkDesign,
-} from "../../data";
+import { resolveSizePreset, type FireworkDesign } from "../../data";
 import { WATER_LEVEL } from "../scene/createNightSkyScene";
 
 const MAX_STARS = 6_000;
@@ -70,7 +61,7 @@ interface DelayedBurst {
   delay: number;
   design: FireworkDesign;
   position: Vector3Value;
-  seed: number;
+  stars: CompiledStar[];
   velocity: Vector3Value;
 }
 
@@ -325,37 +316,45 @@ export class FireworkSystem {
     (this.#trails.material as LineBasicMaterial).dispose();
   }
 
-  #appendStars(
+  #appendCompiledStars(
     position: Vector3Value,
     inheritedVelocity: Vector3Value,
     design: FireworkDesign,
-    directions: BurstDirection[],
-    speedScale: number,
-    colorStages = design.colorStages,
+    compiledStars: CompiledStar[],
   ): void {
     const size = resolveSizePreset(design.sizeClass);
-    for (const burst of directions) {
-      const speed = design.burstVelocity * burst.speedFactor * speedScale;
-      const lifetime = design.burnDuration * (0.88 + Math.random() * 0.2);
+    for (const compiled of compiledStars) {
+      const definition = compiled.definition;
+      const lifetime = definition.burnDuration * compiled.lifetimeScale;
       this.#stars.push({
-        age: 0,
-        brightness: 0.72 + size.pointScale * 0.28,
-        colorStages,
-        drag: design.drag,
-        gravityScale: design.gravityScale,
+        age: -compiled.timingOffset,
+        brightness: (0.72 + size.pointScale * 0.28) * compiled.intensityScale,
+        colorStages: definition.colorStages,
+        drag: definition.drag,
+        gravityScale: definition.gravityScale,
         history: [clonePosition(position)],
         lifetime,
-        pointScale: size.pointScale * Math.max(design.trailStyle.width, 0.72),
-        position: clonePosition(position),
-        sparkle: design.trailStyle.sparkle,
-        trailLength: design.trailStyle.length,
-        trailWidth: design.trailStyle.width,
-        velocity: {
-          x: burst.direction.x * speed + inheritedVelocity.x * 0.12,
-          y: burst.direction.y * speed + inheritedVelocity.y * 0.06,
-          z: burst.direction.z * speed + inheritedVelocity.z * 0.12,
+        pointScale: size.pointScale * Math.max(definition.trailWidth, 0.72),
+        position: {
+          x: position.x + compiled.initialPosition.x,
+          y: position.y + compiled.initialPosition.y,
+          z: position.z + compiled.initialPosition.z,
         },
-        windResponse: design.windResponse,
+        sparkle: definition.flicker,
+        trailLength: definition.trailLifetime,
+        trailWidth: definition.trailWidth,
+        velocity: {
+          x:
+            compiled.initialVelocity.x * size.burstScale +
+            inheritedVelocity.x * 0.12,
+          y:
+            compiled.initialVelocity.y * size.burstScale +
+            inheritedVelocity.y * 0.06,
+          z:
+            compiled.initialVelocity.z * size.burstScale +
+            inheritedVelocity.z * 0.12,
+        },
+        windResponse: design.burstField.windResponse,
       });
     }
   }
@@ -365,107 +364,20 @@ export class FireworkSystem {
     inheritedVelocity: Vector3Value,
     design: FireworkDesign,
     seed: number,
-    includeCores = true,
+    includeChildren = true,
   ): void {
-    const size = resolveSizePreset(design.sizeClass);
-    const count = Math.max(
-      Math.round(design.particleDensity * size.particleScale),
-      12,
-    );
-    let directions: BurstDirection[];
-    switch (design.burstShape) {
-      case "heart":
-        directions = generateHeartBurst(count, seed);
-        break;
-      case "palm":
-        directions = generatePalmBurst(count, seed);
-        break;
-      case "children":
-        directions = generateSphereBurst(
-          Math.max(Math.round(count * 0.24), 18),
-          design.symmetry,
-          seed,
-        );
-        break;
-      default:
-        directions = generateSphereBurst(count, design.symmetry, seed);
-    }
+    const plan = compileFireworkDesign(design, seed);
+    this.#appendCompiledStars(position, inheritedVelocity, design, plan.stars);
 
-    const shapeScale = design.burstShape === "children" ? 0.36 : 1;
-    this.#appendStars(
-      position,
-      inheritedVelocity,
-      design,
-      directions,
-      size.burstScale * shapeScale,
-    );
-
-    if (includeCores) {
-      design.coreLayers.forEach((core, index) => {
-        const coreCount = Math.max(
-          Math.round(count * (0.24 + core.radius * 0.12)),
-          24,
-        );
-        const coreStages: ColorStage[] = [
-          {
-            normalizedTime: 0,
-            color: 0xffffff,
-            intensity: 1.32,
-            trailColor: core.color,
-          },
-          {
-            normalizedTime: 0.16,
-            color: core.color,
-            intensity: 0.94,
-            trailColor: core.color,
-          },
-          {
-            normalizedTime: 1,
-            color: core.color,
-            intensity: 0,
-            trailColor: core.color,
-          },
-        ];
-        this.#appendStars(
-          position,
-          inheritedVelocity,
-          { ...design, burnDuration: design.burnDuration * 0.72 },
-          generateSphereBurst(coreCount, 0.99, seed + 41 + index * 17),
-          size.burstScale * core.radius,
-          coreStages,
-        );
-      });
-    }
-
-    if (design.burstShape === "children") {
-      for (const child of design.childBursts) {
-        const carriers = generateSphereBurst(
-          child.count,
-          design.symmetry,
-          seed + 503,
-        );
-        carriers.forEach((carrier, index) => {
-          this.#delayedBursts.push({
-            age: 0,
-            delay: child.delay + index * 0.018 + Math.random() * 0.11,
-            design: {
-              ...design,
-              burstShape: "sphere",
-              burstVelocity: 11.5,
-              burnDuration: 1.5,
-              childBursts: [],
-              coreLayers: [],
-              particleDensity: 24,
-              trailStyle: { ...design.trailStyle, length: 0.12 },
-            },
-            position: clonePosition(position),
-            seed: seed + 701 + index * 23,
-            velocity: {
-              x: carrier.direction.x * child.radius,
-              y: carrier.direction.y * child.radius,
-              z: carrier.direction.z * child.radius,
-            },
-          });
+    if (includeChildren) {
+      for (const child of plan.childBursts) {
+        this.#delayedBursts.push({
+          age: 0,
+          delay: child.delay,
+          design,
+          position: clonePosition(position),
+          stars: child.stars,
+          velocity: child.initialVelocity,
         });
       }
     }
@@ -500,12 +412,11 @@ export class FireworkSystem {
       delayed.velocity.y *= Math.exp(-0.9 * delta);
       delayed.velocity.z *= Math.exp(-0.9 * delta);
       if (delayed.age >= delayed.delay) {
-        this.#emitBurst(
+        this.#appendCompiledStars(
           delayed.position,
           delayed.velocity,
           delayed.design,
-          delayed.seed,
-          false,
+          delayed.stars,
         );
       } else {
         active.push(delayed);
@@ -634,6 +545,11 @@ export class FireworkSystem {
   #updateStars(delta: number): void {
     const active: Star[] = [];
     for (const star of this.#stars) {
+      if (star.age < 0) {
+        star.age += delta;
+        active.push(star);
+        continue;
+      }
       integrateParticle(star, delta, { gravity: GRAVITY, wind: this.#wind });
       if (star.trailLength > 0.14 && star.age < star.lifetime * 0.92) {
         star.history.push(clonePosition(star.position));
@@ -650,7 +566,10 @@ export class FireworkSystem {
   }
 
   #writePointBuffers(): void {
-    const visible = [...this.#shells, ...this.#stars].slice(0, MAX_STARS);
+    const visible = [
+      ...this.#shells,
+      ...this.#stars.filter((star) => star.age >= 0),
+    ].slice(0, MAX_STARS);
     const position = this.#starGeometry.getAttribute(
       "position",
     ) as BufferAttribute;

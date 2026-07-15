@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { CHRYSANTHEMUM_PRESET } from "./presets";
-import { DesignRepository, type StorageLike } from "./storage";
+import {
+  DesignRepository,
+  STORAGE_KEY_V1,
+  STORAGE_KEY_V2,
+  type StorageLike,
+} from "./storage";
 
 function memoryStorage(): StorageLike {
   const values = new Map<string, string>();
@@ -48,5 +53,52 @@ describe("DesignRepository", () => {
       setItem: () => undefined,
     };
     expect(new DesignRepository(storage).list()).toEqual([]);
+  });
+
+  it("migrates a complete v1 library to v2 without deleting v1", () => {
+    const values = new Map<string, string>();
+    const storage: StorageLike = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+    };
+    const v1 = structuredClone(CHRYSANTHEMUM_PRESET) as unknown as Record<
+      string,
+      unknown
+    >;
+    for (const key of [
+      "assemblySeed",
+      "burstField",
+      "description",
+      "launchVariation",
+      "layers",
+      "realism",
+      "schemaVersion",
+      "starDefinitions",
+      "themeColors",
+    ]) {
+      delete v1[key];
+    }
+    values.set(STORAGE_KEY_V1, JSON.stringify({ version: 1, designs: [v1] }));
+    const migrated = new DesignRepository(storage).list();
+    expect(migrated[0].schemaVersion).toBe(2);
+    expect(migrated[0].layers.length).toBeGreaterThan(0);
+    expect(values.has(STORAGE_KEY_V1)).toBe(true);
+    expect(values.has(STORAGE_KEY_V2)).toBe(true);
+  });
+
+  it("does not partially migrate a damaged v1 library", () => {
+    const values = new Map<string, string>();
+    const storage: StorageLike = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, value),
+    };
+    values.set(
+      STORAGE_KEY_V1,
+      JSON.stringify({ version: 1, designs: [{ id: "broken" }] }),
+    );
+    const repository = new DesignRepository(storage);
+    expect(repository.list()).toEqual([]);
+    expect(repository.migrationWarning).toContain("自動移行せず");
+    expect(values.has(STORAGE_KEY_V2)).toBe(false);
   });
 });

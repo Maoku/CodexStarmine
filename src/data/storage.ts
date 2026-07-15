@@ -1,34 +1,27 @@
-import type { FireworkDesign } from "./firework";
+import type { FireworkDesign, FireworkDesignV1 } from "./firework";
+import { isFireworkDesignV2 } from "./firework";
+import { isFireworkDesignV1, migrateV1ToV2 } from "./migrations/v1ToV2";
 
-const STORAGE_KEY = "codex-starmine.designs.v1";
+export const STORAGE_KEY_V1 = "codex-starmine.designs.v1";
+export const STORAGE_KEY_V2 = "codex-starmine.designs.v2";
 
 export interface StorageLike {
   getItem: (key: string) => string | null;
   setItem: (key: string, value: string) => void;
 }
 
-interface StoredLibrary {
-  designs: FireworkDesign[];
+interface StoredLibraryV1 {
+  designs: FireworkDesignV1[];
   version: 1;
+}
+
+interface StoredLibraryV2 {
+  designs: FireworkDesign[];
+  version: 2;
 }
 
 function cloneDesign(design: FireworkDesign): FireworkDesign {
   return structuredClone(design);
-}
-
-function isFireworkDesign(value: unknown): value is FireworkDesign {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<FireworkDesign>;
-  return (
-    typeof candidate.id === "string" &&
-    typeof candidate.name === "string" &&
-    typeof candidate.pattern === "string" &&
-    typeof candidate.sizeClass === "string" &&
-    typeof candidate.particleDensity === "number" &&
-    Array.isArray(candidate.colorStages) &&
-    Array.isArray(candidate.coreLayers) &&
-    Array.isArray(candidate.childBursts)
-  );
 }
 
 function defaultId(): string {
@@ -42,10 +35,16 @@ export class DesignRepository {
   readonly #idFactory: () => string;
   readonly #storage?: StorageLike;
   #fallback: FireworkDesign[] = [];
+  #migrationWarning: string | undefined;
 
   constructor(storage?: StorageLike, idFactory: () => string = defaultId) {
     this.#storage = storage;
     this.#idFactory = idFactory;
+  }
+
+  get migrationWarning(): string | undefined {
+    this.#read();
+    return this.#migrationWarning;
   }
 
   list(): FireworkDesign[] {
@@ -95,15 +94,46 @@ export class DesignRepository {
     return true;
   }
 
+  #parseV2(raw: string): FireworkDesign[] | undefined {
+    const parsed = JSON.parse(raw) as Partial<StoredLibraryV2>;
+    if (parsed.version !== 2 || !Array.isArray(parsed.designs))
+      return undefined;
+    if (!parsed.designs.every(isFireworkDesignV2)) return undefined;
+    return parsed.designs.map(cloneDesign);
+  }
+
+  #migrateV1(raw: string): FireworkDesign[] | undefined {
+    const parsed = JSON.parse(raw) as Partial<StoredLibraryV1>;
+    if (parsed.version !== 1 || !Array.isArray(parsed.designs))
+      return undefined;
+    if (!parsed.designs.every(isFireworkDesignV1)) {
+      this.#migrationWarning =
+        "旧形式の作品に破損があるため、自動移行せず元データを保持しました。";
+      return undefined;
+    }
+    const migrated = parsed.designs.map(migrateV1ToV2);
+    if (!migrated.every(isFireworkDesignV2)) return undefined;
+    this.#write(migrated);
+    return migrated;
+  }
+
   #read(): FireworkDesign[] {
     if (!this.#storage) return this.#fallback.map(cloneDesign);
     try {
-      const raw = this.#storage.getItem(STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw) as Partial<StoredLibrary>;
-      if (parsed.version !== 1 || !Array.isArray(parsed.designs)) return [];
-      return parsed.designs.filter(isFireworkDesign).map(cloneDesign);
+      const v2 = this.#storage.getItem(STORAGE_KEY_V2);
+      if (v2) {
+        const designs = this.#parseV2(v2);
+        if (designs) return designs;
+        this.#migrationWarning =
+          "保存作品を検証できなかったため、このセッションでは安全な控えを使用します。";
+        return this.#fallback.map(cloneDesign);
+      }
+      const v1 = this.#storage.getItem(STORAGE_KEY_V1);
+      if (!v1) return [];
+      return this.#migrateV1(v1) ?? this.#fallback.map(cloneDesign);
     } catch {
+      this.#migrationWarning =
+        "保存領域を読み込めなかったため、このセッションだけで編集します。";
       return this.#fallback.map(cloneDesign);
     }
   }
@@ -112,10 +142,11 @@ export class DesignRepository {
     this.#fallback = designs.map(cloneDesign);
     if (!this.#storage) return;
     try {
-      const payload: StoredLibrary = { version: 1, designs };
-      this.#storage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      const payload: StoredLibraryV2 = { version: 2, designs };
+      this.#storage.setItem(STORAGE_KEY_V2, JSON.stringify(payload));
     } catch {
-      // Private browsing or exhausted storage still keeps this session usable.
+      this.#migrationWarning =
+        "保存領域へ書き込めなかったため、このセッションだけ作品を保持します。";
     }
   }
 }

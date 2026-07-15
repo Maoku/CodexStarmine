@@ -2,3 +2,4 @@
 export {};
 export * from "./FreeShowController";
 export * from "./generateFreeShow";
+export * from "./viewPresets";
