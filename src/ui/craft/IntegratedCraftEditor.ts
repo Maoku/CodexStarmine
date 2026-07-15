@@ -242,8 +242,7 @@ export class IntegratedCraftEditor {
             <label><span>玉内の半径 <output>${Math.round(parameters.radius * 100)}%</output></span><input name="layer-radius" type="range" min="20" max="100" value="${Math.round(parameters.radius * 100)}" aria-label="玉内の半径" aria-valuetext="${Math.round(parameters.radius * 100)}パーセント" /></label>`;
         }
       } else if (selectedLayer.authoringMode === "pattern") {
-        specific = `<label><span>形状</span><select name="pattern-template"><option value="circle" ${selectedLayer.pattern.template === "circle" ? "selected" : ""}>円</option><option value="heart" ${selectedLayer.pattern.template === "heart" ? "selected" : ""}>ハート</option></select></label>
-          <label><span>大きさ <output>${Math.round(selectedLayer.pattern.scale * 100)}%</output></span><input name="pattern-scale" type="range" min="15" max="95" value="${Math.round(selectedLayer.pattern.scale * 100)}" aria-label="型物の大きさ" aria-valuetext="${Math.round(selectedLayer.pattern.scale * 100)}パーセント" /></label>
+        specific = `<label><span>大きさ <output>${Math.round(selectedLayer.pattern.scale * 100)}%</output></span><input name="pattern-scale" type="range" min="15" max="95" value="${Math.round(selectedLayer.pattern.scale * 100)}" aria-label="型物の大きさ" aria-valuetext="${Math.round(selectedLayer.pattern.scale * 100)}パーセント" /></label>
           <label><span>密度 <output>${selectedLayer.pattern.density}</output></span><input name="pattern-density" type="range" min="12" max="240" value="${selectedLayer.pattern.density}" aria-label="型物の密度" aria-valuetext="${selectedLayer.pattern.density}個" /></label>
           <label><span>回転 <output>${selectedLayer.pattern.rotationDegrees}°</output></span><input name="pattern-rotation" type="range" min="0" max="345" step="15" value="${selectedLayer.pattern.rotationDegrees}" aria-label="型物の回転" aria-valuetext="${selectedLayer.pattern.rotationDegrees}度" /></label>
           <p class="inspector-note">型物の生成点は個別編集できません。断面は中央のワークベンチで選びます。</p>`;
@@ -317,8 +316,8 @@ export class IntegratedCraftEditor {
       } else if (intent?.authoringMode === "manual" && intent.points[0]) {
         this.#section = { ...intent.points[0].section };
       }
-      this.#controller.document.selectLayer(layerId);
       this.#drawer = undefined;
+      this.#controller.document.selectLayer(layerId);
     } else if (action === "toggle-layer" && layerId) {
       this.#updateIntentLayer(layerId, "レイヤー表示を変更", (layer) => {
         layer.visible = !layer.visible;
@@ -371,6 +370,13 @@ export class IntegratedCraftEditor {
       this.#setSection({
         plane: this.#section.plane,
         ratio: Number(button.dataset.ratio) as SectionRatio,
+      });
+    } else if (action === "select-pattern-template" && layerId) {
+      const template = button.dataset.template === "heart" ? "heart" : "circle";
+      this.#updateIntentLayer(layerId, "型物の形状を変更", (layer) => {
+        if (layer.authoringMode === "pattern") {
+          layer.pattern.template = template;
+        }
       });
     } else if (action === "placement-template") {
       const template = button.dataset.template as PlacementTemplate;
@@ -1003,9 +1009,7 @@ export class IntegratedCraftEditor {
           layer.parameters.branchCount = Number(value);
         }
       } else if (layer.authoringMode === "pattern") {
-        if (name === "pattern-template") {
-          layer.pattern.template = value === "heart" ? "heart" : "circle";
-        } else if (name === "pattern-scale") {
+        if (name === "pattern-scale") {
           layer.pattern.scale = Number(value) / 100;
         } else if (name === "pattern-density") {
           layer.pattern.density = Number(value);

@@ -4,6 +4,7 @@ import {
   CHRYSANTHEMUM_PRESET,
   ensureFireworkDesignV3,
   migrateV3ToV4,
+  resolveFireworkDesignV4,
 } from "../../data";
 import {
   canvasPointOnSection,
@@ -62,5 +63,43 @@ describe("IntegratedPlacementWorkbench", () => {
     expect(markup).not.toContain("経度区画");
     expect(markup).not.toContain("配置面の回転");
     expect(markup).not.toContain('data-point-editable="true"');
+  });
+
+  it("puts pattern shape controls in the workbench without point operations", () => {
+    const intent = migrateV3ToV4(ensureFireworkDesignV3(CHRYSANTHEMUM_PRESET));
+    delete intent.legacyIntent;
+    intent.layers = [
+      {
+        authoringMode: "pattern",
+        defaultStarId: "star-solid-red",
+        id: "pattern-test",
+        ignitionOffset: 0,
+        locked: false,
+        name: "型物テスト",
+        pattern: {
+          density: 48,
+          rotationDegrees: 0,
+          scale: 0.7,
+          section: { plane: "xy", ratio: 0.5 },
+          template: "heart",
+        },
+        radialSpeedScale: 0.9,
+        visible: true,
+      },
+    ];
+    const runtime = resolveFireworkDesignV4(intent);
+    const markup = renderIntegratedPlacementWorkbench(
+      runtime,
+      intent,
+      runtime.layers[0],
+      intent.layers[0],
+      { plane: "xy", ratio: 0.5 },
+      "manual",
+    );
+
+    expect(markup).toContain("型物の形状");
+    expect(markup).toContain('data-action="select-pattern-template"');
+    expect(markup).not.toContain('data-action="delete-point"');
+    expect(markup).not.toContain('data-action="placement-template"');
   });
 });

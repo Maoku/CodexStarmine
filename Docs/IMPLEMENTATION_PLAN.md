@@ -4,6 +4,7 @@
 - 根拠資料: [Docs/PLAN.md](PLAN.md)、[Docs/RESEARCH.md](RESEARCH.md)
 - 製作モード強化: [花火内部配置エディター強化 実装計画書](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)
 - 画面遷移リニューアル: [画面遷移・編集体験リニューアル 改修計画書](RENEWAL_IMPLEMENTATION_PLAN.md)
+- 編集体験Renewal2: [編集体験Renewal2 改修実装計画書](RENEWAL_IMPLEMENTATION_PLAN2.md)
 - 対象: ブラウザで動作する花火の製作・鑑賞ゲームアプリ
 
 ## 1. ゴールと成功条件
@@ -66,6 +67,7 @@ src/
 
 - `FireworkDesign`: family（割物/ぽか物/半割物）、pattern、sizeClass、burstShape、coreLayers[]、childBursts[]、colorStages[]、trailStyle、gravityScale、drag、windResponse、soundProfile、smokeProfile ほか
 - `FireworkDesignV2`: 仮想星定義、外周・芯・型物・子花レイヤー、固定seed、写実度を追加し、v1から非破壊移行する（詳細は製作モード強化計画）
+- `FireworkDesignV4`: `preset / pattern / manual` の編集意図、XY／XZの5断面、型物レシピを正本として保存し、描画時に決定的なv3互換配置へ解決する。v1／v2／v3キーは削除しない
 - `ShowCue`: time、launcherLane、launchAngle、fireworkDesignID、sizePreset、targetHeight、timingVariation
 - サイズプリセット: Small(3号)・Medium(5号)・Large(10号)。高度・開花径・粒子数・発光量・低音・煙量を連動させる（RESEARCH 5.2）
 
@@ -158,6 +160,17 @@ src/
 - **詳細計画**: [画面遷移・編集体験リニューアル 改修計画書](RENEWAL_IMPLEMENTATION_PLAN.md)
 - **完了確認**: 1280×720・1024×768・390×844で全画面フロー、保存と削除復元、check/free、未保存離脱を実ブラウザ確認。`npm run lint`、89件の単体テスト、production buildに合格し、全幅で横スクロールとブラウザコンソールエラーがないことを確認
 
+### 編集体験Renewal2（完了: 2026-07-16）
+
+- [x] 店名依存を削除したタイトルと、低密度・無音・reduced motion対応のアドバタイズデモ
+- [x] v4編集意図、v1→v2→v3→v4／v3→v4の非破壊移行、固定seed回帰比較
+- [x] 編集ヘッダーの作品情報と、左ペインに集約した `既定 / 型物 / 手動` の追加・複製・削除
+- [x] XY／XZと10／30／50／70／90%の断面ワークベンチ、他断面・他レイヤー参照表示
+- [x] 決定的な円／ハート型物レシピ、手動の置換／追加と1点編集、authoring mode別の操作権限
+- [x] ビューポート内へ反転する星オーバーレイ、内部スクロール設定と固定の簡易確認、モバイルドロワー
+- **詳細計画**: [編集体験Renewal2 改修実装計画書](RENEWAL_IMPLEMENTATION_PLAN2.md)
+- **完了確認**: 新規作品を型物72点と手動36点で作成し、保存・再読込後もXZ 30%の断面と座標を保持したまま湖面確認へ進み、編集へ戻れることを実ブラウザで確認。1440×900・1280×720・390×844で最終画面を記録し、`npm run lint`、121件の単体テスト、production buildに合格
+
 ### Phase 7: ミュージック連動モード
 
 - 音楽ファイルの入力方式はローカルファイル選択のみ
@@ -184,6 +197,7 @@ Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 → 6.5 → 7 → 8
 - **M2（Phase 5 完了、2026-07-15）**: 製作モードが成立（コアバリュー達成）
 - **M2.5（Phase 6.5 完了、2026-07-15）**: 内部配置を含む花火デザイン体験が成立
 - **M2.6（画面遷移リニューアル完了、2026-07-16）**: 作品管理・統合編集・単発確認・フリー鑑賞を目的別の画面として利用可能
+- **M2.7（編集体験Renewal2完了、2026-07-16）**: v4編集意図と5断面による型物／手動配置、固定プレビュー、端で欠けない星オーバーレイを利用可能
 - **M3（Phase 7 完了）**: PLAN.md の全モード実装完了
 
 ## 6. git 運用
@@ -195,7 +209,7 @@ Phase 0 → 1 → 2 → 3 → 4 → 5 → 6 → 6.5 → 7 → 8
 
 - **単体テスト（Vitest）**: colorStages の補間、バースト形状の点群生成、ShowCue スケジューラ、音遅延計算、音楽解析のオンセット検出
 - **目視確認**: 各フェーズの完了基準はレンダリング品質を含むため、ブラウザでの確認を必須とする
-- **受け入れテスト**: RESEARCH 9.12節と13章、および `RENEWAL_IMPLEMENTATION_PLAN.md` 10章をチェックリスト化し、画面遷移リニューアルとPhase 8で全項目を確認する
+- **受け入れテスト**: RESEARCH 9.12節と13章、および `RENEWAL_IMPLEMENTATION_PLAN2.md` 9章をチェックリスト化し、編集体験Renewal2とPhase 8で全項目を確認する
 
 ## 8. リスクと対策
 
