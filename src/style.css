@@ -3002,7 +3002,13 @@ input[type="range"] {
 
 .renewal-screen button:focus-visible,
 .renewal-editor-screen button:focus-visible,
-.renewal-viewer-screen button:focus-visible {
+.renewal-viewer-screen button:focus-visible,
+.renewal-screen input:focus-visible,
+.renewal-screen select:focus-visible,
+.renewal-editor-screen input:focus-visible,
+.renewal-editor-screen select:focus-visible,
+.renewal-viewer-screen input:focus-visible,
+.renewal-viewer-screen select:focus-visible {
   outline: 2px solid var(--accent-bright);
   outline-offset: 3px;
 }

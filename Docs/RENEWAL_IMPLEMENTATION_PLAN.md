@@ -1,7 +1,7 @@
 # 画面遷移・編集体験リニューアル 改修計画書
 
 - 作成日: 2026-07-15
-- ステータス: 実装中（Renewal Phase 5 完了）
+- ステータス: 完了（Renewal Phase 6、2026-07-16）
 - 基準資料: [RENEWAL_PLAN.md](RENEWAL_PLAN.md)
 - 関連資料: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 - 対象: モード選択、作品棚、初期設定、製作エディター、確認、フリー鑑賞、保存データ
@@ -424,7 +424,7 @@ NightSkyApp
 - 1280 × 720と390 × 844で花火棚と初期設定を確認し、両方で `scrollWidth = innerWidth`、ブラウザコンソールのwarning/errorは0件だった。
 - `rtk npm run lint`、`rtk npm run test:run`（18ファイル、62件成功）、`rtk npm run build`、変更ファイルのPrettier確認が成功した。production buildには既存の550 kB超chunk警告が残る。
 
-### Renewal Phase 3: 自動導出モデルとv3移行
+### Renewal Phase 3: 自動導出モデルとv3移行（完了: 2026-07-15）
 
 - [x] `deriveVirtualBehavior` の入力・出力契約を固定する。
 - [x] 星種、正規化位置、配置方法、玉サイズから実行値を決定する。
@@ -492,16 +492,25 @@ NightSkyApp
 - 実ブラウザで、固定作品の単発ループ、停止中に発射数が増えないこと、ループ解除後に `もう一度発射` で1発だけ増えること、同じ編集作品へ戻ること、freeの停止／再開と視点変更を確認した。1280 × 720、1024 × 768、390 × 844で `scrollWidth = innerWidth`、ブラウザコンソールのwarning/errorは0件だった。
 - `rtk npm run lint`、`rtk npm run test:run`（25ファイル、88件成功）、`rtk npm run build`、`rtk git diff --check` が成功した。production buildには既存の550 kB超chunk警告が残る。
 
-### Renewal Phase 6: 仕上げと受け入れ
+### Renewal Phase 6: 仕上げと受け入れ（完了: 2026-07-16）
 
-- [ ] 1280 × 720、1024 × 768、390 × 844で全フローを確認する。
-- [ ] キーボード、フォーカス順、スクリーンリーダー名、動きの軽減設定を確認する。
-- [ ] 高負荷作品でも長押しバルーンと編集内の簡易確認が本番粒子数に依存しないことを確認する。
-- [ ] lint、単体テスト、production buildを通す。
-- [ ] 既存6プリセット、v2保存作品、フリー鑑賞、完成打上を回帰確認する。
-- [ ] [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) とREADMEの操作説明を更新する。
+- [x] 1280 × 720、1024 × 768、390 × 844で全フローを確認する。
+- [x] キーボード、フォーカス順、スクリーンリーダー名、動きの軽減設定を確認する。
+- [x] 高負荷作品でも長押しバルーンと編集内の簡易確認が本番粒子数に依存しないことを確認する。
+- [x] lint、単体テスト、production buildを通す。
+- [x] 既存6プリセット、v2保存作品、フリー鑑賞、完成打上を回帰確認する。
+- [x] [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) とREADMEの操作説明を更新する。
 
 完了基準: 受け入れ基準を全件確認し、旧保存データを保持したままリニューアル版を通常起動できる。
+
+**完了確認**:
+
+- 390px幅で閉じた左右ドロワーを `inert` と `aria-hidden` にし、画面外の操作がTab順へ残らないようにした。開閉時、星プレビュー終了時、削除ダイアログ終了時のフォーカス復帰と、削除ダイアログ内のフォーカス循環も実ブラウザで確認した。
+- 花火棚の編集／削除、レイヤーの表示／ロック／並替／複製／削除、描画負荷メーター、仮想星数・半径などのレンジへ対象を含む読み上げ名を追加した。選択状態は `aria-pressed`、保存状態とカウントはlive regionで伝える。
+- `prefers-reduced-motion: reduce` で簡易確認アニメーションとドロワー遷移を停止する既存設定を再確認し、入力・選択コントロールにも共通の `:focus-visible` 表示を追加した。
+- `ApproximateSpreadRenderer.test.ts` に、仮想星数を12件から900,000件へ増やしても簡易確認のband数とSVG circle数が増えない回帰テストを追加した。長押しバルーンは単一プリセットの固定本数SVGであり、どちらも本番粒子生成や `FireworkSystem` を使用しない。
+- 実ブラウザで390 × 844の新規作成→編集→星プレビュー→湖面確認→編集→保存→棚→削除復元、1024 × 768の新規作成→湖面確認→未保存離脱→フリー鑑賞、1280 × 720の既存作品編集→湖面確認とフリー鑑賞を確認した。全寸法で `scrollWidth = innerWidth`、check/freeは同じ `.viewing-stage` を使い、ブラウザコンソールのwarning/errorは0件だった。
+- `rtk npm run lint`、`rtk npm run test:run`（25ファイル、89件成功）、`rtk npm run build`、`rtk npm run format:check`、`rtk git diff --check` が成功した。production buildには既存の550 kB超chunk警告が残る。
 
 ## 9. テスト計画
 
@@ -549,9 +558,9 @@ NightSkyApp
 - [x] 編集画面内の小窓で配置全体の簡易確認アニメーションを再生できる。
 - [x] 許容角度、発火タイミング、速度、重力、抗力を手動設定するUIがない。
 - [x] 星種と位置から同じ実行値を再現可能に導出する。
-- [ ] `確認` とフリー鑑賞が同じ湖面画面シェルを使う。
-- [ ] `確認` では編集中の1作品だけが単発ループ発射される。
-- [ ] checkとfreeの発射予約が同時に残らない。
+- [x] `確認` とフリー鑑賞が同じ湖面画面シェルを使う。
+- [x] `確認` では編集中の1作品だけが単発ループ発射される。
+- [x] checkとfreeの発射予約が同時に残らない。
 - [x] 花火棚と編集画面が工房を基調とし、過剰な飾り罫、柄、発光を使わない。
 - [x] v2作品を失わずv3へ移行し、v2キーが残る。
 - [x] 既存6プリセット、完成打上、フリー鑑賞が回帰しない。

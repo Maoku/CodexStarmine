@@ -43,4 +43,32 @@ describe("ApproximateSpreadRenderer", () => {
       layerCount: 0,
     });
   });
+
+  it("keeps preview work bounded when production particle counts grow", () => {
+    const lowLoad = structuredClone(CHRYSANTHEMUM_PRESET);
+    const highLoad = structuredClone(CHRYSANTHEMUM_PRESET);
+    const lowLayer = lowLoad.layers.find((layer) => layer.kind === "spherical");
+    const highLayer = highLoad.layers.find(
+      (layer) => layer.kind === "spherical",
+    );
+    if (!lowLayer || lowLayer.kind !== "spherical") {
+      throw new Error("Low-load spherical layer fixture is missing.");
+    }
+    if (!highLayer || highLayer.kind !== "spherical") {
+      throw new Error("High-load spherical layer fixture is missing.");
+    }
+    lowLayer.count = 12;
+    highLayer.count = 900_000;
+
+    const lowModel = buildApproximateSpreadModel(lowLoad);
+    const highModel = buildApproximateSpreadModel(highLoad);
+    const lowMarkup = renderApproximateSpread(lowModel, true, 0);
+    const highMarkup = renderApproximateSpread(highModel, true, 0);
+
+    expect(highModel.bands).toHaveLength(lowModel.bands.length);
+    expect(highMarkup.match(/<circle/g)).toHaveLength(
+      lowMarkup.match(/<circle/g)?.length ?? 0,
+    );
+    expect(highMarkup.length - lowMarkup.length).toBeLessThan(80);
+  });
 });

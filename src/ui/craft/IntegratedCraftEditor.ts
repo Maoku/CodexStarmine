@@ -76,6 +76,7 @@ export class IntegratedCraftEditor {
   readonly element = document.createElement("section");
   readonly #callbacks: IntegratedCraftEditorCallbacks;
   readonly #controller: CraftController;
+  readonly #mobileQuery: MediaQueryList;
   readonly #starLongPress = new StarLongPressGesture();
   #drawer?: MobileDrawer;
   #face: PlacementFace = {
@@ -103,6 +104,7 @@ export class IntegratedCraftEditor {
   ) {
     this.#controller = controller;
     this.#callbacks = callbacks;
+    this.#mobileQuery = window.matchMedia("(max-width: 900px)");
     this.element.className = "craft-workspace integrated-craft-editor";
     this.element.addEventListener("click", this.#handleClick);
     this.element.addEventListener("change", this.#handleChange);
@@ -114,6 +116,7 @@ export class IntegratedCraftEditor {
     window.addEventListener("pointerup", this.#handlePointerEnd);
     window.addEventListener("pointercancel", this.#handlePointerEnd);
     window.addEventListener("keydown", this.#handleKeyDown);
+    this.#mobileQuery.addEventListener("change", this.#handleMobileQueryChange);
     this.#unsubscribe = this.#controller.document.subscribe((snapshot) => {
       this.#snapshot = snapshot;
       this.#schedulePreview(snapshot.draft);
@@ -135,6 +138,10 @@ export class IntegratedCraftEditor {
     window.removeEventListener("pointerup", this.#handlePointerEnd);
     window.removeEventListener("pointercancel", this.#handlePointerEnd);
     window.removeEventListener("keydown", this.#handleKeyDown);
+    this.#mobileQuery.removeEventListener(
+      "change",
+      this.#handleMobileQueryChange,
+    );
     this.element.remove();
   }
 
@@ -186,7 +193,7 @@ export class IntegratedCraftEditor {
         <section class="craft-card performance-card ${warningClass}">
           <header><span>描画負荷</span><strong>${warningClass === "is-good" ? "● 良好" : warningClass === "is-warning" ? "▲ 注意" : "× 超過"}</strong></header>
           <p><span>最大粒子</span><b>${diagnostic.estimatedCost.maximumParticles.toLocaleString()} / 6,000</b></p>
-          <meter min="0" max="6000" low="2000" high="5500" optimum="1200" value="${diagnostic.estimatedCost.maximumParticles}"></meter>
+          <meter min="0" max="6000" low="2000" high="5500" optimum="1200" value="${diagnostic.estimatedCost.maximumParticles}" aria-label="描画負荷: 最大粒子 ${diagnostic.estimatedCost.maximumParticles.toLocaleString()} / 6,000"></meter>
           ${warningClass === "is-good" ? "" : `<button type="button" data-action="simplify">自動簡略化</button>`}
         </section>
         <section class="craft-card inspector-card">
@@ -210,10 +217,11 @@ export class IntegratedCraftEditor {
           <label><span>配置面 ${this.#face.rotationDegrees}°</span><input name="surface-rotation" type="range" min="0" max="345" step="15" value="${this.#face.rotationDegrees}" /></label>
           <button type="button" data-action="rotate-surface" data-step="15" aria-label="配置面を右へ15度回転">↷</button>
         </div>
-        <span class="editor-save-state">${snapshot.dirty ? "未保存の変更あり" : "保存済み"}</span>
+        <span class="editor-save-state" role="status" aria-live="polite">${snapshot.dirty ? "未保存の変更あり" : "保存済み"}</span>
         <button type="button" data-action="save" class="secondary-save">保存して棚へ</button>
         <button type="button" data-action="check" class="confirm-craft">湖面で確認</button>
       </footer>`;
+    this.#syncMobileDrawerAccessibility();
   }
 
   #renderInspector(
@@ -231,21 +239,21 @@ export class IntegratedCraftEditor {
     if (selectedLayer) {
       let specific = "";
       if (selectedLayer.kind === "spherical") {
-        specific = `<label><span>仮想星数 <output>${selectedLayer.count}</output></span><input name="layer-count" type="range" min="12" max="900" value="${selectedLayer.count}" /></label>
-          <label><span>玉内の半径 <output>${Math.round(selectedLayer.radius * 100)}%</output></span><input name="layer-radius" type="range" min="20" max="100" value="${Math.round(selectedLayer.radius * 100)}" /></label>
+        specific = `<label><span>仮想星数 <output>${selectedLayer.count}</output></span><input name="layer-count" type="range" min="12" max="900" value="${selectedLayer.count}" aria-label="仮想星数" aria-valuetext="${selectedLayer.count}個" /></label>
+          <label><span>玉内の半径 <output>${Math.round(selectedLayer.radius * 100)}%</output></span><input name="layer-radius" type="range" min="20" max="100" value="${Math.round(selectedLayer.radius * 100)}" aria-label="玉内の半径" aria-valuetext="${Math.round(selectedLayer.radius * 100)}パーセント" /></label>
           <label><span>空間配色</span><select name="spatial-color"><option value="layer" ${selectedLayer.coloring.mode === "layer" ? "selected" : ""}>レイヤー一括</option><option value="alternating" ${selectedLayer.coloring.mode === "alternating" ? "selected" : ""}>交互色</option><option value="latitude" ${selectedLayer.coloring.mode === "latitude" ? "selected" : ""}>緯度帯</option><option value="longitude" ${selectedLayer.coloring.mode === "longitude" ? "selected" : ""}>経度区画</option></select></label>`;
       } else if (selectedLayer.kind === "pattern") {
         specific = `<p class="inspector-note">型物も同じワークベンチ上の点群として編集します。円形・ハート配置後に各点を移動できます。</p>`;
       } else if (selectedLayer.kind === "child") {
-        specific = `<label><span>子花数 <output>${selectedLayer.count}</output></span><input name="child-count" type="range" min="4" max="48" value="${selectedLayer.count}" /></label>`;
+        specific = `<label><span>子花数 <output>${selectedLayer.count}</output></span><input name="child-count" type="range" min="4" max="48" value="${selectedLayer.count}" aria-label="子花数" aria-valuetext="${selectedLayer.count}個" /></label>`;
       } else {
-        specific = `<label><span>枝数 <output>${selectedLayer.branchCount}</output></span><input name="branch-count" type="range" min="5" max="20" value="${selectedLayer.branchCount}" /></label>`;
+        specific = `<label><span>枝数 <output>${selectedLayer.branchCount}</output></span><input name="branch-count" type="range" min="5" max="20" value="${selectedLayer.branchCount}" aria-label="枝数" aria-valuetext="${selectedLayer.branchCount}本" /></label>`;
       }
       layerFields = `<div class="inspector-divider"></div><div class="inspector-fields">
         <label><span>レイヤー名</span><input name="layer-name" type="text" maxlength="24" value="${escapeHTML(selectedLayer.name)}" /></label>
         <label><span>既定の仮想星</span><select name="layer-star">${optionsFor(selectedLayer.defaultStarId)}</select></label>
         ${specific}
-        <div class="inspector-actions"><button type="button" data-action="duplicate-layer">複製</button><button type="button" data-action="delete-layer">削除</button></div>
+        <div class="inspector-actions"><button type="button" data-action="duplicate-layer" aria-label="${escapeHTML(selectedLayer.name)}を複製">複製</button><button type="button" data-action="delete-layer" aria-label="${escapeHTML(selectedLayer.name)}を削除">削除</button></div>
       </div>`;
     }
     return `<div class="inspector-fields">
@@ -293,9 +301,20 @@ export class IntegratedCraftEditor {
       const drawer = button.dataset.drawer as MobileDrawer;
       this.#drawer = this.#drawer === drawer ? undefined : drawer;
       this.#render();
+      this.#focusAfterRender(
+        this.#drawer
+          ? `.craft-rail--${this.#drawer === "layers" ? "left" : "right"} .drawer-close`
+          : `[data-action="toggle-drawer"][data-drawer="${drawer}"]`,
+      );
     } else if (action === "close-drawer") {
+      const drawer = this.#drawer;
       this.#drawer = undefined;
       this.#render();
+      if (drawer) {
+        this.#focusAfterRender(
+          `[data-action="toggle-drawer"][data-drawer="${drawer}"]`,
+        );
+      }
     } else if (action === "select-layer" && layerId) {
       this.#selectedPointIndex = undefined;
       this.#controller.document.selectLayer(layerId);
@@ -571,10 +590,20 @@ export class IntegratedCraftEditor {
       if (event.shiftKey) this.#controller.document.redo();
       else this.#controller.document.undo();
     } else if (event.key === "Escape") {
-      if (this.#starPreviewId || this.#drawer) {
+      if (this.#starPreviewId) {
+        const starId = this.#starPreviewId;
         this.#starPreviewId = undefined;
+        this.#render();
+        this.#focusAfterRender(
+          `[data-action="assign-star"][data-star-id="${CSS.escape(starId)}"]`,
+        );
+      } else if (this.#drawer) {
+        const drawer = this.#drawer;
         this.#drawer = undefined;
         this.#render();
+        this.#focusAfterRender(
+          `[data-action="toggle-drawer"][data-drawer="${drawer}"]`,
+        );
       }
     } else if (
       event.key === "Delete" &&
@@ -627,6 +656,38 @@ export class IntegratedCraftEditor {
         )
         ?.focus();
     });
+  }
+
+  readonly #handleMobileQueryChange = (): void => {
+    if (!this.#mobileQuery.matches) this.#drawer = undefined;
+    this.#syncMobileDrawerAccessibility();
+  };
+
+  #syncMobileDrawerAccessibility(): void {
+    const mobile = this.#mobileQuery.matches;
+    const rails = [
+      {
+        drawer: "layers" as const,
+        element: this.element.querySelector<HTMLElement>(".craft-rail--left"),
+      },
+      {
+        drawer: "inspector" as const,
+        element: this.element.querySelector<HTMLElement>(".craft-rail--right"),
+      },
+    ];
+    rails.forEach(({ drawer, element }) => {
+      if (!element) return;
+      const concealed = mobile && this.#drawer !== drawer;
+      element.inert = concealed;
+      if (concealed) element.setAttribute("aria-hidden", "true");
+      else element.removeAttribute("aria-hidden");
+    });
+  }
+
+  #focusAfterRender(selector: string): void {
+    queueMicrotask(() =>
+      this.element.querySelector<HTMLElement>(selector)?.focus(),
+    );
   }
 
   #cancelStarPress(): void {

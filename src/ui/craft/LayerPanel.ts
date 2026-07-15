@@ -7,11 +7,12 @@ function renderLayerRow(
   index: number,
   selectedLayerId: string | undefined,
 ): string {
+  const layerName = escapeHTML(layer.name);
   return `<article class="layer-row ${layer.id === selectedLayerId ? "is-selected" : ""}" data-layer-id="${layer.id}">
-    <button type="button" data-action="toggle-layer" aria-label="${layer.visible ? "非表示にする" : "表示する"}">${layer.visible ? "◉" : "○"}</button>
-    <button type="button" data-action="select-layer" aria-pressed="${layer.id === selectedLayerId}"><i style="--layer:${layerColor(design, layer)}"></i><span>${escapeHTML(layer.name)}</span><small>${layerKindLabel(layer)}</small></button>
-    <button type="button" data-action="toggle-lock" aria-label="${layer.locked ? "ロック解除" : "ロック"}">${layer.locked ? "▣" : "□"}</button>
-    <div class="layer-row__move"><button type="button" data-action="move-layer-up" aria-label="上へ移動" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-action="move-layer-down" aria-label="下へ移動" ${index === design.layers.length - 1 ? "disabled" : ""}>↓</button></div>
+    <button type="button" data-action="toggle-layer" aria-label="${layerName}を${layer.visible ? "非表示にする" : "表示する"}">${layer.visible ? "◉" : "○"}</button>
+    <button type="button" data-action="select-layer" aria-pressed="${layer.id === selectedLayerId}"><i style="--layer:${layerColor(design, layer)}"></i><span>${layerName}</span><small>${layerKindLabel(layer)}</small></button>
+    <button type="button" data-action="toggle-lock" aria-label="${layerName}の${layer.locked ? "ロックを解除" : "ロックを有効化"}">${layer.locked ? "▣" : "□"}</button>
+    <div class="layer-row__move"><button type="button" data-action="move-layer-up" aria-label="${layerName}を上へ移動" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-action="move-layer-down" aria-label="${layerName}を下へ移動" ${index === design.layers.length - 1 ? "disabled" : ""}>↓</button></div>
   </article>`;
 }
 

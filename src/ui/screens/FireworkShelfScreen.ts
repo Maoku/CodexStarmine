@@ -193,6 +193,11 @@ export class FireworkShelfScreen {
         this.#pendingDeleteId = undefined;
         this.#renderResults();
         this.#renderDeleteDialog();
+        queueMicrotask(() =>
+          this.element
+            .querySelector<HTMLButtonElement>("[data-action='create']")
+            ?.focus(),
+        );
       }
     }
   };
@@ -212,9 +217,28 @@ export class FireworkShelfScreen {
   };
 
   readonly #handleKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === "Escape" && this.#pendingDeleteId) {
+    if (!this.#pendingDeleteId) return;
+    if (event.key === "Escape") {
       event.preventDefault();
       this.#closeDeleteDialog();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const dialog = this.element.querySelector<HTMLElement>(
+      ".shelf-delete-dialog",
+    );
+    const focusable = dialog?.querySelectorAll<HTMLButtonElement>(
+      "button:not([disabled])",
+    );
+    if (!focusable || focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
     }
   };
 
@@ -265,8 +289,8 @@ export class FireworkShelfScreen {
         </span>
       </button>
       <div class="shelf-design-card__actions">
-        <button class="primary-action" type="button" data-action="edit" data-design-id="${escapeHTML(design.id)}">編集</button>
-        <button class="shelf-delete-action" type="button" data-action="delete" data-design-id="${escapeHTML(design.id)}">削除</button>
+        <button class="primary-action" type="button" data-action="edit" data-design-id="${escapeHTML(design.id)}" aria-label="${escapeHTML(design.name)}を編集">編集</button>
+        <button class="shelf-delete-action" type="button" data-action="delete" data-design-id="${escapeHTML(design.id)}" aria-label="${escapeHTML(design.name)}を削除">削除</button>
       </div>
     </article>`;
   }
@@ -276,13 +300,24 @@ export class FireworkShelfScreen {
       "[data-delete-dialog-host]",
     );
     if (!host) return;
+    const background = this.element.querySelectorAll<HTMLElement>(
+      ":scope > header, :scope > main",
+    );
     const design = this.#designs.find(
       (candidate) => candidate.id === this.#pendingDeleteId,
     );
     if (!design) {
       host.replaceChildren();
+      background.forEach((element) => {
+        element.inert = false;
+        element.removeAttribute("aria-hidden");
+      });
       return;
     }
+    background.forEach((element) => {
+      element.inert = true;
+      element.setAttribute("aria-hidden", "true");
+    });
     host.innerHTML = `<div class="shelf-dialog-backdrop">
       <section class="shelf-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" aria-describedby="delete-dialog-detail">
         <p class="renewal-kicker">REMOVE FROM SHELF</p>
