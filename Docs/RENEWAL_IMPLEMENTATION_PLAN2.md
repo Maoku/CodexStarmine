@@ -1,7 +1,7 @@
 # 編集体験リニューアル2 改修計画書
 
 - 作成日: 2026-07-16
-- ステータス: 計画策定済み・未着手
+- ステータス: Renewal2 Phase 0 完了・Phase 1 着手前
 - 基準資料: [RENEWAL_PLAN2.md](RENEWAL_PLAN2.md)
 - 先行計画: [RENEWAL_IMPLEMENTATION_PLAN.md](RENEWAL_IMPLEMENTATION_PLAN.md)
 - 関連資料: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RESEARCH.md](RESEARCH.md)
@@ -608,3 +608,15 @@ rtk npm run test:e2e
 - 先行リニューアルの木製工房、暗い実用パネル、控えめな金色の方向性を継承する。
 
 再生成用プロンプトは [PROMPT.md](images/renewal2/PROMPT.md) に保存する。
+
+## 13. 実装記録
+
+### Renewal2 Phase 0
+
+- 完了日: 2026-07-16
+- `RENEWAL_PLAN2.md` の16要求を `RENEWAL2_ACCEPTANCE_CONTRACTS` と本書9章へ対応付けた。
+- 現行v3、ハート型物、手動override、芯、子花をv3 fixtureとして固定し、全件が `isFireworkDesignV3()` を通ることを確認した。
+- `既定 / 型物 / 手動` の個別点編集権限と、タイトル／確認／フリー鑑賞の背景runtime所有画面を契約化した。
+- 現行画面を `images/renewal2/baseline/` の1440×900、1280×720、390×844で記録した。
+- 現時点で `test:e2e` スクリプトは未導入。ブラウザ検証は `rtk npm run dev -- --host 127.0.0.1` で起動し、Codex in-app browserで実施する。自動回帰は `npm run test:run`、`npm run lint`、`npm run build` を必須とする。
+- 基準結果: 25 test files / 89 tests成功、lint成功、build成功。1280×720では簡易確認が右ペイン下へ押し出され、390×844では3ペインが縮小されたままになる現行差分を確認した。
