@@ -25,7 +25,7 @@ import {
 } from "./SliceGeometry";
 import { renderShellSliceNavigator } from "./ShellSliceNavigator";
 
-export type PlacementTemplate = ManualPlacementKind | "manual";
+export type PlacementTemplate = ManualPlacementKind | "image" | "manual";
 export type TemplateApplyMode = "append" | "replace";
 
 interface WorkbenchPoint {
@@ -73,8 +73,12 @@ export function createPlacementTemplatePoints(
 function renderManualRecipeControls(
   kind: PlacementTemplate,
   settings: ManualPlacementSettings,
+  imageTargetCount: number,
 ): string {
   if (kind === "manual") return "";
+  if (kind === "image") {
+    return `<div class="manual-recipe-controls image-placement-controls"><label><span>目標点数</span><input name="image-target-count" type="number" min="8" max="240" value="${imageTargetCount}" /></label><span>画像を選び直すと、この点数を上限に再生成します。</span></div>`;
+  }
   const count = `<label><span>個数</span><input name="manual-count" type="number" min="2" max="240" value="${settings.count}" /></label>`;
   const rotation = `<label><span>回転</span><input name="manual-rotation" type="number" min="-360" max="360" value="${settings.rotationDegrees}" /></label>`;
   let parameters = "";
@@ -232,6 +236,8 @@ export function renderIntegratedPlacementWorkbench(
   templateApplyMode: TemplateApplyMode = "replace",
   sliceAnnouncement = "",
   manualPlacementSettings: ManualPlacementSettings = DEFAULT_MANUAL_PLACEMENT_SETTINGS,
+  imageTargetCount = 96,
+  imageImporting = false,
 ): string {
   const pointEditingAllowed = selectedIntent?.authoringMode === "manual";
   const points = workbenchPoints(
@@ -268,12 +274,13 @@ export function renderIntegratedPlacementWorkbench(
   const sliceRadius = sectionRadius(section) * SPHERE_RADIUS_PX;
   const patternEditing = selectedIntent?.authoringMode === "pattern";
   const toolControls = pointEditingAllowed
-    ? (["manual", "circle", "line", "arc", "grid"] as PlacementTemplate[])
+    ? (["manual", "circle", "line", "arc", "grid"] as const)
         .map(
           (template) =>
             `<button type="button" data-action="placement-template" data-template="${template}" class="${placementTemplate === template ? "is-active" : ""}" aria-pressed="${placementTemplate === template}">${({ manual: "1点", circle: "円周", line: "直線", arc: "円弧", grid: "格子" } as const)[template]}</button>`,
         )
-        .join("")
+        .join("") +
+      `<button type="button" data-action="import-image-placement" data-template="image" class="${placementTemplate === "image" ? "is-active" : ""}" aria-pressed="${placementTemplate === "image"}" aria-label="画像から仮想星を生成" ${imageImporting ? "disabled" : ""}>${imageImporting ? "解析中…" : "画像から生成"}</button>`
     : patternEditing
       ? PATTERN_TEMPLATES.map(
           (template: PatternTemplate) =>
@@ -288,7 +295,7 @@ export function renderIntegratedPlacementWorkbench(
     <div class="placement-tool-row" aria-label="便利な配置">
       <span>${patternEditing ? "形状" : "便利な配置"}</span>
       ${toolControls}
-      ${pointEditingAllowed ? renderManualRecipeControls(placementTemplate, manualPlacementSettings) : ""}
+      ${pointEditingAllowed ? renderManualRecipeControls(placementTemplate, manualPlacementSettings, imageTargetCount) : ""}
       ${pointEditingAllowed ? `<label class="template-apply-mode"><span>生成方法</span><select name="template-apply-mode"><option value="replace" ${templateApplyMode === "replace" ? "selected" : ""}>置換</option><option value="append" ${templateApplyMode === "append" ? "selected" : ""}>追加</option></select></label>` : ""}
       ${pointEditingAllowed ? `<button type="button" data-action="delete-point" ${selectedPointIndex === undefined ? "disabled" : ""}>選択点を削除</button>` : ""}
     </div>
@@ -306,7 +313,7 @@ export function renderIntegratedPlacementWorkbench(
       </svg>
       ${renderShellSliceNavigator(section)}
       <p class="slice-announcement" aria-live="polite">${escapeHTML(sliceAnnouncement)}</p>
-      <p>${pointEditingAllowed ? (placementTemplate === "manual" ? "断面円を押して1点追加。現在断面の点だけ移動できます。" : "現在断面へ等間隔配置し、その後は各点を編集できます。") : patternEditing ? "形状は上のボタン、サイズ・密度・回転は右のパラメーターで調整します。" : "生成点は参照表示です。右のパラメーターで調整してください。"}</p>
+      <p>${pointEditingAllowed ? (placementTemplate === "manual" ? "断面円を押して1点追加。現在断面の点だけ移動できます。" : placementTemplate === "image" ? "画像の被写体を現在断面の編集可能な仮想星へ変換します。" : "現在断面へ等間隔配置し、その後は各点を編集できます。") : patternEditing ? "形状は上のボタン、サイズ・密度・回転は右のパラメーターで調整します。" : "生成点は参照表示です。右のパラメーターで調整してください。"}</p>
     </div>
   </section>`;
 }

@@ -1,7 +1,7 @@
 # 画像から仮想星配置 機能追加計画書
 
 - 作成日: 2026-07-16
-- ステータス: 計画
+- ステータス: 実装済み（2026-07-16）
 - 基準資料: [IMAGE_TO_STARMINE.md](IMAGE_TO_STARMINE.md)
 - 関連資料: [RENEWAL_IMPLEMENTATION_PLAN3.md](RENEWAL_IMPLEMENTATION_PLAN3.md)、[CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)
 - 対象: 玉内配置ワークベンチ（手動レイヤー編集時のみ）
@@ -182,4 +182,14 @@ File (ダイアログで選択)
 
 ## 9. 実装記録
 
-（実装時に追記する）
+2026-07-16にPhase 1〜4を実装した。
+
+- `ImagePlacementRecipe.ts` に、外周中央値による背景推定、透過画像対応、半径0.94内への座標変換、決定的な距離制約サンプリング、最大4色のメディアンカット、既存星との近色照合、派生星生成を実装した。
+- `imagePixelLoader.ts` に20MB上限、画像形式ガード、最長辺128pxへの縮小デコード、Canvas 2Dからの画素取得を実装した。
+- `IntegratedPlacementWorkbench.ts` に手動レイヤー限定の「画像から生成」、目標点数、処理中状態、アクセシビリティ属性を追加した。
+- `IntegratedCraftEditor.ts` に隠しfile input、エラー通知、多重起動防止、置換／追加モードを尊重した画像適用フローを追加した。
+- `ImagePlacementApplication.ts` で点群と派生星の追加を同一 `updateIntent("画像から配置")` にまとめ、単一Undoと未参照派生星の除去を実装した。
+- `Docs/reference/latte.png`（400×400透過PNG）を実ブラウザのローダーへ渡した結果、128×128へ縮小し、既定設定で96点、最大半径0.8534、4色を生成した。抽出は再実行時も完全一致した。
+- 同じ実サンプルをエディターへ適用し、成功通知「画像から96点を配置しました」、Undoで0点、Redoで96点、schema v4維持、画像本体とファイル名の非保存を確認した。
+- 390×844のモバイル表示でレイヤードロワーから手動レイヤーを選択し、「画像から生成」ボタンがワークベンチ内に表示・操作可能であることを確認した。ブラウザの警告・エラーログは0件だった。
+- 着手前は lint / build / 42ファイル149テストが成功。実装後も `rtk npm run lint`、`rtk npm run build`、`rtk npm run test:run` が成功し、テストは43ファイル155件となった。

@@ -107,9 +107,10 @@ describe("IntegratedPlacementWorkbench", () => {
     expect(markup).toContain('data-action="select-pattern-template"');
     expect(markup).not.toContain('data-action="delete-point"');
     expect(markup).not.toContain('data-action="placement-template"');
+    expect(markup).not.toContain('data-action="import-image-placement"');
   });
 
-  it("renders circle, line, arc, and grid assistance for manual layers", () => {
+  it("renders manual assistance and image import only for manual layers", () => {
     const intent = migrateV3ToV4(ensureFireworkDesignV3(CHRYSANTHEMUM_PRESET));
     delete intent.legacyIntent;
     intent.layers = [
@@ -140,10 +141,30 @@ describe("IntegratedPlacementWorkbench", () => {
     ["円周", "直線", "円弧", "格子"].forEach((label) =>
       expect(markup).toContain(`>${label}</button>`),
     );
+    expect(markup).toContain('data-action="import-image-placement"');
+    expect(markup).toContain('aria-label="画像から仮想星を生成"');
     expect(markup).toContain('name="manual-rows"');
     expect(markup).toContain('name="manual-columns"');
     expect(markup).toContain('name="manual-spacing"');
     expect(markup).toContain('data-action="apply-manual-recipe"');
     expect(markup).toContain('<option value="append" selected>追加</option>');
+
+    const imageMarkup = renderIntegratedPlacementWorkbench(
+      runtime,
+      intent,
+      runtime.layers[0],
+      intent.layers[0],
+      { plane: "xy", ratio: 0.5 },
+      "image",
+      undefined,
+      "replace",
+      "",
+      undefined,
+      128,
+    );
+    expect(imageMarkup).toContain('name="image-target-count"');
+    expect(imageMarkup).toContain('value="128"');
+    expect(imageMarkup).toContain('data-template="image" class="is-active"');
+    expect(imageMarkup).not.toContain('data-action="apply-manual-recipe"');
   });
 });

@@ -20,6 +20,17 @@ import {
   type PlacementTemplate,
   type TemplateApplyMode,
 } from "./IntegratedPlacementWorkbench";
+import {
+  applyImagePlacementToDraft,
+  type ApplyImagePlacementResult,
+} from "./ImagePlacementApplication";
+import {
+  DEFAULT_IMAGE_PLACEMENT_SETTINGS,
+  extractImagePlacement,
+  IMAGE_PLACEMENT_MAXIMUM_POINTS,
+  IMAGE_PLACEMENT_MINIMUM_POINTS,
+} from "./ImagePlacementRecipe";
+import { ImagePixelLoadError, loadImagePixels } from "./imagePixelLoader";
 import { renderLayerPanel } from "./LayerPanel";
 import {
   createManualPlacementPoints,
@@ -53,6 +64,10 @@ export interface IntegratedCraftEditorCallbacks {
   onToast: (message: string) => void;
 }
 
+export interface IntegratedCraftEditorDependencies {
+  loadImagePixels: typeof loadImagePixels;
+}
+
 interface PointDrag {
   index: number;
   layerId: string;
@@ -76,9 +91,12 @@ export class IntegratedCraftEditor {
   readonly element = document.createElement("section");
   readonly #callbacks: IntegratedCraftEditorCallbacks;
   readonly #controller: CraftController;
+  readonly #loadImagePixels: typeof loadImagePixels;
   readonly #mobileQuery: MediaQueryList;
   readonly #starLongPress = new StarLongPressGesture();
   #drawer?: MobileDrawer;
+  #imageImporting = false;
+  #imageTargetCount = DEFAULT_IMAGE_PLACEMENT_SETTINGS.targetCount;
   #section: SectionRef = { plane: "xy", ratio: 0.5 };
   #placementTemplate: PlacementTemplate = "manual";
   #manualPlacementSettings: ManualPlacementSettings = {
@@ -104,9 +122,11 @@ export class IntegratedCraftEditor {
   constructor(
     controller: CraftController,
     callbacks: IntegratedCraftEditorCallbacks,
+    dependencies: Partial<IntegratedCraftEditorDependencies> = {},
   ) {
     this.#controller = controller;
     this.#callbacks = callbacks;
+    this.#loadImagePixels = dependencies.loadImagePixels ?? loadImagePixels;
     this.#mobileQuery = window.matchMedia("(max-width: 900px)");
     this.element.className = "craft-workspace integrated-craft-editor";
     this.element.addEventListener("click", this.#handleClick);
@@ -203,6 +223,8 @@ export class IntegratedCraftEditor {
           this.#templateApplyMode,
           this.#sliceAnnouncement,
           this.#manualPlacementSettings,
+          this.#imageTargetCount,
+          this.#imageImporting,
         )}
       </main>
 
@@ -240,7 +262,8 @@ export class IntegratedCraftEditor {
         design,
         this.#starPreviewId,
         this.#starPreviewPosition,
-      )}`;
+      )}
+      <input name="image-placement-file" type="file" accept="image/*" hidden />`;
     this.#syncMobileDrawerAccessibility();
   }
 
@@ -410,6 +433,24 @@ export class IntegratedCraftEditor {
       this.#placementTemplate = template;
       this.#selectedPointIndex = undefined;
       this.#render();
+    } else if (action === "import-image-placement") {
+      const layer = this.#selectedIntentLayer();
+      this.#placementTemplate = "image";
+      this.#selectedPointIndex = undefined;
+      if (layer?.authoringMode !== "manual") {
+        this.#callbacks.onToast("手動レイヤーを選んでください");
+        return;
+      }
+      if (layer.locked) {
+        this.#callbacks.onToast("レイヤーのロックを解除してください");
+        this.#render();
+        return;
+      }
+      if (this.#imageImporting) return;
+      this.#render();
+      this.element
+        .querySelector<HTMLInputElement>("input[name='image-placement-file']")
+        ?.click();
     } else if (action === "apply-manual-recipe") {
       this.#applyManualRecipe();
     } else if (action === "delete-point") {
@@ -439,7 +480,22 @@ export class IntegratedCraftEditor {
   readonly #handleChange = (event: Event): void => {
     const input = event.target as HTMLInputElement | HTMLSelectElement;
     if (!this.#snapshot) return;
-    if (input.name === "template-apply-mode") {
+    if (input.name === "image-placement-file") {
+      const file = (input as HTMLInputElement).files?.[0];
+      (input as HTMLInputElement).value = "";
+      if (file) void this.#applyImagePlacement(file);
+    } else if (input.name === "image-target-count") {
+      const value = Number(input.value);
+      if (Number.isFinite(value)) {
+        this.#imageTargetCount = Math.round(
+          Math.min(
+            Math.max(value, IMAGE_PLACEMENT_MINIMUM_POINTS),
+            IMAGE_PLACEMENT_MAXIMUM_POINTS,
+          ),
+        );
+      }
+      this.#render();
+    } else if (input.name === "template-apply-mode") {
       this.#templateApplyMode = input.value as TemplateApplyMode;
       this.#render();
     } else if (input.name.startsWith("manual-")) {
@@ -991,7 +1047,7 @@ export class IntegratedCraftEditor {
         this.#changeManualPlacementSetting(input.name, input.value),
       );
     const template = this.#placementTemplate;
-    if (template === "manual") return;
+    if (template === "image" || template === "manual") return;
     const layerId = this.#snapshot?.selection.layerId;
     if (!layerId) return;
     const selectedStarId = this.#snapshot?.selection.starDefinitionId;
@@ -1026,6 +1082,61 @@ export class IntegratedCraftEditor {
         ? `選択中の切断面へ${label}を${this.#templateApplyMode === "append" ? "追加" : "配置"}しました`
         : "手動レイヤーを選んでください",
     );
+  }
+
+  async #applyImagePlacement(file: File): Promise<void> {
+    if (this.#imageImporting) return;
+    const layerId = this.#snapshot?.selection.layerId;
+    const layer = this.#selectedIntentLayer();
+    if (!layerId || layer?.authoringMode !== "manual") {
+      this.#callbacks.onToast("手動レイヤーを選んでください");
+      return;
+    }
+    if (layer.locked) {
+      this.#callbacks.onToast("レイヤーのロックを解除してください");
+      return;
+    }
+
+    const section = { ...this.#section };
+    this.#imageImporting = true;
+    this.#render();
+    try {
+      const pixels = await this.#loadImagePixels(file);
+      const placement = extractImagePlacement(pixels, {
+        targetCount: this.#imageTargetCount,
+      });
+      if (placement.points.length < IMAGE_PLACEMENT_MINIMUM_POINTS) {
+        this.#callbacks.onToast("画像から被写体を検出できませんでした");
+        return;
+      }
+      let result: ApplyImagePlacementResult | undefined;
+      this.#controller.document.updateIntent("画像から配置", (draft) => {
+        result = applyImagePlacementToDraft(draft, placement, {
+          applyMode: this.#templateApplyMode,
+          layerId,
+          section,
+        });
+      });
+      if (result?.status === "locked") {
+        this.#callbacks.onToast("レイヤーのロックを解除してください");
+      } else if (result?.status !== "applied") {
+        this.#callbacks.onToast("手動レイヤーを選んでください");
+      } else {
+        this.#selectedPointIndex = undefined;
+        this.#callbacks.onToast(
+          `画像から${result.appliedPointCount}点を配置しました`,
+        );
+      }
+    } catch (error) {
+      this.#callbacks.onToast(
+        error instanceof ImagePixelLoadError
+          ? error.message
+          : "画像の読み込みに失敗しました",
+      );
+    } finally {
+      this.#imageImporting = false;
+      this.#render();
+    }
   }
 
   #changeManualPlacementSetting(name: string, value: string): void {

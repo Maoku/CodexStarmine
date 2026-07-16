@@ -394,6 +394,12 @@
   color: #e0c49f;
 }
 
+.image-placement-controls > span {
+  align-self: center;
+  color: #6f777c;
+  font-size: 0.44rem;
+}
+
 .workbench-canvas-wrap {
   position: relative;
   min-height: 0;
