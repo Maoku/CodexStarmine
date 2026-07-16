@@ -4,6 +4,9 @@ import { CHRYSANTHEMUM_PRESET, HEART_PRESET, PEONY_PRESET } from "../../data";
 import {
   buildShelfThumbnailModel,
   filterAndSortShelfDesigns,
+  formatShelfUpdatedAt,
+  isBuiltInShelfPreset,
+  renderShelfImportConflictDialog,
 } from "./FireworkShelfScreen";
 
 describe("FireworkShelfScreen models", () => {
@@ -43,5 +46,25 @@ describe("FireworkShelfScreen models", () => {
     expect(heart.kind).toBe("pattern");
     expect(heart.rings.length).toBeGreaterThan(0);
     expect(heart.rings.length).toBeLessThanOrEqual(3);
+  });
+
+  it("distinguishes immutable built-in presets from saved works", () => {
+    expect(isBuiltInShelfPreset(CHRYSANTHEMUM_PRESET)).toBe(true);
+    expect(isBuiltInShelfPreset(designs[0])).toBe(false);
+  });
+
+  it("formats update timestamps in the requested local time zone", () => {
+    expect(
+      formatShelfUpdatedAt("2026-07-17T03:00:00.000Z", "ja-JP", "Asia/Tokyo"),
+    ).toContain("12:00");
+    expect(formatShelfUpdatedAt("broken", "ja-JP")).toBe("更新日時不明");
+  });
+
+  it("asks before replacing colliding firework IDs", () => {
+    const dialog = renderShelfImportConflictDialog(3);
+    expect(dialog).toContain("3件の花火玉が重複しています。置き換えますか？");
+    expect(dialog).toContain('data-action="cancel-dialog"');
+    expect(dialog).toContain('data-action="confirm-import-skip"');
+    expect(dialog).toContain('data-action="confirm-import-replace"');
   });
 });

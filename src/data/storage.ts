@@ -29,10 +29,41 @@ export const STORAGE_KEY_V1 = "codex-starmine.designs.v1";
 export const STORAGE_KEY_V2 = "codex-starmine.designs.v2";
 export const STORAGE_KEY_V3 = "codex-starmine.designs.v3";
 export const STORAGE_KEY_V4 = "codex-starmine.designs.v4";
+export const STORAGE_METADATA_KEY_V1 = "codex-starmine.designs.metadata.v1";
+export const FIREWORK_LIBRARY_EXPORT_FORMAT = "codex-starmine.firework-library";
 
 export interface StorageLike {
   getItem: (key: string) => string | null;
+  removeItem?: (key: string) => void;
   setItem: (key: string, value: string) => void;
+}
+
+export interface DesignLibraryEntry {
+  readonly design: FireworkDesignV3;
+  readonly updatedAt: string;
+}
+
+export interface FireworkLibraryExportEntry {
+  readonly design: FireworkDesignV4;
+  readonly updatedAt: string;
+}
+
+export interface FireworkLibraryExportV1 {
+  readonly exportedAt: string;
+  readonly fireworks: readonly FireworkLibraryExportEntry[];
+  readonly format: typeof FIREWORK_LIBRARY_EXPORT_FORMAT;
+  readonly version: 1;
+}
+
+export interface FireworkLibraryImportResult {
+  readonly added: number;
+  readonly replaced: number;
+  readonly skipped: number;
+}
+
+export interface FireworkLibraryImportPreview {
+  readonly added: number;
+  readonly conflicts: number;
 }
 
 interface StoredLibraryV1 {
@@ -56,6 +87,11 @@ export interface StoredLibraryV4 {
   readonly version: 4;
 }
 
+interface StoredDesignMetadataV1 {
+  readonly updatedAtById: Readonly<Record<string, string>>;
+  readonly version: 1;
+}
+
 function clone<T>(value: T): T {
   return structuredClone(value);
 }
@@ -65,6 +101,55 @@ function defaultId(): string {
     globalThis.crypto?.randomUUID?.() ??
     `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
   );
+}
+
+function defaultNow(): Date {
+  return new Date();
+}
+
+function isValidUpdatedAt(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+export function parseFireworkLibraryExport(
+  raw: string,
+): FireworkLibraryExportV1 {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error("JSONファイルを読み取れませんでした。");
+  }
+  if (!value || typeof value !== "object") {
+    throw new Error("花火玉ライブラリの形式ではありません。");
+  }
+  const payload = value as Partial<FireworkLibraryExportV1>;
+  if (
+    payload.format !== FIREWORK_LIBRARY_EXPORT_FORMAT ||
+    payload.version !== 1 ||
+    !isValidUpdatedAt(payload.exportedAt) ||
+    !Array.isArray(payload.fireworks)
+  ) {
+    throw new Error("対応していない花火玉ライブラリ形式です。");
+  }
+
+  const ids = new Set<string>();
+  for (const entry of payload.fireworks) {
+    if (
+      !entry ||
+      typeof entry !== "object" ||
+      !isValidUpdatedAt(entry.updatedAt) ||
+      !isFireworkDesignV4(entry.design) ||
+      !entry.design.id.startsWith("custom-")
+    ) {
+      throw new Error("花火玉データに破損または未対応の項目があります。");
+    }
+    if (ids.has(entry.design.id)) {
+      throw new Error("同じIDの花火玉がファイル内で重複しています。");
+    }
+    ids.add(entry.design.id);
+  }
+  return clone(payload as FireworkLibraryExportV1);
 }
 
 function plansMatchV2(
@@ -93,13 +178,20 @@ function plansMatchV3(
  */
 export class DesignRepository {
   readonly #idFactory: () => string;
+  readonly #now: () => Date;
   readonly #storage?: StorageLike;
   #fallback: FireworkDesignV4[] = [];
+  #fallbackUpdatedAtById: Record<string, string> = {};
   #migrationWarning: string | undefined;
 
-  constructor(storage?: StorageLike, idFactory: () => string = defaultId) {
+  constructor(
+    storage?: StorageLike,
+    idFactory: () => string = defaultId,
+    now: () => Date = defaultNow,
+  ) {
     this.#storage = storage;
     this.#idFactory = idFactory;
+    this.#now = now;
   }
 
   get migrationWarning(): string | undefined {
@@ -113,6 +205,17 @@ export class DesignRepository {
 
   listIntents(): FireworkDesignV4[] {
     return this.#read().map(clone);
+  }
+
+  listEntries(): DesignLibraryEntry[] {
+    const designs = this.list();
+    const updatedAtById = this.#readUpdatedAtById(
+      designs.map((design) => design.id),
+    );
+    return designs.map((design) => ({
+      design,
+      updatedAt: updatedAtById[design.id],
+    }));
   }
 
   find(id: string): FireworkDesignV3 | undefined {
@@ -131,6 +234,9 @@ export class DesignRepository {
 
   saveIntent(design: AnyFireworkDesign, asCopy = false): FireworkDesignV4 {
     const designs = this.#read();
+    const updatedAtById = this.#readUpdatedAtById(
+      designs.map((candidate) => candidate.id),
+    );
     const isExistingCustom =
       design.id.startsWith("custom-") &&
       designs.some((candidate) => candidate.id === design.id);
@@ -138,7 +244,9 @@ export class DesignRepository {
     const saved = clone({
       ...editable,
       id:
-        !asCopy && isExistingCustom ? design.id : `custom-${this.#idFactory()}`,
+        !asCopy && isExistingCustom
+          ? design.id
+          : this.#createUniqueCustomId(designs),
       name: asCopy
         ? `${design.name} の複製`
         : design.name.trim() || "無題の花火",
@@ -149,7 +257,95 @@ export class DesignRepository {
     if (existingIndex >= 0) designs.splice(existingIndex, 1);
     designs.unshift(saved);
     this.#writeV4(designs);
+    updatedAtById[saved.id] = this.#nowISOString();
+    this.#writeUpdatedAtById(
+      updatedAtById,
+      designs.map((candidate) => candidate.id),
+    );
     return clone(saved);
+  }
+
+  exportLibrary(): FireworkLibraryExportV1 {
+    const designs = this.listIntents();
+    const updatedAtById = this.#readUpdatedAtById(
+      designs.map((design) => design.id),
+    );
+    return {
+      exportedAt: this.#nowISOString(),
+      fireworks: designs.map((design) => ({
+        design,
+        updatedAt: updatedAtById[design.id],
+      })),
+      format: FIREWORK_LIBRARY_EXPORT_FORMAT,
+      version: 1,
+    };
+  }
+
+  exportLibraryJSON(): string {
+    return JSON.stringify(this.exportLibrary(), null, 2);
+  }
+
+  previewLibraryImportJSON(raw: string): FireworkLibraryImportPreview {
+    const payload = parseFireworkLibraryExport(raw);
+    const existingIds = new Set(this.#read().map((design) => design.id));
+    const conflicts = payload.fireworks.filter((entry) =>
+      existingIds.has(entry.design.id),
+    ).length;
+    return {
+      added: payload.fireworks.length - conflicts,
+      conflicts,
+    };
+  }
+
+  importLibraryJSON(
+    raw: string,
+    replaceConflicts = false,
+  ): FireworkLibraryImportResult {
+    const payload = parseFireworkLibraryExport(raw);
+    const existing = this.#read();
+    const updatedAtById = this.#readUpdatedAtById(
+      existing.map((design) => design.id),
+    );
+    const byId = new Map(existing.map((design) => [design.id, design]));
+    const changedIds: string[] = [];
+    let added = 0;
+    let replaced = 0;
+    let skipped = 0;
+
+    for (const entry of payload.fireworks) {
+      const id = entry.design.id;
+      const current = byId.get(id);
+      if (!current) {
+        byId.set(id, clone(entry.design));
+        updatedAtById[id] = new Date(entry.updatedAt).toISOString();
+        changedIds.push(id);
+        added += 1;
+        continue;
+      }
+      if (!replaceConflicts) {
+        skipped += 1;
+        continue;
+      }
+      byId.set(id, clone(entry.design));
+      updatedAtById[id] = new Date(entry.updatedAt).toISOString();
+      changedIds.push(id);
+      replaced += 1;
+    }
+
+    if (changedIds.length > 0) {
+      const changedIdSet = new Set(changedIds);
+      const merged = [
+        ...changedIds.map((id) => byId.get(id)).filter(Boolean),
+        ...existing.filter((design) => !changedIdSet.has(design.id)),
+      ] as FireworkDesignV4[];
+      this.#writeV4(merged);
+      this.#writeUpdatedAtById(
+        updatedAtById,
+        merged.map((design) => design.id),
+      );
+    }
+
+    return { added, replaced, skipped };
   }
 
   duplicate(id: string): FireworkDesignV3 | undefined {
@@ -161,10 +357,155 @@ export class DesignRepository {
 
   remove(id: string): boolean {
     const designs = this.#read();
+    const updatedAtById = this.#readUpdatedAtById(
+      designs.map((design) => design.id),
+    );
     const filtered = designs.filter((design) => design.id !== id);
     if (filtered.length === designs.length) return false;
     this.#writeV4(filtered);
+    delete updatedAtById[id];
+    this.#writeUpdatedAtById(
+      updatedAtById,
+      filtered.map((design) => design.id),
+    );
     return true;
+  }
+
+  clear(): number {
+    const count = this.#read().length;
+    this.#fallback = [];
+    this.#fallbackUpdatedAtById = {};
+    this.#migrationWarning = undefined;
+    if (!this.#storage) return count;
+
+    const keys = [
+      STORAGE_KEY_V1,
+      STORAGE_KEY_V2,
+      STORAGE_KEY_V3,
+      STORAGE_KEY_V4,
+      STORAGE_METADATA_KEY_V1,
+    ];
+    try {
+      if (this.#storage.removeItem) {
+        keys.forEach((key) => this.#storage?.removeItem?.(key));
+      } else {
+        this.#storage.setItem(
+          STORAGE_KEY_V1,
+          JSON.stringify({ version: 1, designs: [] }),
+        );
+        this.#storage.setItem(
+          STORAGE_KEY_V2,
+          JSON.stringify({ version: 2, designs: [] }),
+        );
+        this.#storage.setItem(
+          STORAGE_KEY_V3,
+          JSON.stringify({ version: 3, designs: [] }),
+        );
+        this.#storage.setItem(
+          STORAGE_KEY_V4,
+          JSON.stringify({ version: 4, designs: [] }),
+        );
+        this.#storage.setItem(
+          STORAGE_METADATA_KEY_V1,
+          JSON.stringify({ version: 1, updatedAtById: {} }),
+        );
+      }
+    } catch {
+      this.#migrationWarning = "保存領域から作品を消去できませんでした。";
+    }
+    return count;
+  }
+
+  #createUniqueCustomId(designs: readonly FireworkDesignV4[]): string {
+    const ids = new Set(designs.map((design) => design.id));
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const suffix = this.#idFactory().trim();
+      if (!suffix) continue;
+      const id = `custom-${suffix}`;
+      if (!ids.has(id)) return id;
+    }
+    throw new Error("花火玉のユニークIDを生成できませんでした。");
+  }
+
+  #nowISOString(): string {
+    const value = this.#now();
+    return Number.isFinite(value.getTime())
+      ? value.toISOString()
+      : new Date().toISOString();
+  }
+
+  #readUpdatedAtById(designIds: readonly string[]): Record<string, string> {
+    const validIds = new Set(designIds);
+    let source: Record<string, string> = {
+      ...this.#fallbackUpdatedAtById,
+    };
+    let changed = false;
+
+    if (this.#storage) {
+      try {
+        const raw = this.#storage.getItem(STORAGE_METADATA_KEY_V1);
+        if (raw) {
+          const parsed = JSON.parse(raw) as Partial<StoredDesignMetadataV1>;
+          if (
+            parsed.version === 1 &&
+            parsed.updatedAtById &&
+            typeof parsed.updatedAtById === "object"
+          ) {
+            source = { ...parsed.updatedAtById };
+          } else {
+            changed = true;
+          }
+        } else {
+          changed = designIds.length > 0;
+        }
+      } catch {
+        source = {};
+        changed = true;
+      }
+    }
+
+    const updatedAtById: Record<string, string> = {};
+    const fallbackUpdatedAt = this.#nowISOString();
+    for (const id of validIds) {
+      const value = source[id];
+      if (isValidUpdatedAt(value)) {
+        updatedAtById[id] = new Date(value).toISOString();
+      } else {
+        updatedAtById[id] = fallbackUpdatedAt;
+        changed = true;
+      }
+    }
+    if (Object.keys(source).some((id) => !validIds.has(id))) changed = true;
+
+    this.#fallbackUpdatedAtById = { ...updatedAtById };
+    if (changed) this.#writeUpdatedAtById(updatedAtById, designIds);
+    return { ...updatedAtById };
+  }
+
+  #writeUpdatedAtById(
+    source: Readonly<Record<string, string>>,
+    designIds: readonly string[],
+  ): void {
+    const updatedAtById = Object.fromEntries(
+      designIds.map((id) => [
+        id,
+        isValidUpdatedAt(source[id])
+          ? new Date(source[id]).toISOString()
+          : this.#nowISOString(),
+      ]),
+    );
+    this.#fallbackUpdatedAtById = { ...updatedAtById };
+    if (!this.#storage) return;
+    try {
+      const payload: StoredDesignMetadataV1 = {
+        version: 1,
+        updatedAtById,
+      };
+      this.#storage.setItem(STORAGE_METADATA_KEY_V1, JSON.stringify(payload));
+    } catch {
+      this.#migrationWarning =
+        "更新日時を保存できなかったため、このセッションだけで保持します。";
+    }
   }
 
   #parseV4(raw: string): FireworkDesignV4[] | undefined {

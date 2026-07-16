@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { compileFireworkDesign } from "../../core/burst";
-import { DesignRepository, type StorageLike } from "../../data";
+import {
+  DesignRepository,
+  FIREWORK_PRESETS,
+  type StorageLike,
+} from "../../data";
 import { RENEWAL_BASELINE_SEED } from "../../test/fixtures/renewalBaseline";
 import { CraftController } from "./CraftController";
 
@@ -14,6 +18,29 @@ function memoryStorage(): StorageLike {
 }
 
 describe("CraftController renewal regression", () => {
+  it("keeps built-in presets on the shelf independently from local storage", () => {
+    const controller = new CraftController(
+      new DesignRepository(
+        memoryStorage(),
+        () => "from-preset",
+        () => new Date("2026-07-17T06:00:00.000Z"),
+      ),
+    );
+
+    expect(controller.savedDesigns).toEqual([]);
+    expect(controller.shelfDesigns.map((design) => design.id)).toEqual(
+      FIREWORK_PRESETS.map((preset) => preset.id),
+    );
+
+    expect(controller.load(FIREWORK_PRESETS[0].id)).toBe(true);
+    expect(controller.draft.id).toBe(FIREWORK_PRESETS[0].id);
+    expect(controller.save().id).toBe("custom-from-preset");
+    expect(controller.shelfDesigns).toHaveLength(FIREWORK_PRESETS.length + 1);
+    expect(controller.shelfLibrary.updatedAtById).toEqual({
+      "custom-from-preset": "2026-07-17T06:00:00.000Z",
+    });
+  });
+
   it("creates an unsaved initial-setup draft without writing the library", () => {
     const repository = new DesignRepository(memoryStorage(), () => "new-draft");
     const controller = new CraftController(repository);

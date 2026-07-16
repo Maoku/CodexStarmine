@@ -7,11 +7,18 @@ import {
   type DesignRepository,
   type FireworkDesign,
   type FireworkDesignV4,
+  type FireworkLibraryImportPreview,
+  type FireworkLibraryImportResult,
   type FireworkPattern,
   type SizeClass,
   type SphericalStarLayer,
 } from "../../data";
 import { CraftDocumentStore } from "./CraftDocumentStore";
+
+export interface CraftShelfLibraryState {
+  readonly designs: FireworkDesign[];
+  readonly updatedAtById: Readonly<Record<string, string>>;
+}
 
 function cloneDesign(design: FireworkDesign): FireworkDesign {
   return structuredClone(design);
@@ -50,6 +57,23 @@ export class CraftController {
 
   get savedDesigns(): FireworkDesign[] {
     return this.#repository.list();
+  }
+
+  get shelfDesigns(): FireworkDesign[] {
+    return this.shelfLibrary.designs;
+  }
+
+  get shelfLibrary(): CraftShelfLibraryState {
+    const entries = this.#repository.listEntries();
+    return {
+      designs: [
+        ...entries.map((entry) => entry.design),
+        ...this.#presets.map((preset) => cloneDesign(preset)),
+      ],
+      updatedAtById: Object.fromEntries(
+        entries.map((entry) => [entry.design.id, entry.updatedAt]),
+      ),
+    };
   }
 
   get migrationWarning(): string | undefined {
@@ -114,7 +138,9 @@ export class CraftController {
   }
 
   load(id: string): boolean {
-    const design = this.#repository.findIntent(id);
+    const design =
+      this.#repository.findIntent(id) ??
+      this.#presets.find((preset) => preset.id === id);
     if (!design) return false;
     this.document.replace(design);
     return true;
@@ -257,6 +283,29 @@ export class CraftController {
 
   duplicate(id: string): FireworkDesign | undefined {
     return this.#repository.duplicate(id);
+  }
+
+  exportLibraryJSON(): string {
+    return this.#repository.exportLibraryJSON();
+  }
+
+  previewLibraryImportJSON(raw: string): FireworkLibraryImportPreview {
+    return this.#repository.previewLibraryImportJSON(raw);
+  }
+
+  importLibraryJSON(
+    raw: string,
+    replaceConflicts: boolean,
+  ): FireworkLibraryImportResult {
+    return this.#repository.importLibraryJSON(raw, replaceConflicts);
+  }
+
+  clearSavedDesigns(): number {
+    const cleared = this.#repository.clear();
+    if (this.draft.id.startsWith("custom-")) {
+      this.document.replace(this.#createBlankDesign());
+    }
+    return cleared;
   }
 
   remove(id: string): boolean {

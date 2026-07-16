@@ -15,7 +15,10 @@ import {
 } from "../modes/viewFree";
 import { IntegratedCraftEditor } from "./craft/IntegratedCraftEditor";
 import { escapeHTML } from "./craft/viewUtils";
-import { FireworkShelfScreen } from "./screens/FireworkShelfScreen";
+import {
+  FireworkShelfScreen,
+  type FireworkShelfLibraryState,
+} from "./screens/FireworkShelfScreen";
 import { InitialSetupScreen } from "./screens/InitialSetupScreen";
 import { ModeSelectionScreen } from "./screens/ModeSelectionScreen";
 import { ViewingStage, type ViewerContext } from "./viewer";
@@ -175,11 +178,25 @@ export class AppShell {
       });
     }
     if (screen.kind === "library") {
+      const library = this.#controller.shelfLibrary;
+      const libraryState = (message: string): FireworkShelfLibraryState => {
+        const next = this.#controller.shelfLibrary;
+        return { ...next, message };
+      };
       return new FireworkShelfScreen(
-        this.#controller.savedDesigns,
+        library.designs,
         screen.selectedDesignId,
         {
           onBack: () => this.#flow.back(),
+          onClear: () => {
+            const cleared = this.#controller.clearSavedDesigns();
+            this.#callbacks.onDesignLibraryChange(
+              this.#controller.savedDesigns,
+            );
+            return libraryState(
+              `ローカル保存作品 ${cleared} 件を消去しました。`,
+            );
+          },
           onCreate: () => this.#flow.navigate("create-design"),
           onDelete: (designId) => {
             const removed = this.#controller.remove(designId);
@@ -196,7 +213,24 @@ export class AppShell {
               designId,
               origin: "saved",
             }),
+          onExport: () => this.#controller.exportLibraryJSON(),
+          onImport: (raw, replaceConflicts) => {
+            const result = this.#controller.importLibraryJSON(
+              raw,
+              replaceConflicts,
+            );
+            this.#callbacks.onDesignLibraryChange(
+              this.#controller.savedDesigns,
+            );
+            return libraryState(
+              `JSONを読み込みました。新規 ${result.added} 件、置換 ${result.replaced} 件、重複スキップ ${result.skipped} 件。`,
+            );
+          },
+          onPreviewImport: (raw) =>
+            this.#controller.previewLibraryImportJSON(raw),
+          onNotice: (message) => this.showToast(message),
         },
+        library.updatedAtById,
       );
     }
     if (screen.kind === "initial-setup") {
@@ -218,10 +252,7 @@ export class AppShell {
   #createEditorScreen(
     screen: Extract<AppScreen, { kind: "editor" }>,
   ): MountedScreen {
-    if (
-      screen.designId !== this.#controller.draft.id &&
-      screen.designId.startsWith("custom-")
-    ) {
+    if (screen.designId !== this.#controller.draft.id) {
       this.#controller.load(screen.designId);
     }
     const element = document.createElement("section");

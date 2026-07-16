@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { CHRYSANTHEMUM_PRESET } from "./presets";
 import {
   DesignRepository,
+  FIREWORK_LIBRARY_EXPORT_FORMAT,
+  STORAGE_METADATA_KEY_V1,
   STORAGE_KEY_V1,
   STORAGE_KEY_V2,
   STORAGE_KEY_V3,
@@ -10,15 +12,139 @@ import {
   type StorageLike,
 } from "./storage";
 
-function memoryStorage(): StorageLike {
-  const values = new Map<string, string>();
+function memoryStorage(values = new Map<string, string>()): StorageLike {
   return {
     getItem: (key) => values.get(key) ?? null,
+    removeItem: (key) => void values.delete(key),
     setItem: (key, value) => values.set(key, value),
   };
 }
 
 describe("DesignRepository", () => {
+  it("assigns unique IDs and updates timestamps on every save", () => {
+    const ids = ["same", "same", "second"];
+    let now = new Date("2026-07-17T01:00:00.000Z");
+    const repository = new DesignRepository(
+      memoryStorage(),
+      () => ids.shift() ?? "fallback",
+      () => now,
+    );
+
+    const first = repository.save(CHRYSANTHEMUM_PRESET);
+    const second = repository.save({
+      ...CHRYSANTHEMUM_PRESET,
+      name: "別の花火玉",
+    });
+    expect(first.id).toBe("custom-same");
+    expect(second.id).toBe("custom-second");
+    expect(repository.listEntries()).toEqual([
+      expect.objectContaining({
+        design: expect.objectContaining({ id: second.id }),
+        updatedAt: "2026-07-17T01:00:00.000Z",
+      }),
+      expect.objectContaining({
+        design: expect.objectContaining({ id: first.id }),
+        updatedAt: "2026-07-17T01:00:00.000Z",
+      }),
+    ]);
+
+    now = new Date("2026-07-17T02:30:00.000Z");
+    repository.save({ ...first, name: "更新した花火玉" });
+    expect(repository.listEntries()[0]).toMatchObject({
+      design: { id: first.id, name: "更新した花火玉" },
+      updatedAt: "2026-07-17T02:30:00.000Z",
+    });
+  });
+
+  it("previews collisions and only replaces them after explicit approval", () => {
+    let now = new Date("2026-07-17T03:00:00.000Z");
+    const source = new DesignRepository(
+      memoryStorage(),
+      () => "portable",
+      () => now,
+    );
+    const saved = source.save({
+      ...CHRYSANTHEMUM_PRESET,
+      name: "持ち運ぶ花火玉",
+    });
+    const firstJSON = source.exportLibraryJSON();
+    expect(JSON.parse(firstJSON)).toMatchObject({
+      exportedAt: "2026-07-17T03:00:00.000Z",
+      format: FIREWORK_LIBRARY_EXPORT_FORMAT,
+      version: 1,
+    });
+
+    const target = new DesignRepository(
+      memoryStorage(),
+      () => "unused",
+      () => new Date("2026-07-17T04:00:00.000Z"),
+    );
+    expect(target.importLibraryJSON(firstJSON)).toEqual({
+      added: 1,
+      replaced: 0,
+      skipped: 0,
+    });
+    expect(target.previewLibraryImportJSON(firstJSON)).toEqual({
+      added: 0,
+      conflicts: 1,
+    });
+    expect(target.importLibraryJSON(firstJSON)).toEqual({
+      added: 0,
+      replaced: 0,
+      skipped: 1,
+    });
+    expect(target.list()).toHaveLength(1);
+
+    now = new Date("2026-07-17T02:00:00.000Z");
+    source.save({ ...saved, name: "JSON側の花火玉" });
+    expect(target.importLibraryJSON(source.exportLibraryJSON(), true)).toEqual({
+      added: 0,
+      replaced: 1,
+      skipped: 0,
+    });
+    expect(target.listEntries()[0]).toMatchObject({
+      design: { id: saved.id, name: "JSON側の花火玉" },
+      updatedAt: "2026-07-17T02:00:00.000Z",
+    });
+  });
+
+  it("rejects duplicate IDs inside an import file", () => {
+    const source = new DesignRepository(memoryStorage(), () => "duplicate");
+    source.save(CHRYSANTHEMUM_PRESET);
+    const payload = source.exportLibrary();
+    const duplicated = JSON.stringify({
+      ...payload,
+      fireworks: [payload.fireworks[0], payload.fireworks[0]],
+    });
+
+    expect(() => source.importLibraryJSON(duplicated)).toThrow("重複");
+    expect(source.list()).toHaveLength(1);
+  });
+
+  it("clears all persisted firework keys after explicit confirmation", () => {
+    const values = new Map<string, string>();
+    const repository = new DesignRepository(
+      memoryStorage(values),
+      () => "clear-me",
+    );
+    repository.save(CHRYSANTHEMUM_PRESET);
+    values.set(STORAGE_KEY_V1, "legacy-v1");
+    values.set(STORAGE_KEY_V2, "legacy-v2");
+    values.set(STORAGE_KEY_V3, "legacy-v3");
+
+    expect(repository.clear()).toBe(1);
+    for (const key of [
+      STORAGE_KEY_V1,
+      STORAGE_KEY_V2,
+      STORAGE_KEY_V3,
+      STORAGE_KEY_V4,
+      STORAGE_METADATA_KEY_V1,
+    ]) {
+      expect(values.has(key)).toBe(false);
+    }
+    expect(repository.list()).toEqual([]);
+  });
+
   it("saves a preset as a custom design and reloads it", () => {
     const storage = memoryStorage();
     const repository = new DesignRepository(storage, () => "first");
