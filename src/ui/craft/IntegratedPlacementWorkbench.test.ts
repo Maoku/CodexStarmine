@@ -108,4 +108,42 @@ describe("IntegratedPlacementWorkbench", () => {
     expect(markup).not.toContain('data-action="delete-point"');
     expect(markup).not.toContain('data-action="placement-template"');
   });
+
+  it("renders circle, line, arc, and grid assistance for manual layers", () => {
+    const intent = migrateV3ToV4(ensureFireworkDesignV3(CHRYSANTHEMUM_PRESET));
+    delete intent.legacyIntent;
+    intent.layers = [
+      {
+        authoringMode: "manual",
+        defaultStarId: "star-solid-red",
+        id: "manual-test",
+        ignitionOffset: 0,
+        locked: false,
+        name: "手動テスト",
+        points: [],
+        radialSpeedScale: 1,
+        visible: true,
+      },
+    ];
+    const runtime = resolveFireworkDesignV4(intent);
+    const markup = renderIntegratedPlacementWorkbench(
+      runtime,
+      intent,
+      runtime.layers[0],
+      intent.layers[0],
+      { plane: "xy", ratio: 0.5 },
+      "grid",
+      undefined,
+      "append",
+    );
+
+    ["円周", "直線", "円弧", "格子"].forEach((label) =>
+      expect(markup).toContain(`>${label}</button>`),
+    );
+    expect(markup).toContain('name="manual-rows"');
+    expect(markup).toContain('name="manual-columns"');
+    expect(markup).toContain('name="manual-spacing"');
+    expect(markup).toContain('data-action="apply-manual-recipe"');
+    expect(markup).toContain('<option value="append" selected>追加</option>');
+  });
 });

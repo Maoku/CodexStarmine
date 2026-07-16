@@ -7,6 +7,11 @@ import type {
   PatternTemplate,
   SectionRef,
 } from "../../data";
+import {
+  DEFAULT_MANUAL_PLACEMENT_SETTINGS,
+  type ManualPlacementKind,
+  type ManualPlacementSettings,
+} from "./ManualPlacementRecipe";
 import { PATTERN_TEMPLATE_LABELS, PATTERN_TEMPLATES } from "./PatternRecipe";
 import { colorToCSS, escapeHTML } from "./viewUtils";
 import {
@@ -20,7 +25,7 @@ import {
 } from "./SliceGeometry";
 import { renderShellSliceNavigator } from "./ShellSliceNavigator";
 
-export type PlacementTemplate = "circle" | "heart" | "manual";
+export type PlacementTemplate = ManualPlacementKind | "manual";
 export type TemplateApplyMode = "append" | "replace";
 
 interface WorkbenchPoint {
@@ -36,9 +41,7 @@ interface WorkbenchPoint {
 const CANVAS_CENTER = { x: 300, y: 272 };
 const SPHERE_RADIUS_PX = 214;
 
-function localTemplatePoints(
-  template: Exclude<PlacementTemplate, "manual">,
-): SectionPoint2D[] {
+function localTemplatePoints(template: "circle" | "heart"): SectionPoint2D[] {
   if (template === "circle") {
     return Array.from({ length: 36 }, (_, index) => {
       const angle = (index / 36) * Math.PI * 2;
@@ -58,13 +61,33 @@ function localTemplatePoints(
 }
 
 export function createPlacementTemplatePoints(
-  template: Exclude<PlacementTemplate, "manual">,
+  template: "circle" | "heart",
   section: SectionRef,
   radius = 1,
 ): Point3D[] {
   return localTemplatePoints(template).map((point) =>
     pointFromSection(section, point, radius),
   );
+}
+
+function renderManualRecipeControls(
+  kind: PlacementTemplate,
+  settings: ManualPlacementSettings,
+): string {
+  if (kind === "manual") return "";
+  const count = `<label><span>個数</span><input name="manual-count" type="number" min="2" max="240" value="${settings.count}" /></label>`;
+  const rotation = `<label><span>回転</span><input name="manual-rotation" type="number" min="-360" max="360" value="${settings.rotationDegrees}" /></label>`;
+  let parameters = "";
+  if (kind === "circle") {
+    parameters = `${count}<label><span>半径</span><input name="manual-radius" type="number" min="5" max="94" value="${Math.round(settings.radius * 100)}" /></label>${rotation}`;
+  } else if (kind === "line") {
+    parameters = `${count}<label><span>長さ</span><input name="manual-length" type="number" min="10" max="188" value="${Math.round(settings.length * 100)}" /></label><label><span>角度</span><input name="manual-angle" type="number" min="-360" max="360" value="${settings.angleDegrees}" /></label>`;
+  } else if (kind === "arc") {
+    parameters = `${count}<label><span>半径</span><input name="manual-radius" type="number" min="5" max="94" value="${Math.round(settings.radius * 100)}" /></label><label><span>開始角</span><input name="manual-start-angle" type="number" min="-360" max="360" value="${settings.startAngleDegrees}" /></label><label><span>終了角</span><input name="manual-end-angle" type="number" min="-360" max="360" value="${settings.endAngleDegrees}" /></label>`;
+  } else {
+    parameters = `<label><span>行</span><input name="manual-rows" type="number" min="1" max="20" value="${settings.rows}" /></label><label><span>列</span><input name="manual-columns" type="number" min="1" max="20" value="${settings.columns}" /></label><label><span>間隔</span><input name="manual-spacing" type="number" min="4" max="45" value="${Math.round(settings.spacing * 100)}" /></label>${rotation}`;
+  }
+  return `<div class="manual-recipe-controls">${parameters}<button type="button" data-action="apply-manual-recipe">生成</button></div>`;
 }
 
 export function canvasPointOnSection(
@@ -208,6 +231,7 @@ export function renderIntegratedPlacementWorkbench(
   selectedPointIndex?: number,
   templateApplyMode: TemplateApplyMode = "replace",
   sliceAnnouncement = "",
+  manualPlacementSettings: ManualPlacementSettings = DEFAULT_MANUAL_PLACEMENT_SETTINGS,
 ): string {
   const pointEditingAllowed = selectedIntent?.authoringMode === "manual";
   const points = workbenchPoints(
@@ -226,26 +250,28 @@ export function renderIntegratedPlacementWorkbench(
         item.selectedLayer &&
         item.index === selectedPointIndex;
       const reference = !currentSection || !item.selectedLayer;
-      return `<circle
+      const attributes = `data-layer-id="${item.layerId}" data-point-index="${item.index}" data-point-editable="${item.editable}" data-current-section="${currentSection}"`;
+      const hitTarget = item.editable
+        ? `<circle cx="${projected.x.toFixed(1)}" cy="${projected.y.toFixed(1)}" r="16" class="workbench-point-hit" ${attributes} />`
+        : "";
+      return `${hitTarget}<circle
         cx="${projected.x.toFixed(1)}"
         cy="${projected.y.toFixed(1)}"
         r="${selected ? 6.5 : item.selectedLayer ? 4.2 : 2.8}"
         style="--point-color:${colorToCSS(item.color)};--point-depth:${reference ? "0.28" : "0.9"}"
         class="workbench-point${item.selectedLayer ? " is-layer-selected" : ""}${selected ? " is-point-selected" : ""}${reference ? " is-reference" : ""}"
-        data-layer-id="${item.layerId}"
-        data-point-index="${item.index}"
-        data-point-editable="${item.editable}"
-        data-current-section="${currentSection}"
+        data-point-visual="true"
+        ${attributes}
       />`;
     })
     .join("");
   const sliceRadius = sectionRadius(section) * SPHERE_RADIUS_PX;
   const patternEditing = selectedIntent?.authoringMode === "pattern";
   const toolControls = pointEditingAllowed
-    ? (["circle", "heart", "manual"] as PlacementTemplate[])
+    ? (["manual", "circle", "line", "arc", "grid"] as PlacementTemplate[])
         .map(
           (template) =>
-            `<button type="button" data-action="placement-template" data-template="${template}" class="${placementTemplate === template ? "is-active" : ""}" aria-pressed="${placementTemplate === template}">${({ circle: "円形", heart: "ハート", manual: "手動" } as const)[template]}</button>`,
+            `<button type="button" data-action="placement-template" data-template="${template}" class="${placementTemplate === template ? "is-active" : ""}" aria-pressed="${placementTemplate === template}">${({ manual: "1点", circle: "円周", line: "直線", arc: "円弧", grid: "格子" } as const)[template]}</button>`,
         )
         .join("")
     : patternEditing
@@ -262,6 +288,7 @@ export function renderIntegratedPlacementWorkbench(
     <div class="placement-tool-row" aria-label="便利な配置">
       <span>${patternEditing ? "形状" : "便利な配置"}</span>
       ${toolControls}
+      ${pointEditingAllowed ? renderManualRecipeControls(placementTemplate, manualPlacementSettings) : ""}
       ${pointEditingAllowed ? `<label class="template-apply-mode"><span>生成方法</span><select name="template-apply-mode"><option value="replace" ${templateApplyMode === "replace" ? "selected" : ""}>置換</option><option value="append" ${templateApplyMode === "append" ? "selected" : ""}>追加</option></select></label>` : ""}
       ${pointEditingAllowed ? `<button type="button" data-action="delete-point" ${selectedPointIndex === undefined ? "disabled" : ""}>選択点を削除</button>` : ""}
     </div>

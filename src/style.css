@@ -361,6 +361,39 @@
   margin-left: 0;
 }
 
+.manual-recipe-controls {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: end;
+  gap: 0.3rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgb(255 255 255 / 5%);
+}
+
+.manual-recipe-controls label {
+  display: grid;
+  min-width: 3.4rem;
+  gap: 0.16rem;
+  color: #777f84;
+  font-size: 0.44rem;
+}
+
+.manual-recipe-controls input {
+  width: 4.1rem;
+  min-height: 1.85rem;
+  padding: 0 0.35rem;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0.2rem;
+  background: #11171b;
+  color: #d6c6ad;
+  font-size: 0.5rem;
+}
+
+.manual-recipe-controls button {
+  border-color: rgb(197 151 93 / 68%);
+  color: #e0c49f;
+}
+
 .workbench-canvas-wrap {
   position: relative;
   min-height: 0;
@@ -512,6 +545,16 @@
   opacity: var(--point-depth);
   stroke: rgb(255 255 255 / 20%);
   stroke-width: 0.6;
+}
+
+.workbench-point-hit {
+  fill: transparent;
+  cursor: grab;
+  pointer-events: all;
+}
+
+.workbench-point[data-point-editable="true"] {
+  pointer-events: none;
 }
 
 .workbench-point.is-layer-selected {
@@ -801,6 +844,10 @@
     gap: 0.18rem;
     overflow-x: auto;
     padding: 0.3rem 0.35rem;
+  }
+
+  .manual-recipe-controls {
+    min-width: max-content;
   }
 
   .placement-tool-row > span {

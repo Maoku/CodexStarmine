@@ -15,13 +15,17 @@ import {
 import { renderInlineDiagnosticPreview } from "./InlineDiagnosticPreview";
 import {
   canvasPointOnSection,
-  createPlacementTemplatePoints,
   projectSectionPoint,
   renderIntegratedPlacementWorkbench,
   type PlacementTemplate,
   type TemplateApplyMode,
 } from "./IntegratedPlacementWorkbench";
 import { renderLayerPanel } from "./LayerPanel";
+import {
+  createManualPlacementPoints,
+  DEFAULT_MANUAL_PLACEMENT_SETTINGS,
+  type ManualPlacementSettings,
+} from "./ManualPlacementRecipe";
 import {
   effectivePatternScale,
   PATTERN_TEMPLATES,
@@ -39,6 +43,7 @@ import {
 } from "./StarLongPressGesture";
 import { sectionAfterNavigatorDrag } from "./ShellSliceNavigator";
 import { pointFromSection, stepSection, type Point3D } from "./SliceGeometry";
+import { clientPointToSvg } from "./SvgCoordinateTransform";
 import { escapeHTML, layerAuthoringLabel } from "./viewUtils";
 
 export interface IntegratedCraftEditorCallbacks {
@@ -76,6 +81,9 @@ export class IntegratedCraftEditor {
   #drawer?: MobileDrawer;
   #section: SectionRef = { plane: "xy", ratio: 0.5 };
   #placementTemplate: PlacementTemplate = "manual";
+  #manualPlacementSettings: ManualPlacementSettings = {
+    ...DEFAULT_MANUAL_PLACEMENT_SETTINGS,
+  };
   #templateApplyMode: TemplateApplyMode = "replace";
   #navigatorDrag?: NavigatorDrag;
   #pointDrag?: PointDrag;
@@ -193,6 +201,7 @@ export class IntegratedCraftEditor {
           pointEditingAllowed ? this.#selectedPointIndex : undefined,
           this.#templateApplyMode,
           this.#sliceAnnouncement,
+          this.#manualPlacementSettings,
         )}
       </main>
 
@@ -399,11 +408,9 @@ export class IntegratedCraftEditor {
       const template = button.dataset.template as PlacementTemplate;
       this.#placementTemplate = template;
       this.#selectedPointIndex = undefined;
-      if (template === "circle" || template === "heart") {
-        this.#applyPlacementTemplate(template);
-      } else {
-        this.#render();
-      }
+      this.#render();
+    } else if (action === "apply-manual-recipe") {
+      this.#applyManualRecipe();
     } else if (action === "delete-point") {
       this.#deleteSelectedPoint();
     } else if (action === "undo") {
@@ -433,6 +440,9 @@ export class IntegratedCraftEditor {
     if (!this.#snapshot) return;
     if (input.name === "template-apply-mode") {
       this.#templateApplyMode = input.value as TemplateApplyMode;
+      this.#render();
+    } else if (input.name.startsWith("manual-")) {
+      this.#changeManualPlacementSetting(input.name, input.value);
       this.#render();
     } else if (input.name) {
       this.#changeSelectedLayer(input.name, input.value);
@@ -514,6 +524,13 @@ export class IntegratedCraftEditor {
     const canvas = point.closest<SVGSVGElement>("[data-workbench-canvas]");
     if (!canvas || !point.dataset.layerId) return;
     const local = this.#canvasLocalPoint(event.clientX, event.clientY, canvas);
+    const visualPoint = Array.from(
+      canvas.querySelectorAll<SVGCircleElement>("[data-point-visual='true']"),
+    ).find(
+      (candidate) =>
+        candidate.dataset.layerId === point.dataset.layerId &&
+        candidate.dataset.pointIndex === point.dataset.pointIndex,
+    );
     this.#pointDrag = {
       index: Number(point.dataset.pointIndex),
       layerId: point.dataset.layerId,
@@ -522,7 +539,7 @@ export class IntegratedCraftEditor {
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      target: point,
+      target: visualPoint ?? point,
     };
     event.preventDefault();
   };
@@ -763,9 +780,7 @@ export class IntegratedCraftEditor {
     clientY: number,
     canvas: SVGSVGElement,
   ): { x: number; y: number } {
-    const bounds = canvas.getBoundingClientRect();
-    const svgX = ((clientX - bounds.left) / bounds.width) * 600;
-    const svgY = ((clientY - bounds.top) / bounds.height) * 544;
+    const { x: svgX, y: svgY } = clientPointToSvg(clientX, clientY, canvas);
     return canvasPointOnSection(svgX, svgY, this.#section);
   }
 
@@ -973,25 +988,30 @@ export class IntegratedCraftEditor {
     );
   }
 
-  #applyPlacementTemplate(
-    template: Exclude<PlacementTemplate, "manual">,
-  ): void {
+  #applyManualRecipe(): void {
+    this.element
+      .querySelectorAll<HTMLInputElement>("input[name^='manual-']")
+      .forEach((input) =>
+        this.#changeManualPlacementSetting(input.name, input.value),
+      );
+    const template = this.#placementTemplate;
+    if (template === "manual") return;
     const layerId = this.#snapshot?.selection.layerId;
     if (!layerId) return;
     const selectedStarId = this.#snapshot?.selection.starDefinitionId;
     let applied = false;
     this.#updateIntentLayer(
       layerId,
-      `${template === "circle" ? "円形" : "ハート"}配置`,
+      `${({ circle: "円周", line: "直線", arc: "円弧", grid: "格子" } as const)[template]}配置`,
       (layer) => {
         if (layer.authoringMode !== "manual") return;
         const existingCount = layer.points.length;
-        const generated = createPlacementTemplatePoints(
+        const generated = createManualPlacementPoints(
           template,
-          this.#section,
-        ).map((position, index) => ({
+          this.#manualPlacementSettings,
+        ).map((point, index) => ({
           id: `${layer.id}-${template}-${existingCount + index + 1}`,
-          position,
+          position: pointFromSection(this.#section, point),
           section: { ...this.#section },
           starId: selectedStarId ?? layer.defaultStarId,
         }));
@@ -1002,11 +1022,38 @@ export class IntegratedCraftEditor {
         applied = true;
       },
     );
+    const label = (
+      { circle: "円周", line: "直線", arc: "円弧", grid: "格子" } as const
+    )[template];
     this.#callbacks.onToast(
       applied
-        ? `${this.#section.plane.toUpperCase()} ${Math.round(this.#section.ratio * 100)}%断面へ${template === "circle" ? "円形" : "ハート"}を${this.#templateApplyMode === "append" ? "追加" : "配置"}しました`
+        ? `選択中の切断面へ${label}を${this.#templateApplyMode === "append" ? "追加" : "配置"}しました`
         : "手動レイヤーを選んでください",
     );
+  }
+
+  #changeManualPlacementSetting(name: string, value: string): void {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return;
+    if (name === "manual-count") this.#manualPlacementSettings.count = number;
+    else if (name === "manual-radius")
+      this.#manualPlacementSettings.radius = number / 100;
+    else if (name === "manual-rotation")
+      this.#manualPlacementSettings.rotationDegrees = number;
+    else if (name === "manual-length")
+      this.#manualPlacementSettings.length = number / 100;
+    else if (name === "manual-angle")
+      this.#manualPlacementSettings.angleDegrees = number;
+    else if (name === "manual-start-angle")
+      this.#manualPlacementSettings.startAngleDegrees = number;
+    else if (name === "manual-end-angle")
+      this.#manualPlacementSettings.endAngleDegrees = number;
+    else if (name === "manual-rows")
+      this.#manualPlacementSettings.rows = number;
+    else if (name === "manual-columns")
+      this.#manualPlacementSettings.columns = number;
+    else if (name === "manual-spacing")
+      this.#manualPlacementSettings.spacing = number / 100;
   }
 
   #addManualPoint(

@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { CHRYSANTHEMUM_PRESET, type SphericalStarLayer } from "../../data";
 import { buildEditorDiagnostic } from "./CraftDiagnosticController";
 import { CraftDocumentStore } from "./CraftDocumentStore";
-import { createPlacementTemplatePoints } from "../../ui/craft/IntegratedPlacementWorkbench";
+import {
+  createManualPlacementPoints,
+  DEFAULT_MANUAL_PLACEMENT_SETTINGS,
+} from "../../ui/craft/ManualPlacementRecipe";
+import { pointFromSection } from "../../ui/craft/SliceGeometry";
 
 describe("CraftDocumentStore", () => {
   it("undoes and redoes a layer edit without changing other layers", () => {
@@ -102,14 +106,15 @@ describe("CraftDocumentStore", () => {
       const layer = draft.layers.find((item) => item.id === "manual-test");
       if (!layer || layer.authoringMode !== "manual") return;
       const section = { plane: "xz" as const, ratio: 0.3 as const };
-      layer.points = createPlacementTemplatePoints("circle", section).map(
-        (position, index) => ({
-          id: `point-${index}`,
-          position,
-          section,
-          starId: layer.defaultStarId,
-        }),
-      );
+      layer.points = createManualPlacementPoints("circle", {
+        ...DEFAULT_MANUAL_PLACEMENT_SETTINGS,
+        count: 36,
+      }).map((point, index) => ({
+        id: `point-${index}`,
+        position: pointFromSection(section, point),
+        section,
+        starId: layer.defaultStarId,
+      }));
     });
 
     const manualPointCount = () => {
