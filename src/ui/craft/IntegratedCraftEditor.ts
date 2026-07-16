@@ -2,6 +2,7 @@ import {
   type FireworkDesign,
   type FireworkDesignV4,
   type LayerIntentV4,
+  type PatternTemplate,
   type PresetLayerIntent,
   type PresetLayerParameters,
   type SectionRef,
@@ -21,6 +22,11 @@ import {
   type TemplateApplyMode,
 } from "./IntegratedPlacementWorkbench";
 import { renderLayerPanel } from "./LayerPanel";
+import {
+  effectivePatternScale,
+  PATTERN_TEMPLATES,
+  patternScaleLimit,
+} from "./PatternRecipe";
 import {
   computeStarPreviewPosition,
   renderStarLibraryPanel,
@@ -254,8 +260,13 @@ export class IntegratedCraftEditor {
             <label><span>玉内の半径 <output>${Math.round(parameters.radius * 100)}%</output></span><input name="layer-radius" type="range" min="20" max="100" value="${Math.round(parameters.radius * 100)}" aria-label="玉内の半径" aria-valuetext="${Math.round(parameters.radius * 100)}パーセント" /></label>`;
         }
       } else if (selectedLayer.authoringMode === "pattern") {
-        specific = `<label><span>大きさ <output>${Math.round(selectedLayer.pattern.scale * 100)}%</output></span><input name="pattern-scale" type="range" min="15" max="95" value="${Math.round(selectedLayer.pattern.scale * 100)}" aria-label="型物の大きさ" aria-valuetext="${Math.round(selectedLayer.pattern.scale * 100)}パーセント" /></label>
-          <label><span>密度 <output>${selectedLayer.pattern.density}</output></span><input name="pattern-density" type="range" min="12" max="240" value="${selectedLayer.pattern.density}" aria-label="型物の密度" aria-valuetext="${selectedLayer.pattern.density}個" /></label>
+        const effectiveScale = effectivePatternScale(selectedLayer.pattern);
+        const maximumScale = patternScaleLimit(
+          selectedLayer.pattern.section,
+          selectedLayer.pattern.template,
+        );
+        specific = `<label><span>大きさ <output>${Math.round(effectiveScale * 100)}%</output></span><input name="pattern-scale" type="range" min="15" max="${Math.round(maximumScale * 100)}" value="${Math.round(effectiveScale * 100)}" aria-label="型物の大きさ" aria-valuetext="${Math.round(effectiveScale * 100)}パーセント" /></label>
+          <label><span>点の密度 <output>${selectedLayer.pattern.density}</output></span><input name="pattern-density" type="range" min="12" max="240" value="${selectedLayer.pattern.density}" aria-label="型物の点の密度" aria-valuetext="${selectedLayer.pattern.density}個" /></label>
           <label><span>回転 <output>${selectedLayer.pattern.rotationDegrees}°</output></span><input name="pattern-rotation" type="range" min="0" max="345" step="15" value="${selectedLayer.pattern.rotationDegrees}" aria-label="型物の回転" aria-valuetext="${selectedLayer.pattern.rotationDegrees}度" /></label>
           <p class="inspector-note">型物の生成点は個別編集できません。断面は中央のワークベンチで選びます。</p>`;
       } else {
@@ -374,10 +385,14 @@ export class IntegratedCraftEditor {
     } else if (action === "close-star-preview") {
       this.#closeStarPreview();
     } else if (action === "select-pattern-template" && layerId) {
-      const template = button.dataset.template === "heart" ? "heart" : "circle";
+      const requestedTemplate = button.dataset.template as PatternTemplate;
+      const template = PATTERN_TEMPLATES.includes(requestedTemplate)
+        ? requestedTemplate
+        : "circle";
       this.#updateIntentLayer(layerId, "型物の形状を変更", (layer) => {
         if (layer.authoringMode === "pattern") {
           layer.pattern.template = template;
+          layer.pattern.scale = effectivePatternScale(layer.pattern);
         }
       });
     } else if (action === "placement-template") {
@@ -1073,7 +1088,10 @@ export class IntegratedCraftEditor {
         }
       } else if (layer.authoringMode === "pattern") {
         if (name === "pattern-scale") {
-          layer.pattern.scale = Number(value) / 100;
+          layer.pattern.scale = Math.min(
+            Number(value) / 100,
+            patternScaleLimit(layer.pattern.section, layer.pattern.template),
+          );
         } else if (name === "pattern-density") {
           layer.pattern.density = Number(value);
         } else if (name === "pattern-rotation") {

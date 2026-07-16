@@ -101,7 +101,9 @@ describe("IntegratedPlacementWorkbench", () => {
       "manual",
     );
 
-    expect(markup).toContain("型物の形状");
+    ["円形", "ハート", "星形", "四角", "三角", "六角形"].forEach((label) =>
+      expect(markup).toContain(`>${label}</button>`),
+    );
     expect(markup).toContain('data-action="select-pattern-template"');
     expect(markup).not.toContain('data-action="delete-point"');
     expect(markup).not.toContain('data-action="placement-template"');

@@ -270,6 +270,8 @@ export interface FireworkDesignV3 extends Omit<
 }
 
 export type LayerAuthoringMode = "preset" | "pattern" | "manual";
+export type PatternTemplate =
+  "circle" | "heart" | "star" | "square" | "triangle" | "hexagon";
 export type SectionPlane = "xy" | "xz";
 export type SectionRatio = 0.1 | 0.3 | 0.5 | 0.7 | 0.9;
 
@@ -319,7 +321,7 @@ export interface PatternLayerIntent extends LayerBaseV4 {
     rotationDegrees: number;
     scale: number;
     section: SectionRef;
-    template: "circle" | "heart";
+    template: PatternTemplate;
   };
 }
 
@@ -607,7 +609,9 @@ function isLayerIntentV4(value: unknown): value is LayerIntentV4 {
   if (value.authoringMode === "pattern") {
     return (
       isRecord(value.pattern) &&
-      ["circle", "heart"].includes(String(value.pattern.template)) &&
+      ["circle", "heart", "star", "square", "triangle", "hexagon"].includes(
+        String(value.pattern.template),
+      ) &&
       isSectionRef(value.pattern.section) &&
       hasNumberFields(value.pattern, ["density", "rotationDegrees", "scale"])
     );

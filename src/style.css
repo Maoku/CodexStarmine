@@ -316,6 +316,7 @@
 
 .placement-tool-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.28rem;
   padding: 0.35rem 0.65rem;
@@ -329,7 +330,7 @@
   font-size: 0.5rem;
 }
 
-.placement-tool-row button:last-child {
+.placement-tool-row button[data-action="delete-point"] {
   margin-left: auto;
 }
 
@@ -356,7 +357,7 @@
   font-size: 0.48rem;
 }
 
-.template-apply-mode + button:last-child {
+.template-apply-mode + button[data-action="delete-point"] {
   margin-left: 0;
 }
 

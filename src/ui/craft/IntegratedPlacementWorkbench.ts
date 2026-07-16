@@ -4,8 +4,10 @@ import type {
   FireworkDesignV4,
   FireworkLayer,
   LayerIntentV4,
+  PatternTemplate,
   SectionRef,
 } from "../../data";
+import { PATTERN_TEMPLATE_LABELS, PATTERN_TEMPLATES } from "./PatternRecipe";
 import { colorToCSS, escapeHTML } from "./viewUtils";
 import {
   clampSectionPoint,
@@ -247,12 +249,10 @@ export function renderIntegratedPlacementWorkbench(
         )
         .join("")
     : patternEditing
-      ? (["circle", "heart"] as const)
-          .map(
-            (template) =>
-              `<button type="button" data-action="select-pattern-template" data-template="${template}" class="${selectedIntent.pattern.template === template ? "is-active" : ""}" aria-pressed="${selectedIntent.pattern.template === template}">${template === "circle" ? "円形" : "ハート"}</button>`,
-          )
-          .join("")
+      ? PATTERN_TEMPLATES.map(
+          (template: PatternTemplate) =>
+            `<button type="button" data-action="select-pattern-template" data-template="${template}" class="${selectedIntent.pattern.template === template ? "is-active" : ""}" aria-pressed="${selectedIntent.pattern.template === template}">${PATTERN_TEMPLATE_LABELS[template]}</button>`,
+        ).join("")
       : '<span class="placement-permission-note">このレイヤーはパラメーターで編集します</span>';
   return `<section class="integrated-workbench" aria-labelledby="placement-workbench-title">
     <header class="workbench-heading">
@@ -260,7 +260,7 @@ export function renderIntegratedPlacementWorkbench(
       <span>${selectedLayer ? escapeHTML(selectedLayer.name) : "レイヤーを選択"}</span>
     </header>
     <div class="placement-tool-row" aria-label="便利な配置">
-      <span>${patternEditing ? "型物の形状" : "便利な配置"}</span>
+      <span>${patternEditing ? "形状" : "便利な配置"}</span>
       ${toolControls}
       ${pointEditingAllowed ? `<label class="template-apply-mode"><span>生成方法</span><select name="template-apply-mode"><option value="replace" ${templateApplyMode === "replace" ? "selected" : ""}>置換</option><option value="append" ${templateApplyMode === "append" ? "selected" : ""}>追加</option></select></label>` : ""}
       ${pointEditingAllowed ? `<button type="button" data-action="delete-point" ${selectedPointIndex === undefined ? "disabled" : ""}>選択点を削除</button>` : ""}
