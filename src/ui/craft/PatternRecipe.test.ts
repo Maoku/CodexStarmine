@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SectionPlane } from "../../data";
-import { SECTION_RATIOS, pointToSection } from "./SectionGeometry";
+import { SECTION_RATIOS, pointToSection } from "./SliceGeometry";
 import { createPatternRecipePoints } from "./PatternRecipe";
 
 describe("PatternRecipe", () => {

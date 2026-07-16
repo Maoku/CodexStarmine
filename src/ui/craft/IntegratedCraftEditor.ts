@@ -4,8 +4,6 @@ import {
   type LayerIntentV4,
   type PresetLayerIntent,
   type PresetLayerParameters,
-  type SectionPlane,
-  type SectionRatio,
   type SectionRef,
 } from "../../data";
 import type { CraftController, CraftDocumentSnapshot } from "../../modes/craft";
@@ -33,7 +31,8 @@ import {
   STAR_LONG_PRESS_DELAY_MS,
   StarLongPressGesture,
 } from "./StarLongPressGesture";
-import { pointFromSection, type Point3D } from "./SectionGeometry";
+import { sectionAfterNavigatorDrag } from "./ShellSliceNavigator";
+import { pointFromSection, stepSection, type Point3D } from "./SliceGeometry";
 import { escapeHTML, layerAuthoringLabel } from "./viewUtils";
 
 export interface IntegratedCraftEditorCallbacks {
@@ -54,6 +53,12 @@ interface PointDrag {
   target: SVGCircleElement;
 }
 
+interface NavigatorDrag {
+  pointerId: number;
+  startX: number;
+  startY: number;
+}
+
 type MobileDrawer = "layers" | "inspector";
 
 export class IntegratedCraftEditor {
@@ -66,6 +71,7 @@ export class IntegratedCraftEditor {
   #section: SectionRef = { plane: "xy", ratio: 0.5 };
   #placementTemplate: PlacementTemplate = "manual";
   #templateApplyMode: TemplateApplyMode = "replace";
+  #navigatorDrag?: NavigatorDrag;
   #pointDrag?: PointDrag;
   #previewModel?: ApproximateSpreadModel;
   #previewRevision = 0;
@@ -73,6 +79,7 @@ export class IntegratedCraftEditor {
   #previewSignature = "";
   #previewTimer = 0;
   #selectedPointIndex?: number;
+  #sliceAnnouncement = "";
   #snapshot?: CraftDocumentSnapshot;
   #starPressTimer = 0;
   #starPreviewId?: string;
@@ -94,6 +101,9 @@ export class IntegratedCraftEditor {
     this.element.addEventListener("dragover", this.#handleDragOver);
     this.element.addEventListener("drop", this.#handleDrop);
     this.element.addEventListener("pointerdown", this.#handlePointerDown);
+    this.element.addEventListener("wheel", this.#handleWheel, {
+      passive: false,
+    });
     window.addEventListener("pointermove", this.#handlePointerMove);
     window.addEventListener("pointerup", this.#handlePointerEnd);
     window.addEventListener("pointercancel", this.#handlePointerEnd);
@@ -116,6 +126,7 @@ export class IntegratedCraftEditor {
     this.element.removeEventListener("dragover", this.#handleDragOver);
     this.element.removeEventListener("drop", this.#handleDrop);
     this.element.removeEventListener("pointerdown", this.#handlePointerDown);
+    this.element.removeEventListener("wheel", this.#handleWheel);
     window.removeEventListener("pointermove", this.#handlePointerMove);
     window.removeEventListener("pointerup", this.#handlePointerEnd);
     window.removeEventListener("pointercancel", this.#handlePointerEnd);
@@ -175,6 +186,7 @@ export class IntegratedCraftEditor {
           this.#placementTemplate,
           pointEditingAllowed ? this.#selectedPointIndex : undefined,
           this.#templateApplyMode,
+          this.#sliceAnnouncement,
         )}
       </main>
 
@@ -361,16 +373,6 @@ export class IntegratedCraftEditor {
       this.#openStarPreview(button.dataset.starId, button);
     } else if (action === "close-star-preview") {
       this.#closeStarPreview();
-    } else if (action === "select-section-plane") {
-      this.#setSection({
-        plane: button.dataset.plane as SectionPlane,
-        ratio: this.#section.ratio,
-      });
-    } else if (action === "select-section-ratio") {
-      this.#setSection({
-        plane: this.#section.plane,
-        ratio: Number(button.dataset.ratio) as SectionRatio,
-      });
     } else if (action === "select-pattern-template" && layerId) {
       const template = button.dataset.template === "heart" ? "heart" : "circle";
       this.#updateIntentLayer(layerId, "型物の形状を変更", (layer) => {
@@ -452,6 +454,19 @@ export class IntegratedCraftEditor {
 
   readonly #handlePointerDown = (event: PointerEvent): void => {
     const target = event.target as HTMLElement;
+    const navigator = target.closest<HTMLElement>(
+      "[data-shell-slice-navigator]",
+    );
+    if (navigator) {
+      this.#navigatorDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+      };
+      navigator.focus();
+      event.preventDefault();
+      return;
+    }
     const starButton = target.closest<HTMLButtonElement>(
       "button[data-action='assign-star']",
     );
@@ -504,6 +519,13 @@ export class IntegratedCraftEditor {
       window.clearTimeout(this.#starPressTimer);
       this.#starPressTimer = 0;
     }
+    if (
+      this.#navigatorDrag &&
+      this.#navigatorDrag.pointerId === event.pointerId
+    ) {
+      event.preventDefault();
+      return;
+    }
     const drag = this.#pointDrag;
     if (!drag || drag.pointerId !== event.pointerId) return;
     const canvas = drag.target.closest<SVGSVGElement>(
@@ -524,6 +546,17 @@ export class IntegratedCraftEditor {
     this.#starLongPress.end(event.pointerId);
     window.clearTimeout(this.#starPressTimer);
     this.#starPressTimer = 0;
+    const navigatorDrag = this.#navigatorDrag;
+    if (navigatorDrag?.pointerId === event.pointerId) {
+      this.#navigatorDrag = undefined;
+      const next = sectionAfterNavigatorDrag(
+        this.#section,
+        event.clientX - navigatorDrag.startX,
+        event.clientY - navigatorDrag.startY,
+      );
+      this.#setSection(next, true);
+      return;
+    }
     const drag = this.#pointDrag;
     if (!drag || drag.pointerId !== event.pointerId) return;
     this.#pointDrag = undefined;
@@ -546,6 +579,19 @@ export class IntegratedCraftEditor {
 
   readonly #handleKeyDown = (event: KeyboardEvent): void => {
     const target = event.target as HTMLElement;
+    if (target.closest("[data-shell-slice-navigator]")) {
+      const planeStep = ["ArrowLeft", "ArrowRight"].includes(event.key) ? 1 : 0;
+      const ratioStep =
+        event.key === "ArrowUp" ? 1 : event.key === "ArrowDown" ? -1 : 0;
+      if (planeStep || ratioStep) {
+        event.preventDefault();
+        this.#setSection(
+          stepSection(this.#section, planeStep, ratioStep),
+          true,
+        );
+      }
+      return;
+    }
     const starButton = target.closest<HTMLButtonElement>(
       "button[data-action='assign-star']",
     );
@@ -588,6 +634,19 @@ export class IntegratedCraftEditor {
       event.preventDefault();
       this.#deleteSelectedPoint();
     }
+  };
+
+  readonly #handleWheel = (event: WheelEvent): void => {
+    if (
+      !(event.target as HTMLElement).closest("[data-shell-slice-navigator]")
+    ) {
+      return;
+    }
+    event.preventDefault();
+    this.#setSection(
+      stepSection(this.#section, 0, event.deltaY > 0 ? -1 : 1),
+      true,
+    );
   };
 
   #schedulePreview(design: FireworkDesign): void {
@@ -714,8 +773,9 @@ export class IntegratedCraftEditor {
     });
   }
 
-  #setSection(section: SectionRef): void {
+  #setSection(section: SectionRef, restoreNavigatorFocus = false): void {
     this.#section = section;
+    this.#sliceAnnouncement = "選択中の切断面を更新しました";
     const selected = this.#selectedIntentLayer();
     if (selected?.authoringMode === "pattern") {
       this.#updateIntentLayer(selected.id, "型物の断面を変更", (layer) => {
@@ -726,6 +786,9 @@ export class IntegratedCraftEditor {
     } else {
       this.#selectedPointIndex = undefined;
       this.#render();
+    }
+    if (restoreNavigatorFocus) {
+      this.#focusAfterRender("[data-shell-slice-navigator]");
     }
   }
 

@@ -1,5 +1,5 @@
 import type { PatternLayerIntent, SectionRef } from "../../data";
-import { pointFromSection, type Point3D } from "./SectionGeometry";
+import { pointFromSection, type Point3D } from "./SliceGeometry";
 
 export interface PatternRecipe {
   density: number;

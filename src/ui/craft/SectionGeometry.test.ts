@@ -8,9 +8,11 @@ import {
   pointFromSection,
   pointToSection,
   sectionRadius,
-} from "./SectionGeometry";
+  sliceFrame,
+  stepSection,
+} from "./SliceGeometry";
 
-describe("SectionGeometry", () => {
+describe("SliceGeometry", () => {
   const planes: SectionPlane[] = ["xy", "xz"];
 
   it("derives symmetric fixed coordinates and slice radii for all 10 sections", () => {
@@ -59,5 +61,24 @@ describe("SectionGeometry", () => {
     expect(clampSectionPoint({ x: 2, y: 0 })).toEqual({ x: 1, y: 0 });
     const diagonal = clampSectionPoint({ x: 1, y: 1 });
     expect(Math.hypot(diagonal.x, diagonal.y)).toBeCloseTo(1, 10);
+  });
+
+  it("provides a stable local frame and direct-operation steps", () => {
+    const section = { plane: "xy" as const, ratio: 0.5 as const };
+    expect(sliceFrame(section)).toEqual({
+      center: { x: 0, y: 0, z: 0 },
+      normal: { x: 0, y: 0, z: 1 },
+      radius: 1,
+      tangentX: { x: 1, y: 0, z: 0 },
+      tangentY: { x: 0, y: 1, z: 0 },
+    });
+    expect(stepSection(section, 1, 1)).toEqual({
+      plane: "xz",
+      ratio: 0.7,
+    });
+    expect(stepSection({ plane: "xz", ratio: 0.9 }, 0, 1)).toEqual({
+      plane: "xz",
+      ratio: 0.9,
+    });
   });
 });

@@ -12,12 +12,11 @@ import {
   pointFromSection,
   pointToSection,
   sameSection,
-  sectionLabel,
   sectionRadius,
-  SECTION_RATIOS,
   type Point3D,
   type SectionPoint2D,
-} from "./SectionGeometry";
+} from "./SliceGeometry";
+import { renderShellSliceNavigator } from "./ShellSliceNavigator";
 
 export type PlacementTemplate = "circle" | "heart" | "manual";
 export type TemplateApplyMode = "append" | "replace";
@@ -197,16 +196,6 @@ function workbenchPoints(
   });
 }
 
-function renderSectionControls(section: SectionRef): string {
-  return `<div class="section-controls">
-    <fieldset><legend>断面の向き</legend>
-      <button type="button" data-action="select-section-plane" data-plane="xy" class="${section.plane === "xy" ? "is-active" : ""}" aria-pressed="${section.plane === "xy"}">XY</button>
-      <button type="button" data-action="select-section-plane" data-plane="xz" class="${section.plane === "xz" ? "is-active" : ""}" aria-pressed="${section.plane === "xz"}">XZ</button>
-    </fieldset>
-    <fieldset><legend>断面位置</legend>${SECTION_RATIOS.map((ratio) => `<button type="button" data-action="select-section-ratio" data-ratio="${ratio}" class="${section.ratio === ratio ? "is-active" : ""}" aria-pressed="${section.ratio === ratio}">${Math.round(ratio * 100)}%</button>`).join("")}</fieldset>
-  </div>`;
-}
-
 export function renderIntegratedPlacementWorkbench(
   design: FireworkDesign,
   intentDesign: FireworkDesignV4,
@@ -216,6 +205,7 @@ export function renderIntegratedPlacementWorkbench(
   placementTemplate: PlacementTemplate,
   selectedPointIndex?: number,
   templateApplyMode: TemplateApplyMode = "replace",
+  sliceAnnouncement = "",
 ): string {
   const pointEditingAllowed = selectedIntent?.authoringMode === "manual";
   const points = workbenchPoints(
@@ -267,9 +257,8 @@ export function renderIntegratedPlacementWorkbench(
   return `<section class="integrated-workbench" aria-labelledby="placement-workbench-title">
     <header class="workbench-heading">
       <div><p>CROSS-SECTION PLACEMENT</p><h2 id="placement-workbench-title">玉内配置ワークベンチ</h2></div>
-      <span>${selectedLayer ? escapeHTML(selectedLayer.name) : "レイヤーを選択"} · ${sectionLabel(section)}</span>
+      <span>${selectedLayer ? escapeHTML(selectedLayer.name) : "レイヤーを選択"}</span>
     </header>
-    ${renderSectionControls(section)}
     <div class="placement-tool-row" aria-label="便利な配置">
       <span>${patternEditing ? "型物の形状" : "便利な配置"}</span>
       ${toolControls}
@@ -277,7 +266,7 @@ export function renderIntegratedPlacementWorkbench(
       ${pointEditingAllowed ? `<button type="button" data-action="delete-point" ${selectedPointIndex === undefined ? "disabled" : ""}>選択点を削除</button>` : ""}
     </div>
     <div class="workbench-canvas-wrap">
-      <svg viewBox="0 0 600 544" data-workbench-canvas role="img" aria-label="${sectionLabel(section)}断面と全レイヤーの参照点">
+      <svg viewBox="0 0 600 544" data-workbench-canvas role="img" aria-label="選択中の切断面と全レイヤーの参照点">
         <defs><radialGradient id="workbench-shell-fill"><stop offset="0" stop-color="#151d24"/><stop offset=".78" stop-color="#0a1117"/><stop offset="1" stop-color="#302416"/></radialGradient></defs>
         <circle cx="300" cy="272" r="224" class="workbench-sphere-reference" />
         <circle cx="300" cy="272" r="${sliceRadius.toFixed(1)}" class="workbench-section-disc" />
@@ -288,6 +277,8 @@ export function renderIntegratedPlacementWorkbench(
         <g class="workbench-points">${points}</g>
         <circle cx="300" cy="272" r="${sliceRadius.toFixed(1)}" class="workbench-section-edge" />
       </svg>
+      ${renderShellSliceNavigator(section)}
+      <p class="slice-announcement" aria-live="polite">${escapeHTML(sliceAnnouncement)}</p>
       <p>${pointEditingAllowed ? (placementTemplate === "manual" ? "断面円を押して1点追加。現在断面の点だけ移動できます。" : "現在断面へ等間隔配置し、その後は各点を編集できます。") : patternEditing ? "形状は上のボタン、サイズ・密度・回転は右のパラメーターで調整します。" : "生成点は参照表示です。右のパラメーターで調整してください。"}</p>
     </div>
   </section>`;

@@ -41,7 +41,7 @@ describe("IntegratedPlacementWorkbench", () => {
     expect(projected.distanceFromPlane).toBeCloseTo(0, 8);
   });
 
-  it("renders XY and XZ with five section choices and no legacy face controls", () => {
+  it("renders the spatial navigator without numeric section controls", () => {
     const runtime = ensureFireworkDesignV3(CHRYSANTHEMUM_PRESET);
     const intent = migrateV3ToV4(runtime);
     const markup = renderIntegratedPlacementWorkbench(
@@ -54,10 +54,14 @@ describe("IntegratedPlacementWorkbench", () => {
       0,
     );
 
-    expect(markup).toContain(">XY<");
-    expect(markup).toContain(">XZ<");
+    expect(markup).toContain("data-shell-slice-navigator");
+    expect(markup).toContain("slice-disc");
+    expect(markup).not.toContain("断面の向き");
+    expect(markup).not.toContain("断面位置");
+    expect(markup).not.toContain(">XY<");
+    expect(markup).not.toContain(">XZ<");
     [10, 30, 50, 70, 90].forEach((ratio) =>
-      expect(markup).toContain(`>${ratio}%<`),
+      expect(markup).not.toContain(`>${ratio}%<`),
     );
     expect(markup).not.toContain("緯度区画");
     expect(markup).not.toContain("経度区画");
