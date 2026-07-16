@@ -34,7 +34,10 @@ import {
 import { AppShell } from "../ui/AppShell";
 import { AdvertiseCameraController, FreeViewCameraController } from "./camera";
 import { FireworkSystem } from "./fx";
-import { createNightSkyScene } from "./scene/createNightSkyScene";
+import {
+  createNightSkyScene,
+  NIGHT_SCENE_ACCESSIBLE_LABEL,
+} from "./scene/createNightSkyScene";
 
 export class NightSkyApp {
   readonly #advertiseCamera: AdvertiseCameraController;
@@ -68,7 +71,10 @@ export class NightSkyApp {
     this.#timer.connect(document);
 
     const size = this.#measure();
-    const nightSky = createNightSkyScene(size.width / size.height);
+    const nightSky = createNightSkyScene(
+      size.width / size.height,
+      window.devicePixelRatio,
+    );
     this.#camera = nightSky.camera;
     this.#scene = nightSky.scene;
     this.#updateScene = nightSky.update;
@@ -101,7 +107,7 @@ export class NightSkyApp {
     this.#renderer.domElement.setAttribute("role", "img");
     this.#renderer.domElement.setAttribute(
       "aria-label",
-      "月明かりの湖畔で自作花火を鑑賞するシーン。フリー鑑賞ではWASDまたは矢印キーで移動できます",
+      NIGHT_SCENE_ACCESSIBLE_LABEL,
     );
     this.#renderer.outputColorSpace = SRGBColorSpace;
     this.#renderer.toneMapping = ACESFilmicToneMapping;
@@ -199,20 +205,21 @@ export class NightSkyApp {
     this.#advertiseCamera.setReducedMotion(this.#reducedMotionQuery.matches);
     this.#backgroundRuntime = new BackgroundRuntimeController({
       clearScene: () => this.#fireworks.clear(),
+      setFreeViewEnabled: (enabled) => this.#freeView.setEnabled(enabled),
       startAdvertise: () => {
-        this.#freeView.setEnabled(false);
         this.#advertiseCamera.setEnabled(true);
         this.#advertiseDemo.start();
       },
       startCheck: (design) => {
-        this.#freeView.setEnabled(false);
+        this.#advertiseCamera.setEnabled(false);
         this.#freeView.reset();
+        this.#ui.setFreeViewPreset(HOME_FREE_VIEW_PRESET_ID);
         this.#check.start(design);
       },
       startFree: () => {
         this.#advertiseCamera.setEnabled(false);
         this.#freeView.reset();
-        this.#freeView.setEnabled(true);
+        this.#ui.setFreeViewPreset(HOME_FREE_VIEW_PRESET_ID);
         this.#freeShow.start();
       },
       stopAdvertise: () => {
@@ -222,7 +229,6 @@ export class NightSkyApp {
       stopCheck: () => this.#check.stop(),
       stopFree: () => {
         this.#freeShow.stop();
-        this.#freeView.setEnabled(false);
       },
     });
     this.#ui = new AppShell(craft, {

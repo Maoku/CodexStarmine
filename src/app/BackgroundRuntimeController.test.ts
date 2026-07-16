@@ -6,6 +6,7 @@ import { BackgroundRuntimeController } from "./BackgroundRuntimeController";
 function createController(log: string[]) {
   return new BackgroundRuntimeController({
     clearScene: () => log.push("clear"),
+    setFreeViewEnabled: () => undefined,
     startAdvertise: () => log.push("start-advertise"),
     startCheck: () => log.push("start-check"),
     startFree: () => log.push("start-free"),
@@ -65,6 +66,7 @@ describe("BackgroundRuntimeController", () => {
     const startCheck = vi.fn();
     const controller = new BackgroundRuntimeController({
       clearScene: vi.fn(),
+      setFreeViewEnabled: vi.fn(),
       startAdvertise: vi.fn(),
       startCheck,
       startFree: vi.fn(),
@@ -75,5 +77,24 @@ describe("BackgroundRuntimeController", () => {
 
     controller.set("check", PEONY_PRESET);
     expect(startCheck).toHaveBeenCalledExactlyOnceWith(PEONY_PRESET);
+  });
+
+  it("enables the same free camera for check and free runtimes", () => {
+    const setFreeViewEnabled = vi.fn();
+    const controller = new BackgroundRuntimeController({
+      clearScene: vi.fn(),
+      setFreeViewEnabled,
+      startAdvertise: vi.fn(),
+      startCheck: vi.fn(),
+      startFree: vi.fn(),
+      stopAdvertise: vi.fn(),
+      stopCheck: vi.fn(),
+      stopFree: vi.fn(),
+    });
+
+    controller.set("check", PEONY_PRESET);
+    controller.set("free");
+    controller.set("advertise");
+    expect(setFreeViewEnabled.mock.calls).toEqual([[true], [true], [false]]);
   });
 });

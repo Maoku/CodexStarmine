@@ -3,6 +3,7 @@ import type { BackgroundRuntime } from "./renewalContracts";
 
 export interface BackgroundRuntimeControllerOptions {
   clearScene: () => void;
+  setFreeViewEnabled: (enabled: boolean) => void;
   startAdvertise: () => void;
   startCheck: (design: AnyFireworkDesign) => void;
   startFree: () => void;
@@ -34,6 +35,7 @@ export class BackgroundRuntimeController {
     this.#options.stopCheck();
     this.#options.stopFree();
     this.#options.clearScene();
+    this.#options.setFreeViewEnabled(runtime === "check" || runtime === "free");
     this.#runtime = runtime;
 
     if (runtime === "advertise") this.#options.startAdvertise();

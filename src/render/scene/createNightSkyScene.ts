@@ -4,9 +4,7 @@ import {
   BackSide,
   BufferAttribute,
   BufferGeometry,
-  CircleGeometry,
   Color,
-  DirectionalLight,
   DoubleSide,
   FogExp2,
   Group,
@@ -29,6 +27,14 @@ import {
 
 export const NIGHT_SKY_COLOR = 0x01030b;
 export const WATER_LEVEL = 0;
+export const NIGHT_SCENE_ACCESSIBLE_LABEL =
+  "星空の湖畔で自作花火を鑑賞するシーン。確認とフリー鑑賞ではWASDまたは矢印キーで移動できます";
+
+export type LakeQuality = "high" | "low";
+
+export function resolveLakeQuality(pixelRatio: number): LakeQuality {
+  return Number.isFinite(pixelRatio) && pixelRatio > 1.5 ? "low" : "high";
+}
 
 export interface NightSkyScene {
   camera: PerspectiveCamera;
@@ -153,32 +159,99 @@ function createMountainLayer(
   return mountain;
 }
 
-function createMoon(): Group {
-  const group = new Group();
-  group.position.set(-245, 286, -610);
+export const NIGHT_LAKE_VERTEX_SHADER = `
+  uniform float time;
+  varying vec2 vUv;
+  varying float vRipple;
 
-  const glow = new Mesh(
-    new CircleGeometry(22, 64),
-    new MeshBasicMaterial({
-      blending: AdditiveBlending,
-      color: 0x8ca7ce,
-      depthWrite: false,
-      opacity: 0.14,
-      transparent: true,
-    }),
-  );
-  glow.scale.setScalar(2.9);
+  float hash21(vec2 point) {
+    return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453123);
+  }
 
-  const disc = new Mesh(
-    new CircleGeometry(18, 64),
-    new MeshBasicMaterial({ color: 0xdbe4ed, fog: false }),
-  );
-  disc.position.z = 0.2;
-  group.add(glow, disc);
-  return group;
-}
+  float valueNoise(vec2 point) {
+    vec2 cell = floor(point);
+    vec2 local = fract(point);
+    local = local * local * (3.0 - 2.0 * local);
+    float a = hash21(cell);
+    float b = hash21(cell + vec2(1.0, 0.0));
+    float c = hash21(cell + vec2(0.0, 1.0));
+    float d = hash21(cell + vec2(1.0, 1.0));
+    return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
+  }
 
-function createLake(): {
+  float layeredNoise(vec2 point) {
+    float value = 0.0;
+    float weight = 0.55;
+    mat2 turn = mat2(0.80, -0.60, 0.60, 0.80);
+    for (int octave = 0; octave < 4; octave++) {
+      value += valueNoise(point) * weight;
+      point = turn * point * 2.07 + vec2(7.3, 3.9);
+      weight *= 0.48;
+    }
+    return value;
+  }
+
+  void main() {
+    vUv = uv;
+    vec3 displaced = position;
+    vec2 world = displaced.xy;
+    float broad = layeredNoise(world * 0.014 + vec2(time * 0.035, -time * 0.027));
+    float crossing = layeredNoise(
+      mat2(0.62, -0.78, 0.78, 0.62) * world * 0.031 +
+      vec2(-time * 0.052, time * 0.021)
+    );
+    float detail = valueNoise(world * 0.087 + vec2(time * 0.09, time * 0.046));
+    vRipple = (broad - 0.5) * 0.58 + (crossing - 0.5) * 0.31 +
+      (detail - 0.5) * 0.11;
+    displaced.z += vRipple;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+  }
+`;
+
+export const NIGHT_LAKE_FRAGMENT_SHADER = `
+  uniform float time;
+  uniform vec3 deepColor;
+  uniform vec3 horizonColor;
+  uniform vec3 flashColor;
+  uniform float flashIntensity;
+  varying vec2 vUv;
+  varying float vRipple;
+
+  float hash21(vec2 point) {
+    return fract(sin(dot(point, vec2(269.5, 183.3))) * 43758.5453123);
+  }
+
+  float valueNoise(vec2 point) {
+    vec2 cell = floor(point);
+    vec2 local = fract(point);
+    local = local * local * (3.0 - 2.0 * local);
+    float a = hash21(cell);
+    float b = hash21(cell + vec2(1.0, 0.0));
+    float c = hash21(cell + vec2(0.0, 1.0));
+    float d = hash21(cell + vec2(1.0, 1.0));
+    return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
+  }
+
+  void main() {
+    float horizon = pow(1.0 - vUv.y, 2.7);
+    vec3 color = mix(deepColor, horizonColor, horizon * 0.72);
+    vec2 drift = vec2(time * 0.031, -time * 0.047);
+    float flow = valueNoise(vUv * vec2(173.0, 109.0) + drift);
+    float crossing = valueNoise(
+      mat2(0.73, -0.68, 0.68, 0.73) * vUv * vec2(281.0, 157.0) -
+      drift * 1.7
+    );
+    float grain = hash21(floor(vUv * vec2(443.0, 307.0)) + floor(time * 1.7));
+    float crest = smoothstep(0.76, 1.0, flow * 0.58 + crossing * 0.42);
+    float sparkle = crest * (0.28 + grain * 0.72);
+    color += vec3(0.014, 0.032, 0.054) * (sparkle + abs(vRipple) * 0.8);
+    color += flashColor * flashIntensity *
+      (0.035 + horizon * 0.12 + sparkle * 0.065);
+    gl_FragColor = vec4(color, 0.97);
+  }
+`;
+
+function createLake(quality: LakeQuality): {
   lake: Mesh<PlaneGeometry, ShaderMaterial>;
   material: ShaderMaterial;
 } {
@@ -187,55 +260,20 @@ function createLake(): {
       time: { value: 0 },
       deepColor: { value: new Color(0x020c18) },
       horizonColor: { value: new Color(0x1a3a5c) },
-      moonColor: { value: new Color(0x9cb6d0) },
       flashColor: { value: new Color(0xffffff) },
       flashIntensity: { value: 0 },
     },
-    vertexShader: `
-      uniform float time;
-      varying vec2 vUv;
-      varying float vRipple;
-      void main() {
-        vUv = uv;
-        vec3 p = position;
-        float waveA = sin(p.x * 0.055 + time * 0.55) * 0.24;
-        float waveB = sin(p.y * 0.037 - time * 0.34) * 0.18;
-        p.z += waveA + waveB;
-        vRipple = waveA + waveB;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float time;
-      uniform vec3 deepColor;
-      uniform vec3 horizonColor;
-      uniform vec3 moonColor;
-      uniform vec3 flashColor;
-      uniform float flashIntensity;
-      varying vec2 vUv;
-      varying float vRipple;
-      float hash(vec2 p) {
-        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-      }
-      void main() {
-        float horizon = pow(1.0 - vUv.y, 2.7);
-        vec3 color = mix(deepColor, horizonColor, horizon * 0.72);
-        float waves = sin(vUv.x * 330.0 + vUv.y * 57.0 + time * 0.7);
-        waves += sin(vUv.x * 118.0 - vUv.y * 83.0 - time * 0.42);
-        float sparkle = smoothstep(1.62, 1.96, waves + hash(floor(vUv * 420.0)) * 0.18);
-        float moonPath = exp(-pow((vUv.x - 0.31) * 15.0, 2.0));
-        moonPath *= smoothstep(0.02, 0.58, vUv.y) * (0.6 + sparkle * 1.8);
-        color += moonColor * moonPath * (0.045 + sparkle * 0.075);
-        color += vec3(0.018, 0.035, 0.052) * sparkle;
-        color += flashColor * flashIntensity * (0.035 + horizon * 0.12 + sparkle * 0.05);
-        color += vRipple * 0.008;
-        gl_FragColor = vec4(color, 0.97);
-      }
-    `,
+    vertexShader: NIGHT_LAKE_VERTEX_SHADER,
+    fragmentShader: NIGHT_LAKE_FRAGMENT_SHADER,
     side: DoubleSide,
   });
 
-  const lake = new Mesh(new PlaneGeometry(1_600, 1_150, 96, 72), material);
+  const segments = quality === "high" ? [96, 72] : [64, 48];
+  const lake = new Mesh(
+    new PlaneGeometry(1_600, 1_150, segments[0], segments[1]),
+    material,
+  );
+  lake.name = "night-lake";
   lake.rotation.x = -Math.PI / 2;
   lake.position.set(0, WATER_LEVEL, -260);
   return { lake, material };
@@ -260,7 +298,10 @@ function createLaunchSite(): Group {
   return site;
 }
 
-export function createNightSkyScene(aspect: number): NightSkyScene {
+export function createNightSkyScene(
+  aspect: number,
+  pixelRatio = 1,
+): NightSkyScene {
   const scene = new Scene();
   scene.background = new Color(NIGHT_SKY_COLOR);
   scene.fog = new FogExp2(0x07101d, 0.00105);
@@ -269,27 +310,22 @@ export function createNightSkyScene(aspect: number): NightSkyScene {
   camera.position.set(0, 13, 74);
   camera.lookAt(new Vector3(0, 95, -155));
 
-  scene.add(createSkyDome(), createStars(), createMoon());
+  scene.add(createSkyDome(), createStars());
   scene.add(
     createMountainLayer(17, 4, 0x0a1320, -430, 35),
     createMountainLayer(41, 0, 0x050b12, -275, 25),
   );
 
-  const { lake, material: lakeMaterial } = createLake();
+  const { lake, material: lakeMaterial } = createLake(
+    resolveLakeQuality(pixelRatio),
+  );
   scene.add(lake, createLaunchSite());
 
   const environmentLight = new HemisphereLight(0x334b71, 0x010204, 0.42);
-  const moonLight = new DirectionalLight(0x8ca6c9, 0.36);
   const burstLight = new PointLight(0xffffff, 0, 620, 1.45);
   let flashEnergy = 0;
   let lastElapsed = 0;
-  moonLight.position.set(-160, 260, -180);
-  scene.add(
-    environmentLight,
-    moonLight,
-    burstLight,
-    new AmbientLight(0x10182b, 0.18),
-  );
+  scene.add(environmentLight, burstLight, new AmbientLight(0x10182b, 0.18));
 
   return {
     camera,

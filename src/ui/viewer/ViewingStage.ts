@@ -38,6 +38,22 @@ function escapeHTML(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
+export function renderViewerCameraControl(presetId: FreeViewPresetId): string {
+  const viewPresetOptions = FREE_VIEW_PRESET_IDS.map(
+    (candidate) =>
+      `<option value="${candidate}" ${candidate === presetId ? "selected" : ""}>${FREE_VIEW_PRESETS[candidate].label}</option>`,
+  ).join("");
+  return `<section class="free-view-control" aria-labelledby="viewer-camera-heading">
+    <div class="free-view-heading"><span id="viewer-camera-heading">視点を動かす</span><b>FREE CAMERA</b></div>
+    <div class="free-view-row">
+      <label class="free-view-select"><span>プリセット視点</span><select name="viewer-view-preset">${viewPresetOptions}</select></label>
+      <button class="secondary-action free-view-reset" type="button" data-viewer-action="view-reset">元の位置に戻る</button>
+    </div>
+    <p>ドラッグ／1本指で見回す · 右ドラッグ／2本指で移動 · ホイール／ピンチで接近</p>
+    <p class="free-view-keys"><kbd>WASD / 矢印</kbd> 前後左右 · <kbd>Q / E</kbd> 上下 · <kbd>Shift</kbd> 高速</p>
+  </section>`;
+}
+
 export class ViewingStage {
   readonly element = document.createElement("section");
   readonly #callbacks: ViewingStageCallbacks;
@@ -151,9 +167,8 @@ export class ViewingStage {
 
   setFreeViewPreset(presetId: FreeViewPresetId): void {
     this.#freeViewPresetId = presetId;
-    if (this.#context !== "free") return;
     const select = this.element.querySelector<HTMLSelectElement>(
-      "[name='free-view-preset']",
+      "[name='viewer-view-preset']",
     );
     if (select) select.value = presetId;
     const label = this.element.querySelector<HTMLElement>("[data-view-label]");
@@ -178,6 +193,7 @@ export class ViewingStage {
         <div><span>NEXT LAUNCH</span><strong data-check-countdown>打上準備</strong></div>
         <div><span>THIS SESSION</span><strong data-check-shot-count>0発</strong></div>
       </section>
+      ${renderViewerCameraControl(this.#freeViewPresetId)}
       <label class="check-loop-control">
         <input name="check-loop" type="checkbox" ${this.#checkState.loopEnabled ? "checked" : ""} />
         <span><strong>単発ループ</strong><small>1周期につきこの作品を1発だけ打ち上げます</small></span>
@@ -187,10 +203,6 @@ export class ViewingStage {
   }
 
   #renderFreePanel(freeDensity: number): string {
-    const viewPresetOptions = FREE_VIEW_PRESET_IDS.map(
-      (presetId) =>
-        `<option value="${presetId}" ${presetId === this.#freeViewPresetId ? "selected" : ""}>${FREE_VIEW_PRESETS[presetId].label}</option>`,
-    ).join("");
     return `<aside class="control-panel viewing-panel viewing-panel--free" aria-label="フリー鑑賞パネル">
       <div class="panel-heading">
         <div><p class="panel-heading__step">VIEW / FREE</p><h2 id="free-view-heading-title">湖畔に委ねる</h2></div>
@@ -204,15 +216,7 @@ export class ViewingStage {
         <span>演出密度 <output data-output="free-density">${["静か", "標準", "華やか"][freeDensity] ?? "標準"}</output></span>
         <input name="free-density" type="range" min="0" max="2" step="1" value="${freeDensity}" aria-label="演出密度" />
       </label>
-      <section class="free-view-control" aria-labelledby="free-view-heading">
-        <div class="free-view-heading"><span id="free-view-heading">視点を動かす</span><b>FREE CAMERA</b></div>
-        <div class="free-view-row">
-          <label class="free-view-select"><span>プリセット視点</span><select name="free-view-preset">${viewPresetOptions}</select></label>
-          <button class="secondary-action free-view-reset" type="button" data-viewer-action="free-view-reset">元の位置に戻る</button>
-        </div>
-        <p>ドラッグ／1本指で見回す · 右ドラッグ／2本指で移動 · ホイール／ピンチで接近</p>
-        <p class="free-view-keys"><kbd>WASD / 矢印</kbd> 前後左右 · <kbd>Q / E</kbd> 上下 · <kbd>Shift</kbd> 高速</p>
-      </section>
+      ${renderViewerCameraControl(this.#freeViewPresetId)}
       <div class="show-now"><p>NOW PLAYING</p><strong data-show-title>${escapeHTML(this.#freeState.title)}</strong><span data-show-progress>${escapeHTML(this.#freeState.detail)}</span></div>
       <button class="primary-action viewer-primary-toggle" type="button" data-viewer-action="free-toggle">${this.#freeState.running ? "一時停止" : "演目を再開"}</button>
     </aside>`;
@@ -220,7 +224,7 @@ export class ViewingStage {
 
   #renderSceneCaption(): string {
     if (this.#context === "check") {
-      return `<div class="scene-caption"><span>MODE</span><strong>SINGLE LOOP</strong><i></i><span>SEED</span><strong>FIXED</strong></div>`;
+      return `<div class="scene-caption"><span>SEED</span><strong>FIXED</strong><i></i><span>VIEW</span><strong data-view-label>${FREE_VIEW_PRESETS[this.#freeViewPresetId].label}</strong></div>`;
     }
     return `<div class="scene-caption"><span>WIND</span><strong>東 1.3 m/s</strong><i></i><span>VIEW</span><strong data-view-label>${FREE_VIEW_PRESETS[this.#freeViewPresetId].label}</strong></div>`;
   }
@@ -234,7 +238,7 @@ export class ViewingStage {
     if (action === "back") this.#callbacks.onBack();
     else if (action === "check-toggle") this.#callbacks.onCheckToggle();
     else if (action === "free-toggle") this.#callbacks.onFreeToggle();
-    else if (action === "free-view-reset") {
+    else if (action === "view-reset") {
       this.#callbacks.onFreeViewReset();
       this.#callbacks.onToast("視点を湖畔固定席へ戻しました");
     }
@@ -268,7 +272,10 @@ export class ViewingStage {
       this.#callbacks.onCheckLoopChange(input.checked);
       return;
     }
-    if (input.name !== "free-view-preset" || !isFreeViewPresetId(input.value)) {
+    if (
+      input.name !== "viewer-view-preset" ||
+      !isFreeViewPresetId(input.value)
+    ) {
       return;
     }
     this.setFreeViewPreset(input.value);

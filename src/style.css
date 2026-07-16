@@ -4700,6 +4700,13 @@ input[type="range"] {
   border-color: rgb(197 151 93 / 30%);
 }
 
+.viewing-panel--check .viewer-primary-toggle {
+  position: sticky;
+  z-index: 2;
+  bottom: 0.75rem;
+  box-shadow: 0 -0.65rem 1.2rem rgb(4 8 13 / 78%);
+}
+
 .viewer-context-copy {
   padding: 1.05rem 1.15rem 0.7rem;
 }
