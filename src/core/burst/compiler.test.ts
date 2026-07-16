@@ -2,11 +2,50 @@ import { describe, expect, it } from "vitest";
 
 import {
   createHeartPoints,
+  ensureFireworkDesignV4,
   FIREWORK_PRESETS,
   HEART_PRESET,
   SENRIN_PRESET,
+  type FireworkDesignV4,
+  type PatternLayerIntent,
 } from "../../data";
-import { compileFireworkDesign, fibonacciSphere } from "./compiler";
+import {
+  compileFireworkDesign,
+  fibonacciSphere,
+  isValidAuthoredPoint,
+} from "./compiler";
+
+function patternDesign(
+  template: PatternLayerIntent["pattern"]["template"],
+  section: PatternLayerIntent["pattern"]["section"] = {
+    plane: "xy",
+    ratio: 0.5,
+  },
+  scale = 0.72,
+): FireworkDesignV4 {
+  const design = ensureFireworkDesignV4(HEART_PRESET);
+  const source = design.layers[0]!;
+  design.layers = [
+    {
+      authoringMode: "pattern",
+      defaultStarId: source.defaultStarId,
+      id: "authored-pattern",
+      ignitionOffset: 0,
+      locked: false,
+      name: "型物",
+      pattern: {
+        density: 96,
+        rotationDegrees: 0,
+        scale,
+        section,
+        template,
+      },
+      radialSpeedScale: 1,
+      visible: true,
+    },
+  ];
+  return design;
+}
 
 describe("Phase 6.5 burst compiler", () => {
   it("generates the requested number of unit points without polar concentration", () => {
@@ -75,5 +114,71 @@ describe("Phase 6.5 burst compiler", () => {
     expect(plan.estimatedCost.maximumParticles).toBeGreaterThan(
       plan.estimatedCost.starCount,
     );
+  });
+
+  it("preserves authored heart magnitude and notch in compiled velocity", () => {
+    const circle = compileFireworkDesign(patternDesign("circle"), 81_503);
+    const heart = compileFireworkDesign(patternDesign("heart"), 81_503);
+    expect(heart).not.toEqual(circle);
+
+    const projected = heart.stars.map((star) => star.initialVelocity);
+    const width = Math.max(...projected.map((point) => Math.abs(point.x)));
+    const nearCenter = projected.filter(
+      (point) => Math.abs(point.x) < width * 0.08,
+    );
+    const upperCenter = Math.max(...nearCenter.map((point) => point.y));
+    const upperLobes = Math.max(...projected.map((point) => point.y));
+    const bottom = projected.reduce((lowest, point) =>
+      point.y < lowest.y ? point : lowest,
+    );
+
+    expect(upperCenter).toBeLessThan(upperLobes * 0.72);
+    expect(Math.abs(bottom.x)).toBeLessThan(width * 0.08);
+    expect(bottom.y).toBeLessThan(-upperLobes);
+  });
+
+  it("keeps authored scale and section displacement in velocity space", () => {
+    const small = compileFireworkDesign(
+      patternDesign("circle", { plane: "xy", ratio: 0.5 }, 0.3),
+      50_411,
+    );
+    const large = compileFireworkDesign(
+      patternDesign("circle", { plane: "xy", ratio: 0.5 }, 0.8),
+      50_411,
+    );
+    const shiftedXY = compileFireworkDesign(
+      patternDesign("circle", { plane: "xy", ratio: 0.7 }),
+      50_411,
+    );
+    const shiftedXZ = compileFireworkDesign(
+      patternDesign("circle", { plane: "xz", ratio: 0.7 }),
+      50_411,
+    );
+    const averageRadius = (design: typeof small) =>
+      design.stars.reduce(
+        (sum, star) =>
+          sum + Math.hypot(star.initialVelocity.x, star.initialVelocity.y),
+        0,
+      ) / design.stars.length;
+    const centroid = (design: typeof small) =>
+      design.stars.reduce(
+        (sum, star) => ({
+          x: sum.x + star.initialVelocity.x / design.stars.length,
+          y: sum.y + star.initialVelocity.y / design.stars.length,
+          z: sum.z + star.initialVelocity.z / design.stars.length,
+        }),
+        { x: 0, y: 0, z: 0 },
+      );
+
+    expect(averageRadius(large)).toBeGreaterThan(averageRadius(small) * 2.4);
+    expect(Math.abs(centroid(shiftedXY).z)).toBeGreaterThan(10);
+    expect(Math.abs(centroid(shiftedXZ).y)).toBeGreaterThan(10);
+  });
+
+  it("rejects zero, non-finite, and out-of-shell authored points", () => {
+    expect(isValidAuthoredPoint({ x: 0.2, y: 0.3, z: 0.4 })).toBe(true);
+    expect(isValidAuthoredPoint({ x: 0, y: 0, z: 0 })).toBe(false);
+    expect(isValidAuthoredPoint({ x: Number.NaN, y: 0, z: 0 })).toBe(false);
+    expect(isValidAuthoredPoint({ x: 1.01, y: 0, z: 0 })).toBe(false);
   });
 });

@@ -10,7 +10,7 @@ import type {
   SphericalStarLayer,
   VirtualStarPreset,
 } from "../../data/firework";
-import { resolveFireworkDesignV4 } from "../../data/migrations/v3ToV4";
+import { resolveCurrentIntent } from "../../data/migrations/v3ToV4";
 import { deriveVirtualBehavior } from "./deriveVirtualBehavior";
 
 export interface CompiledStar {
@@ -125,6 +125,7 @@ function compileLayerStar(
   definitionId: string,
   index: number,
   random: ReturnType<typeof createSeededRandom>,
+  preserveMagnitude = false,
 ): CompiledStar {
   const sourceDefinition = resolveDefinition(design, definitionId);
   const behavior =
@@ -149,23 +150,28 @@ function compileLayerStar(
     behavior?.velocityJitter ?? design.launchVariation.velocity;
   const placementJitter =
     behavior?.placementJitter ?? design.launchVariation.placement;
-  const speed =
-    (behavior?.baseVelocity ?? design.burstField.baseVelocity) *
-    (behavior?.radialSpeedScale ?? layer.radialSpeedScale) *
-    (1 + random.signed() * velocityJitter);
-  const normalized = normalize({
-    x: direction.x + random.signed() * placementJitter,
-    y: direction.y + random.signed() * placementJitter,
-    z: direction.z + random.signed() * placementJitter,
-  });
+  const speed = preserveMagnitude
+    ? (behavior?.baseVelocity ?? design.burstField.baseVelocity) *
+      layer.radialSpeedScale *
+      (1 + random.signed() * Math.min(velocityJitter, 0.015))
+    : (behavior?.baseVelocity ?? design.burstField.baseVelocity) *
+      (behavior?.radialSpeedScale ?? layer.radialSpeedScale) *
+      (1 + random.signed() * velocityJitter);
+  const velocityVector = preserveMagnitude
+    ? direction
+    : normalize({
+        x: direction.x + random.signed() * placementJitter,
+        y: direction.y + random.signed() * placementJitter,
+        z: direction.z + random.signed() * placementJitter,
+      });
   return {
     definition,
     id: `${layer.id}-star-${index}`,
     initialPosition: { x: 0, y: 0, z: 0 },
     initialVelocity: {
-      x: normalized.x * speed,
-      y: normalized.y * speed,
-      z: normalized.z * speed,
+      x: velocityVector.x * speed,
+      y: velocityVector.y * speed,
+      z: velocityVector.z * speed,
     },
     intensityScale: definition.brightness,
     layerID: layer.id,
@@ -187,12 +193,48 @@ function compileLayerStar(
   };
 }
 
+export function isValidAuthoredPoint(point: Vector3Value): boolean {
+  const radius = Math.hypot(point.x, point.y, point.z);
+  return (
+    Number.isFinite(point.x) &&
+    Number.isFinite(point.y) &&
+    Number.isFinite(point.z) &&
+    radius > 1e-5 &&
+    radius <= 1 + 1e-6
+  );
+}
+
+/** Compiles saved 3D point magnitudes without spherical normalization. */
+export function compileAuthoredPoints(
+  design: FireworkDesign,
+  layer: SphericalStarLayer,
+  launchRandom: ReturnType<typeof createSeededRandom>,
+): CompiledStar[] {
+  return layer.overrides.flatMap((override, index) => {
+    if (override.removed || !override.position) return [];
+    if (!isValidAuthoredPoint(override.position)) return [];
+    return [
+      compileLayerStar(
+        design,
+        layer,
+        override.position,
+        override.starId ?? layer.defaultStarId,
+        override.index ?? index,
+        launchRandom,
+        true,
+      ),
+    ];
+  });
+}
+
 function compileSpherical(
   design: FireworkDesign,
   layer: SphericalStarLayer,
   assemblyRandom: ReturnType<typeof createSeededRandom>,
   launchRandom: ReturnType<typeof createSeededRandom>,
+  authored = false,
 ): CompiledStar[] {
+  if (authored) return compileAuthoredPoints(design, layer, launchRandom);
   const overrides = new Map(layer.overrides.map((item) => [item.index, item]));
   const points = fibonacciSphere(layer.count);
   const stars: CompiledStar[] = [];
@@ -426,14 +468,25 @@ export function compileFireworkDesign(
   design: AnyFireworkDesign,
   launchSeed: number,
 ): CompiledBurstPlan {
-  const runtimeDesign =
-    design.schemaVersion === 4 ? resolveFireworkDesignV4(design) : design;
-  return compileRuntimeFireworkDesign(runtimeDesign, launchSeed);
+  if (design.schemaVersion === 4) {
+    const authoredLayerIds = new Set(
+      design.layers
+        .filter((layer) => ["manual", "pattern"].includes(layer.authoringMode))
+        .map((layer) => layer.id),
+    );
+    return compileRuntimeFireworkDesign(
+      resolveCurrentIntent(design),
+      launchSeed,
+      authoredLayerIds,
+    );
+  }
+  return compileRuntimeFireworkDesign(design, launchSeed);
 }
 
 function compileRuntimeFireworkDesign(
   design: FireworkDesign,
   launchSeed: number,
+  authoredLayerIds: ReadonlySet<string> = new Set(),
 ): CompiledBurstPlan {
   const launchRandom = createSeededRandom(launchSeed ^ design.assemblySeed);
   const assemblyRandom =
@@ -446,7 +499,13 @@ function compileRuntimeFireworkDesign(
     if (!layer.visible) continue;
     if (layer.kind === "spherical") {
       stars.push(
-        ...compileSpherical(design, layer, assemblyRandom, launchRandom),
+        ...compileSpherical(
+          design,
+          layer,
+          assemblyRandom,
+          launchRandom,
+          authoredLayerIds.has(layer.id),
+        ),
       );
     } else if (layer.kind === "pattern") {
       stars.push(

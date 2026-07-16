@@ -10,7 +10,9 @@ import {
 } from "../../test/fixtures/renewal2Baseline";
 import { isFireworkDesignV4, type PatternLayerIntent } from "../firework";
 import {
+  compareLegacyEnvelope,
   migrateV3ToV4,
+  resolveCurrentIntent,
   resolveLayerIntent,
   V3_TO_V4_REGRESSION_SEED,
 } from "./v3ToV4";
@@ -23,13 +25,25 @@ describe("v3ToV4", () => {
     expect(migrated.every((design) => design.schemaVersion === 4)).toBe(true);
   });
 
-  it("retains fixed-seed launch output through the legacy comparison intent", () => {
-    for (const source of RENEWAL2_V3_FIXTURES) {
-      const migrated = migrateV3ToV4(source);
-      expect(compileFireworkDesign(migrated, V3_TO_V4_REGRESSION_SEED)).toEqual(
-        compileFireworkDesign(source, V3_TO_V4_REGRESSION_SEED),
-      );
+  it("uses current layers for execution and keeps legacy intent comparison-only", () => {
+    const migrated = migrateV3ToV4(RENEWAL2_CORE_FIXTURE);
+    const layer = migrated.layers[0];
+    if (!layer || layer.authoringMode !== "preset") {
+      throw new Error("expected preset layer");
     }
+    layer.parameters.count += 7;
+
+    const resolved = resolveCurrentIntent(migrated);
+    const comparison = compareLegacyEnvelope(migrated, resolved);
+
+    expect(resolved.layers[0]).toMatchObject({ count: layer.parameters.count });
+    expect(comparison.hasLegacyIntent).toBe(true);
+    expect(comparison.changedLayerIds).toContain(layer.id);
+    expect(
+      compileFireworkDesign(migrated, V3_TO_V4_REGRESSION_SEED),
+    ).not.toEqual(
+      compileFireworkDesign(migrated.legacyIntent!, V3_TO_V4_REGRESSION_SEED),
+    );
   });
 
   it("classifies explicit point clouds as manual and regular layers as presets", () => {

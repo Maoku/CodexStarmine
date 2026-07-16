@@ -286,18 +286,57 @@ export function resolveLayerIntent(intent: LayerIntentV4): FireworkLayer {
 export function resolveFireworkDesignV4(
   design: FireworkDesignV4,
 ): FireworkDesignV3 {
-  const resolved = design.legacyIntent
-    ? clone(design.legacyIntent)
-    : (clone(design) as unknown as FireworkDesignV3);
-  const source = clone(design) as unknown as Record<string, unknown>;
-  delete source.layers;
-  delete source.legacyIntent;
-  delete source.schemaVersion;
-  Object.assign(resolved, source);
+  return resolveCurrentIntent(design);
+}
+
+export interface MigrationComparison {
+  changedLayerIds: string[];
+  currentLayerCount: number;
+  hasLegacyIntent: boolean;
+  legacyLayerCount: number;
+  matchingLayerIds: string[];
+}
+
+/**
+ * Resolves the editable v4 document into the runtime compatibility shape.
+ * `legacyIntent` is deliberately excluded: it is a migration reference, not
+ * the execution source of truth.
+ */
+export function resolveCurrentIntent(
+  design: FireworkDesignV4,
+): FireworkDesignV3 {
+  const resolved = clone(design) as unknown as FireworkDesignV3;
+  delete (resolved as unknown as Record<string, unknown>).legacyIntent;
   resolved.derivationVersion = CURRENT_DERIVATION_VERSION;
-  resolved.layers = design.legacyIntent
-    ? clone(design.legacyIntent.layers)
-    : design.layers.map(resolveLayerIntent);
+  resolved.layers = design.layers.map(resolveLayerIntent);
   resolved.schemaVersion = FIREWORK_DESIGN_V3_SCHEMA_VERSION;
   return resolved;
+}
+
+/** Keeps migration comparison available without allowing it to affect play. */
+export function compareLegacyEnvelope(
+  design: FireworkDesignV4,
+  resolved: FireworkDesignV3 = resolveCurrentIntent(design),
+): MigrationComparison {
+  const legacyLayers = design.legacyIntent?.layers ?? [];
+  const legacyById = new Map(legacyLayers.map((layer) => [layer.id, layer]));
+  const matchingLayerIds: string[] = [];
+  const changedLayerIds: string[] = [];
+
+  resolved.layers.forEach((layer) => {
+    const legacy = legacyById.get(layer.id);
+    if (legacy && JSON.stringify(legacy) === JSON.stringify(layer)) {
+      matchingLayerIds.push(layer.id);
+    } else {
+      changedLayerIds.push(layer.id);
+    }
+  });
+
+  return {
+    changedLayerIds,
+    currentLayerCount: resolved.layers.length,
+    hasLegacyIntent: Boolean(design.legacyIntent),
+    legacyLayerCount: legacyLayers.length,
+    matchingLayerIds,
+  };
 }
