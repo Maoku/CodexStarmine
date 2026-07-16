@@ -6,6 +6,16 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 550,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("/node_modules/three/examples/jsm/")) {
+            return "three-addons";
+          }
+          if (id.includes("/node_modules/three/")) return "three-core";
+        },
+      },
+    },
   },
   test: {
     include: ["src/**/*.test.ts"],

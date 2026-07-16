@@ -637,3 +637,60 @@ rtk npm run build
 - 現行の編集画面を `1440 × 900`、`1280 × 720`、`390 × 844` で `Docs/images/renewal3/phase0-editor-*.png` に保存した。
 - 自動E2Eは新規依存を増やさず、既存の単体・DOMテストとCodex in-app browserによる画面幅別の操作検証を継続する。
 - 品質ゲート: lint、全126テスト、format check、production buildを実行し、結果をPhase 0 commitへ含める。
+
+### 2026-07-16: Renewal3 Phase 1 完了
+
+- `resolveCurrentIntent()` を実行時の正本とし、`legacyIntent` を移行比較専用へ限定した。
+- manual/patternのauthoring layerを直接コンパイルし、入力点の大きさと重心を正規化せず初期位置・初速度へ反映した。
+- ハートのくぼみ、断面別重心、スケール差、不正点除外を数値回帰テストで固定した。
+- commit: `0b002de feat(renewal3-phase-1): compile current authored intent`
+
+### 2026-07-16: Renewal3 Phase 2 完了
+
+- 数値式のXY／XZ断面ボタンを撤去し、半透明3D玉、選択面、形と文字を伴うXYZギズモへ置換した。
+- ポインタードラッグ、ホイール、矢印／PageUp／PageDownで面と位置を操作でき、中央キャンバスとintentが同期する。
+- 1280×720と390×844で主編集点、ナビゲーター、キーボード操作、横流出なしを確認した。
+- commit: `78ffdfa feat(renewal3-phase-2): add spatial slice navigator`
+
+### 2026-07-16: Renewal3 Phase 3 完了
+
+- 円、ハート、星、四角、三角、六角形を弧長基準で生成し、低密度でも頂点とハートの特徴点を先に保持するようにした。
+- 全テンプレートを選択面へ写像し、安全半径94%以内へ制限した。面変更、回転、密度、最大スケールをコンパイルテストで確認した。
+- commit: `ff56b6d feat(renewal3-phase-3): add bounded pattern templates`
+
+### 2026-07-16: Renewal3 Phase 4 完了
+
+- 手動配置座標を `getScreenCTM().inverse()` 基準へ変更し、レターボックス時のfallbackも保持した。
+- 円周、直線、円弧、格子、追加／置換を実装し、1回のUndoで生成前へ戻せるようにした。
+- 実ブラウザで押下点とのCSS pixel誤差0.854px、生成10点、Undo 1回、モバイルのパラメーター到達性を確認した。
+- commit: `2f05fa4 feat(renewal3-phase-4): align manual placement tools`
+
+### 2026-07-16: Renewal3 Phase 5 完了
+
+- `ApproximateSpreadRenderer` を廃止し、現在のv4 intentから生成した `CompiledBurstPlan` を最大256星へ決定的に層化間引きするプレビューへ置換した。
+- previewとcheckは共通の星初期化、発火遅延、重力、風、drag、色段階更新を使用する。checkはコンパイル済みplanをそのまま `FireworkSystem` へ渡す。
+- 同じseedの代表星を時刻ごとに比較する軌道テスト、256星上限、全レイヤーと速度極値保持、150msデバウンスを確認した。
+- commit: `91fff59 feat(renewal3-phase-5): unify preview and check plans`
+
+### 2026-07-16: Renewal3 Phase 6 完了
+
+- runtime切替でcheck/freeの両方へ同じ `FreeViewCameraController` を割り当て、checkにも4プリセット、リセット、操作案内を追加した。
+- 月オブジェクト、方向光、湖面の月光筋、月を示すaria文言を削除した。湖面は時間移流する複数スケールのvalue noiseへ置換し、pixel ratioに応じてhigh/low geometryを選ぶ。
+- 390×844ではcheckの一時停止をスクロール領域下端へ固定した。check/freeともcanvasの自由操作状態、プリセット変更、リセット、横流出なしを確認した。
+- commit: `838a536 feat(renewal3-phase-6): free check camera and refine lake`
+
+### 2026-07-16: Renewal3 Phase 7 完了
+
+- 移行作品へハート・星・四角・手動直線を同時に配置し、v4保存、再読込、固定seed再コンパイルで全layerが保持される結合テストを追加した。新規白紙作品の星型も同じ手順で確認した。
+- 1280×720の200%表示に相当する640×360 CSS viewportと390×844で横流出がなく、主要操作へ到達できた。reduced motionはタイトルcue削減と固定カメラの既存回帰テストで確認した。
+- 固定視点で湖面を30秒観察し、旧来の平行な正弦波縞や月光筋が現れないことを確認した。check/freeともコンソールエラーは0件だった。
+- Viteでthree coreとaddonsを分割し、最大chunkを543.56kBへ抑えた。従来の550kB警告は解消した。
+- 最終画像を次へ保存した。
+  - [タイトル 1280×720](images/renewal3/final-title-1280x720.png)
+  - [編集 1440×900](images/renewal3/final-editor-1440x900.png)
+  - [編集 1280×720](images/renewal3/final-editor-1280x720.png)
+  - [編集 390×844](images/renewal3/final-editor-390x844.png)
+  - [湖面確認 1280×720](images/renewal3/final-check-1280x720.png)
+  - [フリー鑑賞 1280×720](images/renewal3/final-free-1280x720.png)
+- R3-01〜R3-17をunit、trajectory、DOM、実ブラウザ、スクリーンショット、quality gateの組合せで確認した。
+- 最終品質ゲート: lint、全149テスト、format check、警告なしのproduction build。
