@@ -25,7 +25,7 @@ export interface ImageStarResolution {
 
 export const DEFAULT_IMAGE_PLACEMENT_SETTINGS: ImagePlacementSettings = {
   maximumColors: 4,
-  targetCount: 96,
+  targetCount: 240,
 };
 
 export const IMAGE_PLACEMENT_MAXIMUM_POINTS = 240;
@@ -34,6 +34,17 @@ export const IMAGE_PLACEMENT_SAFETY_RADIUS = 0.94;
 
 const BACKGROUND_DIFFERENCE_THRESHOLD = 24;
 const EXISTING_STAR_COLOR_THRESHOLD = 72;
+const EDGE_SCORE_RELATIVE_THRESHOLD = 0.14;
+/* One 8-bit intensity step; below this a Sobel response is float noise. */
+const FEATURE_EDGE_MINIMUM = 1 / 255;
+const CONTOUR_RIM_THICKNESS_PX = 2;
+const SILHOUETTE_BUDGET_RATIO = 0.62;
+/*
+ * Subject components are scored by accumulated background contrast. Anything
+ * far below the main subject (wall shading strips, detached scraps) is noise
+ * that would waste contour budget and blur the placed shape.
+ */
+const COMPONENT_SCORE_RATIO = 0.15;
 
 interface RGB {
   blue: number;
@@ -123,16 +134,58 @@ function backgroundColor(image: ImageDataLike): RGB & { alpha: number } {
   };
 }
 
-function pixelCandidates(image: ImageDataLike): PixelCandidate[] {
-  const background = backgroundColor(image);
-  const scale =
-    (IMAGE_PLACEMENT_SAFETY_RADIUS * 2) / Math.hypot(image.width, image.height);
-  const centerX = image.width / 2;
-  const centerY = image.height / 2;
-  const candidates: PixelCandidate[] = [];
-  let maximumImportance = 0;
+function sobelMagnitude(
+  field: Float64Array,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+): number {
+  const at = (sampleX: number, sampleY: number): number =>
+    field[clamp(sampleY, 0, height - 1) * width + clamp(sampleX, 0, width - 1)];
+  const gradientX =
+    at(x + 1, y - 1) +
+    2 * at(x + 1, y) +
+    at(x + 1, y + 1) -
+    at(x - 1, y - 1) -
+    2 * at(x - 1, y) -
+    at(x - 1, y + 1);
+  const gradientY =
+    at(x - 1, y + 1) +
+    2 * at(x, y + 1) +
+    at(x + 1, y + 1) -
+    at(x - 1, y - 1) -
+    2 * at(x, y - 1) -
+    at(x + 1, y - 1);
+  return Math.hypot(gradientX, gradientY);
+}
 
-  for (let index = 0; index < image.width * image.height; index += 1) {
+interface ImageAnalysis {
+  featureCandidates: PixelCandidate[];
+  pixelScale: number;
+  silhouetteCandidates: PixelCandidate[];
+}
+
+/**
+ * Splits the subject into its outline against the background and interior
+ * feature edges. The background is the border-connected region of pixels close
+ * to the border color, so subject areas that share the background color (a
+ * white shirt on white) stay part of the subject as long as they are enclosed.
+ */
+function analyzeImage(image: ImageDataLike): ImageAnalysis {
+  const background = backgroundColor(image);
+  const pixelScale =
+    (IMAGE_PLACEMENT_SAFETY_RADIUS * 2) / Math.hypot(image.width, image.height);
+  const size = image.width * image.height;
+  const strength = new Float64Array(size);
+  const channels = {
+    blue: new Float64Array(size),
+    green: new Float64Array(size),
+    red: new Float64Array(size),
+  };
+  let maximumStrength = 0;
+
+  for (let index = 0; index < size; index += 1) {
     const offset = index * 4;
     const red = image.data[offset] ?? 0;
     const green = image.data[offset + 1] ?? 0;
@@ -144,60 +197,215 @@ function pixelCandidates(image: ImageDataLike): PixelCandidate[] {
       blue - background.blue,
     );
     const alphaDifference = Math.abs(alpha - background.alpha);
-    const importance =
+    strength[index] =
       background.alpha < 16
         ? alpha
         : rgbDifference * (alpha / 255) + alphaDifference;
-    maximumImportance = Math.max(maximumImportance, importance);
-    candidates.push({
+    maximumStrength = Math.max(maximumStrength, strength[index]);
+    const opacity = alpha / 255;
+    channels.red[index] = (red / 255) * opacity;
+    channels.green[index] = (green / 255) * opacity;
+    channels.blue[index] = (blue / 255) * opacity;
+  }
+  const empty = { featureCandidates: [], pixelScale, silhouetteCandidates: [] };
+  if (maximumStrength <= 0) return empty;
+  const backgroundThreshold = Math.max(
+    BACKGROUND_DIFFERENCE_THRESHOLD,
+    maximumStrength * 0.08,
+  );
+
+  const flooded = new Uint8Array(size);
+  const queue: number[] = [];
+  borderPixelIndices(image.width, image.height).forEach((index) => {
+    if (!flooded[index] && strength[index] < backgroundThreshold) {
+      flooded[index] = 1;
+      queue.push(index);
+    }
+  });
+  for (let head = 0; head < queue.length; head += 1) {
+    const index = queue[head];
+    const x = index % image.width;
+    const neighbors = [
+      x > 0 ? index - 1 : -1,
+      x < image.width - 1 ? index + 1 : -1,
+      index - image.width,
+      index + image.width,
+    ];
+    neighbors.forEach((neighbor) => {
+      if (
+        neighbor >= 0 &&
+        neighbor < size &&
+        !flooded[neighbor] &&
+        strength[neighbor] < backgroundThreshold
+      ) {
+        flooded[neighbor] = 1;
+        queue.push(neighbor);
+      }
+    });
+  }
+
+  const componentLabels = new Int32Array(size).fill(-1);
+  const componentScores: number[] = [];
+  for (let start = 0; start < size; start += 1) {
+    if (flooded[start] || componentLabels[start] >= 0) continue;
+    const label = componentScores.length;
+    componentLabels[start] = label;
+    const stack = [start];
+    let score = 0;
+    for (let head = 0; head < stack.length; head += 1) {
+      const index = stack[head];
+      score += strength[index];
+      const x = index % image.width;
+      const neighbors = [
+        x > 0 ? index - 1 : -1,
+        x < image.width - 1 ? index + 1 : -1,
+        index - image.width,
+        index + image.width,
+      ];
+      neighbors.forEach((neighbor) => {
+        if (
+          neighbor >= 0 &&
+          neighbor < size &&
+          !flooded[neighbor] &&
+          componentLabels[neighbor] < 0
+        ) {
+          componentLabels[neighbor] = label;
+          stack.push(neighbor);
+        }
+      });
+    }
+    componentScores.push(score);
+  }
+  const bestComponentScore = componentScores.reduce(
+    (best, score) => Math.max(best, score),
+    0,
+  );
+  const keptComponents = componentScores.map(
+    (score) => score >= bestComponentScore * COMPONENT_SCORE_RATIO,
+  );
+
+  /* The image crop line is not a subject contour, so borders stay neutral. */
+  const isBackground = (x: number, y: number): boolean =>
+    x >= 0 &&
+    y >= 0 &&
+    x < image.width &&
+    y < image.height &&
+    flooded[y * image.width + x] === 1;
+  const isKeptSubject = (x: number, y: number): boolean => {
+    if (x < 0 || y < 0 || x >= image.width || y >= image.height) return false;
+    const index = y * image.width + x;
+    return flooded[index] === 0 && keptComponents[componentLabels[index]];
+  };
+  const centerX = image.width / 2;
+  const centerY = image.height / 2;
+  const candidateAt = (
+    x: number,
+    y: number,
+    importance: number,
+  ): PixelCandidate => {
+    const index = y * image.width + x;
+    const offset = index * 4;
+    const red = image.data[offset] ?? 0;
+    const green = image.data[offset + 1] ?? 0;
+    const blue = image.data[offset + 2] ?? 0;
+    return {
       blue,
       color: packColor({ blue, green, red }),
       green,
       importance,
       index,
       point: {
-        x: ((index % image.width) + 0.5 - centerX) * scale,
-        y: (centerY - (Math.floor(index / image.width) + 0.5)) * scale,
+        x: (x + 0.5 - centerX) * pixelScale,
+        y: (centerY - (y + 0.5)) * pixelScale,
       },
       red,
-    });
+    };
+  };
+
+  const silhouetteCandidates: PixelCandidate[] = [];
+  const scoredFeatures: PixelCandidate[] = [];
+  let maximumFeature = 0;
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      if (!isKeptSubject(x, y)) continue;
+      if (
+        isBackground(x - 1, y) ||
+        isBackground(x + 1, y) ||
+        isBackground(x, y - 1) ||
+        isBackground(x, y + 1)
+      ) {
+        silhouetteCandidates.push(candidateAt(x, y, 1));
+        continue;
+      }
+      let interior = true;
+      for (let stepY = -1; stepY <= 1 && interior; stepY += 1) {
+        for (let stepX = -1; stepX <= 1; stepX += 1) {
+          if (isBackground(x + stepX, y + stepY)) {
+            interior = false;
+            break;
+          }
+        }
+      }
+      if (!interior) continue;
+      const featureEdge = Math.hypot(
+        sobelMagnitude(channels.red, image.width, image.height, x, y),
+        sobelMagnitude(channels.green, image.width, image.height, x, y),
+        sobelMagnitude(channels.blue, image.width, image.height, x, y),
+      );
+      if (featureEdge < FEATURE_EDGE_MINIMUM) continue;
+      maximumFeature = Math.max(maximumFeature, featureEdge);
+      scoredFeatures.push(candidateAt(x, y, featureEdge));
+    }
   }
 
-  const threshold = Math.max(
-    BACKGROUND_DIFFERENCE_THRESHOLD,
-    maximumImportance * 0.08,
+  const featureThreshold = Math.max(
+    maximumFeature * EDGE_SCORE_RELATIVE_THRESHOLD,
+    FEATURE_EDGE_MINIMUM,
   );
-  return candidates
-    .filter((candidate) => candidate.importance >= threshold)
-    .sort(
-      (left, right) =>
-        right.importance - left.importance || left.index - right.index,
-    );
+  return {
+    featureCandidates: scoredFeatures
+      .filter((candidate) => candidate.importance >= featureThreshold)
+      .sort(
+        (left, right) =>
+          right.importance - left.importance || left.index - right.index,
+      ),
+    pixelScale,
+    silhouetteCandidates,
+  };
+}
+
+function evenPick(
+  candidates: PixelCandidate[],
+  budget: number,
+): PixelCandidate[] {
+  if (candidates.length <= budget) return candidates;
+  return Array.from(
+    { length: budget },
+    (_, index) => candidates[Math.floor((index * candidates.length) / budget)],
+  );
 }
 
 function sampleCandidates(
   candidates: PixelCandidate[],
-  targetCount: number,
+  budget: number,
+  initialDistance: number,
+  seeds: PixelCandidate[],
 ): PixelCandidate[] {
-  if (candidates.length <= targetCount) return candidates;
-  const initialDistance =
-    Math.sqrt((Math.PI * IMAGE_PLACEMENT_SAFETY_RADIUS ** 2) / targetCount) *
-    0.82;
-  let selected: PixelCandidate[] = [];
+  if (budget <= 0) return [];
+  const seedIndices = new Set(seeds.map((seed) => seed.index));
+  const available = candidates.filter(
+    (candidate) => !seedIndices.has(candidate.index),
+  );
+  if (available.length <= budget) return available;
 
   for (const distanceScale of [1, 0.84, 0.7, 0.56, 0.42, 0]) {
     const minimumDistance = initialDistance * distanceScale;
-    if (minimumDistance === 0) {
-      return Array.from(
-        { length: targetCount },
-        (_, index) =>
-          candidates[Math.floor((index * candidates.length) / targetCount)],
-      );
-    }
-    selected = [];
-    for (const candidate of candidates) {
+    if (minimumDistance === 0) return evenPick(available, budget);
+    const selected: PixelCandidate[] = [];
+    const blockers = [...seeds];
+    for (const candidate of available) {
       if (
-        selected.every(
+        blockers.every(
           (item) =>
             Math.hypot(
               item.point.x - candidate.point.x,
@@ -206,17 +414,12 @@ function sampleCandidates(
         )
       ) {
         selected.push(candidate);
+        blockers.push(candidate);
       }
     }
-    if (selected.length >= targetCount) {
-      return Array.from(
-        { length: targetCount },
-        (_, index) =>
-          selected[Math.floor((index * selected.length) / targetCount)],
-      );
-    }
+    if (selected.length >= budget) return evenPick(selected, budget);
   }
-  return selected.slice(0, targetCount);
+  return [];
 }
 
 export function extractImagePlacement(
@@ -239,7 +442,44 @@ export function extractImagePlacement(
       IMAGE_PLACEMENT_MAXIMUM_POINTS,
     ),
   );
-  const selected = sampleCandidates(pixelCandidates(image), targetCount);
+  const { featureCandidates, pixelScale, silhouetteCandidates } =
+    analyzeImage(image);
+  const silhouetteLength = silhouetteCandidates.length * pixelScale;
+
+  const silhouetteBudget = Math.min(
+    Math.ceil(targetCount * SILHOUETTE_BUDGET_RATIO),
+    targetCount,
+  );
+  const silhouette = sampleCandidates(
+    silhouetteCandidates,
+    silhouetteBudget,
+    Math.max(pixelScale, silhouetteLength / Math.max(silhouetteBudget, 1)),
+    [],
+  );
+
+  const featureBudget = targetCount - silhouette.length;
+  const featureLength =
+    (featureCandidates.length * pixelScale) / CONTOUR_RIM_THICKNESS_PX;
+  const features = sampleCandidates(
+    featureCandidates,
+    featureBudget,
+    Math.max(pixelScale, featureLength / Math.max(featureBudget, 1)),
+    silhouette,
+  );
+
+  let selected = [...silhouette, ...features];
+  const backfillBudget = targetCount - selected.length;
+  if (backfillBudget > 0) {
+    selected = [
+      ...selected,
+      ...sampleCandidates(
+        silhouetteCandidates,
+        backfillBudget,
+        Math.max(pixelScale, silhouetteLength / targetCount),
+        selected,
+      ),
+    ];
+  }
   return {
     colors: selected.map((candidate) => candidate.color),
     points: selected.map((candidate) => candidate.point),

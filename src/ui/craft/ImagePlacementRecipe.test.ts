@@ -61,6 +61,86 @@ describe("ImagePlacementRecipe", () => {
     expect(new Set(placement.colors)).toEqual(new Set([0x14325a]));
   });
 
+  it("places points along the contour instead of filling the subject", () => {
+    const source = image(48, 48, (x, y) =>
+      Math.hypot(x - 23.5, y - 23.5) <= 17 ? [224, 151, 74, 255] : [0, 0, 0, 0],
+    );
+    const placement = extractImagePlacement(source, { targetCount: 48 });
+    const pixelScale = (IMAGE_PLACEMENT_SAFETY_RADIUS * 2) / Math.hypot(48, 48);
+
+    expect(placement.points).toHaveLength(48);
+    placement.points.forEach((point) => {
+      const radius = Math.hypot(point.x, point.y);
+      expect(radius).toBeGreaterThan(13 * pixelScale);
+      expect(radius).toBeLessThan(18.5 * pixelScale);
+    });
+  });
+
+  it("keeps interior feature points such as eyes on the contour map", () => {
+    const eyeCenters = [
+      { x: 23, y: 25 },
+      { x: 37, y: 25 },
+    ];
+    const source = image(60, 60, (x, y) => {
+      if (eyeCenters.some((eye) => Math.hypot(x - eye.x, y - eye.y) <= 2.5)) {
+        return [30, 30, 40, 255];
+      }
+      return Math.hypot(x - 30, y - 30) <= 20
+        ? [230, 200, 180, 255]
+        : [255, 255, 255, 255];
+    });
+    const placement = extractImagePlacement(source, { targetCount: 64 });
+    const pixelScale = (IMAGE_PLACEMENT_SAFETY_RADIUS * 2) / Math.hypot(60, 60);
+    const toSection = (x: number, y: number) => ({
+      x: (x + 0.5 - 30) * pixelScale,
+      y: (30 - (y + 0.5)) * pixelScale,
+    });
+    const nearEye = (point: { x: number; y: number }) =>
+      eyeCenters.some((eye) => {
+        const center = toSection(eye.x, eye.y);
+        return (
+          Math.hypot(point.x - center.x, point.y - center.y) <= 5.5 * pixelScale
+        );
+      });
+    const nearFaceRim = (point: { x: number; y: number }) =>
+      Math.abs(Math.hypot(point.x, point.y) - 20 * pixelScale) <=
+      4 * pixelScale;
+
+    expect(placement.points.length).toBeGreaterThan(0);
+    eyeCenters.forEach((eye) => {
+      const center = toSection(eye.x, eye.y);
+      expect(
+        placement.points.some(
+          (point) =>
+            Math.hypot(point.x - center.x, point.y - center.y) <=
+            5.5 * pixelScale,
+        ),
+      ).toBe(true);
+    });
+    placement.points.forEach((point) => {
+      expect(nearEye(point) || nearFaceRim(point)).toBe(true);
+    });
+  });
+
+  it("ignores faint detached strips and image crop edges", () => {
+    const source = image(64, 64, (x, y) => {
+      if (x <= 3) return [215, 215, 225, 255];
+      return Math.hypot(x - 36, y - 32) <= 16
+        ? [20, 50, 90, 255]
+        : [255, 255, 255, 255];
+    });
+    const placement = extractImagePlacement(source, { targetCount: 48 });
+    const pixelScale = (IMAGE_PLACEMENT_SAFETY_RADIUS * 2) / Math.hypot(64, 64);
+    const discCenter = { x: (36 + 0.5 - 32) * pixelScale, y: 0 };
+
+    expect(placement.points.length).toBeGreaterThan(0);
+    placement.points.forEach((point) => {
+      expect(
+        Math.hypot(point.x - discCenter.x, point.y - discCenter.y),
+      ).toBeLessThan(18 * pixelScale);
+    });
+  });
+
   it("rejects an image without a distinguishable subject", () => {
     const source = image(20, 20, () => [120, 120, 120, 255]);
     expect(extractImagePlacement(source).points).toEqual([]);

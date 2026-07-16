@@ -236,7 +236,7 @@ export function renderIntegratedPlacementWorkbench(
   templateApplyMode: TemplateApplyMode = "replace",
   sliceAnnouncement = "",
   manualPlacementSettings: ManualPlacementSettings = DEFAULT_MANUAL_PLACEMENT_SETTINGS,
-  imageTargetCount = 96,
+  imageTargetCount = 240,
   imageImporting = false,
 ): string {
   const pointEditingAllowed = selectedIntent?.authoringMode === "manual";
