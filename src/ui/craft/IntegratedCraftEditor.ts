@@ -9,9 +9,9 @@ import {
 } from "../../data";
 import type { CraftController, CraftDocumentSnapshot } from "../../modes/craft";
 import {
-  buildApproximateSpreadModel,
-  type ApproximateSpreadModel,
-} from "../../render/preview/ApproximateSpreadRenderer";
+  buildCompiledBurstPreviewModel,
+  type CompiledBurstPreviewModel,
+} from "../../render/preview/CompiledBurstPreviewRenderer";
 import { renderInlineDiagnosticPreview } from "./InlineDiagnosticPreview";
 import {
   canvasPointOnSection,
@@ -87,7 +87,7 @@ export class IntegratedCraftEditor {
   #templateApplyMode: TemplateApplyMode = "replace";
   #navigatorDrag?: NavigatorDrag;
   #pointDrag?: PointDrag;
-  #previewModel?: ApproximateSpreadModel;
+  #previewModel?: CompiledBurstPreviewModel;
   #previewRevision = 0;
   #previewRunning = true;
   #previewSignature = "";
@@ -125,7 +125,7 @@ export class IntegratedCraftEditor {
     this.#mobileQuery.addEventListener("change", this.#handleMobileQueryChange);
     this.#unsubscribe = this.#controller.document.subscribe((snapshot) => {
       this.#snapshot = snapshot;
-      this.#schedulePreview(snapshot.draft);
+      this.#schedulePreview(snapshot.intentDraft);
       this.#render();
     });
   }
@@ -174,7 +174,8 @@ export class IntegratedCraftEditor {
           ? "is-warning"
           : "is-good";
     const preview =
-      this.#previewModel ?? buildApproximateSpreadModel(snapshot.draft);
+      this.#previewModel ??
+      buildCompiledBurstPreviewModel(snapshot.intentDraft);
     this.element.dataset.mobileDrawer = this.#drawer ?? "closed";
     this.element.innerHTML = `
       <nav class="editor-mobile-toolbar" aria-label="編集パネル">
@@ -681,29 +682,24 @@ export class IntegratedCraftEditor {
     );
   };
 
-  #schedulePreview(design: FireworkDesign): void {
-    const signature = JSON.stringify(
-      design.layers.map((layer) => [
-        layer.id,
-        layer.visible,
-        layer.defaultStarId,
-        layer.kind === "pattern"
-          ? layer.points.length
-          : "count" in layer
-            ? layer.count
-            : layer.branchCount,
-      ]),
-    );
+  #schedulePreview(design: FireworkDesignV4): void {
+    const signature = JSON.stringify({
+      burstField: design.burstField,
+      layers: design.layers,
+      launchVariation: design.launchVariation,
+      sizeClass: design.sizeClass,
+      starDefinitions: design.starDefinitions,
+    });
     if (!this.#previewModel) {
-      this.#previewModel = buildApproximateSpreadModel(design);
+      this.#previewModel = buildCompiledBurstPreviewModel(design);
       this.#previewSignature = signature;
       return;
     }
     if (signature === this.#previewSignature) return;
     window.clearTimeout(this.#previewTimer);
     this.#previewTimer = window.setTimeout(() => {
-      this.#previewModel = buildApproximateSpreadModel(
-        this.#controller.document.draft,
+      this.#previewModel = buildCompiledBurstPreviewModel(
+        this.#controller.document.intentDraft,
       );
       this.#previewSignature = signature;
       this.#previewRevision += 1;

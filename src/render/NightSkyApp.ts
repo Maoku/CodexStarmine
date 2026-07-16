@@ -20,8 +20,9 @@ import { clampPixelRatio } from "../core/env";
 import {
   DesignRepository,
   FIREWORK_PRESETS,
+  resolveCurrentIntent,
   resolveSizePreset,
-  type FireworkDesign,
+  type AnyFireworkDesign,
 } from "../data";
 import { SingleLoopCheckController } from "../modes/check";
 import { CraftController } from "../modes/craft";
@@ -58,7 +59,7 @@ export class NightSkyApp {
   #isRunning = false;
   #isUiReady = false;
   #pendingRuntime?: {
-    design?: FireworkDesign;
+    design?: AnyFireworkDesign;
     runtime: BackgroundRuntime;
   };
 
@@ -139,8 +140,13 @@ export class NightSkyApp {
     const craft = new CraftController(repository);
     const getDesigns = () => [...FIREWORK_PRESETS, ...repository.list()];
     this.#check = new SingleLoopCheckController({
-      onLaunch: (design, seed) => {
+      onLaunch: (intentDesign, seed, plan) => {
+        const design =
+          intentDesign.schemaVersion === 4
+            ? resolveCurrentIntent(intentDesign)
+            : intentDesign;
         this.#fireworks.launch(design, {
+          compiledPlan: plan,
           lane: 0,
           launchAngle: 0,
           seed,
@@ -333,7 +339,7 @@ export class NightSkyApp {
 
   #setBackgroundRuntime(
     runtime: BackgroundRuntime,
-    design?: FireworkDesign,
+    design?: AnyFireworkDesign,
   ): void {
     this.#backgroundRuntimeKind = runtime;
     this.#backgroundRuntime.set(runtime, design);

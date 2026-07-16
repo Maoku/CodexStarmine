@@ -5,7 +5,7 @@ import {
 } from "../app/AppFlowController";
 import { RENEWAL2_BACKGROUND_RUNTIME_BY_SCREEN } from "../app/renewalContracts";
 import type { BackgroundRuntime } from "../app/renewalContracts";
-import type { FireworkDesign } from "../data";
+import type { AnyFireworkDesign, FireworkDesign } from "../data";
 import type { SingleLoopCheckState } from "../modes/check";
 import type { CraftController } from "../modes/craft";
 import {
@@ -33,7 +33,7 @@ export interface AppShellCallbacks {
   onFreeViewReset?: () => void;
   onBackgroundRuntimeChange: (
     runtime: BackgroundRuntime,
-    design?: FireworkDesign,
+    design?: AnyFireworkDesign,
   ) => void;
 }
 
@@ -157,7 +157,7 @@ export class AppShell {
     this.#activeViewerContext = viewerContext;
     this.#callbacks.onBackgroundRuntimeChange(
       RENEWAL2_BACKGROUND_RUNTIME_BY_SCREEN[appScreenKind(screen)],
-      viewerContext === "check" ? this.#controller.draft : undefined,
+      viewerContext === "check" ? this.#controller.intentDraft : undefined,
     );
 
     window.setTimeout(() => {

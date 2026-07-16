@@ -21,6 +21,11 @@ export interface ParticleEnvironment {
   wind: Vector3Value;
 }
 
+export const BURST_PARTICLE_ENVIRONMENT: Readonly<ParticleEnvironment> = {
+  gravity: 9.81,
+  wind: { x: 1.25, y: 0, z: 0.18 },
+};
+
 export interface EvaluatedColor {
   color: number;
   intensity: number;
@@ -112,4 +117,23 @@ export function integrateParticle(
   particle.position.y += particle.velocity.y * delta;
   particle.position.z += particle.velocity.z * delta;
   particle.age += delta;
+}
+
+/**
+ * Advances a burst star with the same ignition-delay rule used by the runtime.
+ * A return value of `true` means that ballistic motion was applied this frame.
+ */
+export function advanceBurstParticle(
+  particle: BallisticParticle,
+  deltaSeconds: number,
+  environment: ParticleEnvironment = BURST_PARTICLE_ENVIRONMENT,
+): boolean {
+  const delta = Math.min(Math.max(deltaSeconds, 0), 0.05);
+  if (delta === 0) return false;
+  if (particle.age < 0) {
+    particle.age += delta;
+    return false;
+  }
+  integrateParticle(particle, delta, environment);
+  return true;
 }

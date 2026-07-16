@@ -1,10 +1,10 @@
-import type { FireworkDesign } from "../data";
+import type { AnyFireworkDesign } from "../data";
 import type { BackgroundRuntime } from "./renewalContracts";
 
 export interface BackgroundRuntimeControllerOptions {
   clearScene: () => void;
   startAdvertise: () => void;
-  startCheck: (design: FireworkDesign) => void;
+  startCheck: (design: AnyFireworkDesign) => void;
   startFree: () => void;
   stopAdvertise: () => void;
   stopCheck: () => void;
@@ -24,7 +24,7 @@ export class BackgroundRuntimeController {
     return this.#runtime;
   }
 
-  set(runtime: BackgroundRuntime, design?: FireworkDesign): boolean {
+  set(runtime: BackgroundRuntime, design?: AnyFireworkDesign): boolean {
     if (runtime === this.#runtime) return false;
     if (runtime === "check" && !design) {
       throw new Error("The check runtime requires a firework design.");

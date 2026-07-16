@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PEONY_PRESET, type FireworkDesign } from "../../data";
+import {
+  compileFireworkDesign,
+  type CompiledBurstPlan,
+} from "../../core/burst";
+import { PEONY_PRESET, type AnyFireworkDesign } from "../../data";
 import {
   CHECK_LAUNCH_SEED,
   CHECK_LOOP_INTERVAL_SECONDS,
@@ -10,10 +14,14 @@ import {
 
 describe("SingleLoopCheckController", () => {
   it("launches one fixed-seed design per interval", () => {
-    const launches: Array<{ design: FireworkDesign; seed: number }> = [];
+    const launches: Array<{
+      design: AnyFireworkDesign;
+      plan: CompiledBurstPlan;
+      seed: number;
+    }> = [];
     const states: SingleLoopCheckState[] = [];
     const controller = new SingleLoopCheckController({
-      onLaunch: (design, seed) => launches.push({ design, seed }),
+      onLaunch: (design, seed, plan) => launches.push({ design, plan, seed }),
       onState: (state) => states.push(state),
     });
 
@@ -33,6 +41,10 @@ describe("SingleLoopCheckController", () => {
       CHECK_LAUNCH_SEED,
       CHECK_LAUNCH_SEED,
     ]);
+    expect(launches[0].plan).toEqual(
+      compileFireworkDesign(PEONY_PRESET, CHECK_LAUNCH_SEED),
+    );
+    expect(launches[1].plan).toBe(launches[0].plan);
     expect(states.at(-1)).toMatchObject({
       active: true,
       loopEnabled: true,

@@ -1,6 +1,11 @@
-import type { FireworkDesign } from "../../data";
+import { RENEWAL3_CHECK_SEED } from "../../app/renewal3Contracts";
+import {
+  compileFireworkDesign,
+  type CompiledBurstPlan,
+} from "../../core/burst";
+import type { AnyFireworkDesign } from "../../data";
 
-export const CHECK_LAUNCH_SEED = 50_226;
+export const CHECK_LAUNCH_SEED = RENEWAL3_CHECK_SEED;
 export const CHECK_LOOP_INTERVAL_SECONDS = 8;
 
 export interface SingleLoopCheckState {
@@ -14,12 +19,16 @@ export interface SingleLoopCheckState {
 
 export interface SingleLoopCheckControllerOptions {
   intervalSeconds?: number;
-  onLaunch: (design: FireworkDesign, seed: number) => void;
+  onLaunch: (
+    design: AnyFireworkDesign,
+    seed: number,
+    plan: CompiledBurstPlan,
+  ) => void;
   onState: (state: SingleLoopCheckState) => void;
   seed?: number;
 }
 
-function cloneDesign(design: FireworkDesign): FireworkDesign {
+function cloneDesign(design: AnyFireworkDesign): AnyFireworkDesign {
   return structuredClone(design);
 }
 
@@ -29,11 +38,12 @@ export class SingleLoopCheckController {
   readonly #onState: SingleLoopCheckControllerOptions["onState"];
   readonly #seed: number;
   #active = false;
-  #design?: FireworkDesign;
+  #design?: AnyFireworkDesign;
   #elapsedSeconds = 0;
   #lastStateKey = "";
   #loopEnabled = true;
   #pendingImmediateLaunch = false;
+  #plan?: CompiledBurstPlan;
   #running = false;
   #shotCount = 0;
 
@@ -55,13 +65,14 @@ export class SingleLoopCheckController {
     return this.#running;
   }
 
-  start(design: FireworkDesign): void {
+  start(design: AnyFireworkDesign): void {
     this.#active = true;
     this.#design = cloneDesign(design);
     this.#elapsedSeconds = 0;
     this.#lastStateKey = "";
     this.#loopEnabled = true;
     this.#pendingImmediateLaunch = true;
+    this.#plan = compileFireworkDesign(this.#design, this.#seed);
     this.#running = true;
     this.#shotCount = 0;
     this.#emitState(true);
@@ -72,6 +83,7 @@ export class SingleLoopCheckController {
     this.#design = undefined;
     this.#elapsedSeconds = 0;
     this.#pendingImmediateLaunch = false;
+    this.#plan = undefined;
     this.#running = false;
     this.#shotCount = 0;
     this.#emitState(true);
@@ -125,8 +137,8 @@ export class SingleLoopCheckController {
   }
 
   #launch(): void {
-    if (!this.#design) return;
-    this.#onLaunch(cloneDesign(this.#design), this.#seed);
+    if (!this.#design || !this.#plan) return;
+    this.#onLaunch(cloneDesign(this.#design), this.#seed, this.#plan);
     this.#shotCount += 1;
     this.#elapsedSeconds = 0;
     this.#pendingImmediateLaunch = false;

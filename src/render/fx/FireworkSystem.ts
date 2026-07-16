@@ -12,8 +12,15 @@ import {
   ShaderMaterial,
 } from "three";
 
-import { compileFireworkDesign, type CompiledStar } from "../../core/burst";
 import {
+  compileFireworkDesign,
+  createCompiledStarParticle,
+  type CompiledBurstPlan,
+  type CompiledStar,
+} from "../../core/burst";
+import {
+  advanceBurstParticle,
+  BURST_PARTICLE_ENVIRONMENT,
   evaluateColorStages,
   integrateParticle,
   type BallisticParticle,
@@ -29,6 +36,7 @@ const MAX_TRAIL_VERTICES = 60_000;
 const GRAVITY = 9.81;
 
 interface Shell extends BallisticParticle {
+  compiledPlan?: CompiledBurstPlan;
   design: FireworkDesign;
   seed: number;
   smokeTimer: number;
@@ -67,6 +75,7 @@ interface DelayedBurst {
 }
 
 export interface LaunchOptions {
+  compiledPlan?: CompiledBurstPlan;
   lane?: number;
   launchAngle?: number;
   seed?: number;
@@ -240,7 +249,6 @@ export class FireworkSystem {
   );
   readonly #trailGeometry = new BufferGeometry();
   readonly #trails: LineSegments;
-  readonly #wind = { x: 1.25, y: 0, z: 0.18 };
   #delayedBursts: DelayedBurst[] = [];
   #shells: Shell[] = [];
   #smoke: SmokeParticle[] = [];
@@ -300,6 +308,7 @@ export class FireworkSystem {
     );
     this.#shells.push({
       age: 0,
+      compiledPlan: options.compiledPlan,
       design,
       drag: 0.035,
       gravityScale: 1,
@@ -356,36 +365,21 @@ export class FireworkSystem {
     const size = resolveSizePreset(design.sizeClass);
     for (const compiled of compiledStars) {
       const definition = compiled.definition;
-      const lifetime = definition.burnDuration * compiled.lifetimeScale;
+      const particle = createCompiledStarParticle(
+        compiled,
+        design,
+        position,
+        inheritedVelocity,
+      );
       this.#stars.push({
-        age: -compiled.timingOffset,
+        ...particle,
         brightness: (0.72 + size.pointScale * 0.28) * compiled.intensityScale,
         colorStages: definition.colorStages,
-        drag: definition.drag,
-        gravityScale: definition.gravityScale,
         history: [clonePosition(position)],
-        lifetime,
         pointScale: size.pointScale * Math.max(definition.trailWidth, 0.72),
-        position: {
-          x: position.x + compiled.initialPosition.x,
-          y: position.y + compiled.initialPosition.y,
-          z: position.z + compiled.initialPosition.z,
-        },
         sparkle: definition.flicker,
         trailLength: definition.trailLifetime,
         trailWidth: definition.trailWidth,
-        velocity: {
-          x:
-            compiled.initialVelocity.x * size.burstScale +
-            inheritedVelocity.x * 0.12,
-          y:
-            compiled.initialVelocity.y * size.burstScale +
-            inheritedVelocity.y * 0.06,
-          z:
-            compiled.initialVelocity.z * size.burstScale +
-            inheritedVelocity.z * 0.12,
-        },
-        windResponse: design.burstField.windResponse,
       });
     }
   }
@@ -396,8 +390,9 @@ export class FireworkSystem {
     design: FireworkDesign,
     seed: number,
     includeChildren = true,
+    compiledPlan?: CompiledBurstPlan,
   ): void {
-    const plan = compileFireworkDesign(design, seed);
+    const plan = compiledPlan ?? compileFireworkDesign(design, seed);
     this.#appendCompiledStars(position, inheritedVelocity, design, plan.stars);
 
     if (includeChildren) {
@@ -419,7 +414,14 @@ export class FireworkSystem {
   }
 
   #burst(shell: Shell): void {
-    this.#emitBurst(shell.position, shell.velocity, shell.design, shell.seed);
+    this.#emitBurst(
+      shell.position,
+      shell.velocity,
+      shell.design,
+      shell.seed,
+      true,
+      shell.compiledPlan,
+    );
     this.#spawnBurstSmoke(shell.position, shell.design);
     this.#illuminateSmoke(
       shell.position,
@@ -459,7 +461,7 @@ export class FireworkSystem {
   #updateShells(delta: number): void {
     const active: Shell[] = [];
     for (const shell of this.#shells) {
-      integrateParticle(shell, delta, { gravity: GRAVITY, wind: this.#wind });
+      integrateParticle(shell, delta, BURST_PARTICLE_ENVIRONMENT);
       shell.smokeTimer += delta;
       if (shell.smokeTimer >= 0.085) {
         shell.smokeTimer = 0;
@@ -472,9 +474,11 @@ export class FireworkSystem {
           position: clonePosition(shell.position),
           size: 2.4 + shell.design.smokeProfile.amount * 2.1,
           velocity: {
-            x: this.#wind.x * 0.32 + (Math.random() - 0.5) * 0.25,
+            x:
+              BURST_PARTICLE_ENVIRONMENT.wind.x * 0.32 +
+              (Math.random() - 0.5) * 0.25,
             y: -0.45 + Math.random() * 0.5,
-            z: this.#wind.z * 0.3,
+            z: BURST_PARTICLE_ENVIRONMENT.wind.z * 0.3,
           },
         });
       }
@@ -557,9 +561,9 @@ export class FireworkSystem {
     const active: SmokeParticle[] = [];
     for (const smoke of this.#smoke) {
       smoke.age += delta;
-      smoke.velocity.x += this.#wind.x * 0.12 * delta;
+      smoke.velocity.x += BURST_PARTICLE_ENVIRONMENT.wind.x * 0.12 * delta;
       smoke.velocity.y += 0.13 * delta;
-      smoke.velocity.z += this.#wind.z * 0.12 * delta;
+      smoke.velocity.z += BURST_PARTICLE_ENVIRONMENT.wind.z * 0.12 * delta;
       smoke.position.x += smoke.velocity.x * delta;
       smoke.position.y += smoke.velocity.y * delta;
       smoke.position.z += smoke.velocity.z * delta;
@@ -576,12 +580,10 @@ export class FireworkSystem {
   #updateStars(delta: number): void {
     const active: Star[] = [];
     for (const star of this.#stars) {
-      if (star.age < 0) {
-        star.age += delta;
+      if (!advanceBurstParticle(star, delta, BURST_PARTICLE_ENVIRONMENT)) {
         active.push(star);
         continue;
       }
-      integrateParticle(star, delta, { gravity: GRAVITY, wind: this.#wind });
       if (star.trailLength > 0.14 && star.age < star.lifetime * 0.92) {
         star.history.push(clonePosition(star.position));
         const maxHistory = Math.max(Math.round(3 + star.trailLength * 9), 2);

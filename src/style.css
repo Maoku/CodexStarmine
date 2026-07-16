@@ -598,50 +598,20 @@
     #050b0f;
 }
 
-.approximate-spread {
+.compiled-burst-preview {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-.approximate-spread-guide {
+.compiled-preview-guide {
   fill: none;
-  stroke: rgb(255 255 255 / 8%);
-  stroke-dasharray: 2 5;
+  stroke: rgb(117 199 227 / 14%);
+  stroke-dasharray: 1 5;
 }
 
-.approximate-spread-band circle {
-  fill: var(--spread-color);
-  opacity: calc(var(--spread-strength) * 0.9);
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-.approximate-spread.is-running .approximate-spread-band circle {
-  animation: approximate-spread-pulse 2.4s ease-out infinite;
-  animation-delay: var(--spread-delay);
-}
-
-.approximate-spread.is-paused .approximate-spread-band circle {
-  animation-play-state: paused;
-}
-
-@keyframes approximate-spread-pulse {
-  0% {
-    opacity: 0;
-    transform: scale(0.25);
-  }
-  18% {
-    opacity: var(--spread-strength);
-  }
-  72% {
-    opacity: calc(var(--spread-strength) * 0.6);
-    transform: scale(calc(0.72 + var(--spread-radius) * 0.52));
-  }
-  100% {
-    opacity: 0;
-    transform: scale(calc(0.86 + var(--spread-radius) * 0.68));
-  }
+.compiled-preview-star {
+  filter: drop-shadow(0 0 2px currentColor);
 }
 
 .inline-diagnostic-preview > footer {
@@ -906,10 +876,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .approximate-spread.is-running .approximate-spread-band circle {
-    animation: none;
-  }
-
   .integrated-craft-editor .craft-rail {
     transition: none;
   }

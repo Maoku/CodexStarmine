@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  advanceBurstParticle,
   evaluateColorStages,
   integrateParticle,
   mixHexColors,
@@ -49,5 +50,25 @@ describe("ballistic integration", () => {
     expect(particle.velocity.y).toBeLessThan(5);
     expect(particle.velocity.z).toBeLessThan(0);
     expect(particle.age).toBeCloseTo(0.05);
+  });
+
+  it("holds position until the ignition delay has elapsed", () => {
+    const particle = {
+      age: -0.1,
+      drag: 0,
+      gravityScale: 1,
+      lifetime: 2,
+      position: { x: 1, y: 2, z: 3 },
+      velocity: { x: 4, y: 5, z: 6 },
+      windResponse: 0,
+    };
+    expect(
+      advanceBurstParticle(particle, 0.05, {
+        gravity: 9.81,
+        wind: { x: 0, y: 0, z: 0 },
+      }),
+    ).toBe(false);
+    expect(particle.position).toEqual({ x: 1, y: 2, z: 3 });
+    expect(particle.age).toBeCloseTo(-0.05);
   });
 });
