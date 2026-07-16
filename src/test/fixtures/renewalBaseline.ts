@@ -24,7 +24,7 @@ export const PRESET_BASELINES: readonly PresetBaseline[] = [
     id: "preset-chrysanthemum",
     maximumParticles: 180,
     planHash:
-      "03e0b0d2fe2c3a51cfd2389bc1d58278627ee3ccce28d5ecf8f9ae21fac9e584",
+      "bf18d059c4675968e2c7cc2658ca335ad6a6a9084aba7d9b9e2e393b22f3ecac",
     starCount: 180,
   },
   {
@@ -36,7 +36,7 @@ export const PRESET_BASELINES: readonly PresetBaseline[] = [
     id: "preset-peony",
     maximumParticles: 210,
     planHash:
-      "87b4ee6c3d2b3c8962de9605778aa1157c03fa630c9b08b24206042ed435b95e",
+      "e9c53ee4faff22efc533599a80cfd83f0620799791936dd58b347fdc0e198f32",
     starCount: 210,
   },
   {
@@ -48,7 +48,7 @@ export const PRESET_BASELINES: readonly PresetBaseline[] = [
     id: "preset-crown",
     maximumParticles: 273,
     planHash:
-      "7fff91b090728cef79bea7f6ad200b09e2ee08866b47f390786c791d77fd934e",
+      "3f9d235ad82ac05d7dfab5eb809595eaef0b9309b801fd5a4a06923e454aa006",
     starCount: 273,
   },
   {
@@ -60,7 +60,7 @@ export const PRESET_BASELINES: readonly PresetBaseline[] = [
     id: "preset-palm",
     maximumParticles: 101,
     planHash:
-      "a982999e42b3c3cacb9eb684543313a9fcd486da82e0a1dea1803fd1c831fbd7",
+      "fc040df1b6669a2995c519f6d5c6eb1f8b61a6731ee3276c278bc0e80f322783",
     starCount: 101,
   },
   {
@@ -72,7 +72,7 @@ export const PRESET_BASELINES: readonly PresetBaseline[] = [
     id: "preset-senrin",
     maximumParticles: 306,
     planHash:
-      "77de1a2ea9f00bb5b021986b5f04cfda591ab7192d44245658ce10f9a8b98638",
+      "3b98e92505e637e33f9a36de65a078d78a960fed0d873b97352f476b52653707",
     starCount: 18,
   },
   {
@@ -80,11 +80,11 @@ export const PRESET_BASELINES: readonly PresetBaseline[] = [
     boundsRadius: 40.068548,
     childBurstCount: 0,
     designHash:
-      "d399bf1b5cc23654a161064c88d39f343d0158163075e10ac350317231b91e9b",
+      "f84086d0979a4bf81a0184e73ffcce576dd964dd1b627bc55ded2af3ad78c39a",
     id: "preset-heart",
     maximumParticles: 150,
     planHash:
-      "1bead8e797e5917878ca5c956a7c6814f3c3082b958abcd95a40f27545e608ea",
+      "4c264769afe748f5e9ecdcecbcb85eb22a89cb6bcb947374e754bc40d953901e",
     starCount: 150,
   },
 ];
@@ -102,6 +102,6 @@ export const SAVED_DESIGN_V2_FIXTURE: FireworkDesignV2 = {
 export const SAVED_DESIGN_V2_HASH =
   "193a90b3b96d93a42155b3df0adc6b5e5ebadeadbae852b93337dcf413b76c07";
 export const SAVED_DESIGN_V2_PLAN_HASH =
-  "f8ff1de4bceb114caa66d09766aafd0f61922da9527ee80a9b37c5432e92cfaf";
+  "f7c3545c2fe524c7255d2a175a673015460955567da58dfbfd4bea38e75064d9";
 export const FREE_SHOW_BASELINE_HASH =
   "3edcfbb7b77a0eefce6c099eab621241ef68322f05229b0ca66b3070fd47b21a";
