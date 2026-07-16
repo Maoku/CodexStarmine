@@ -1,0 +1,185 @@
+# 画像から仮想星配置 機能追加計画書
+
+- 作成日: 2026-07-16
+- ステータス: 計画
+- 基準資料: [IMAGE_TO_STARMINE.md](IMAGE_TO_STARMINE.md)
+- 関連資料: [RENEWAL_IMPLEMENTATION_PLAN3.md](RENEWAL_IMPLEMENTATION_PLAN3.md)、[CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)
+- 対象: 玉内配置ワークベンチ（手動レイヤー編集時のみ）
+
+## 1. 目的
+
+玉内配置ワークベンチで手動レイヤーを選択しているときに「画像から生成」ボタンを提供する。押すと画像ファイル選択ダイアログが開き、選択した画像に映っているものをベースとした仮想星の点群を、現在の切断面へ手動レイヤーの配置点として生成する。
+
+完了状態は次のとおり。
+
+1. 手動レイヤー選択時のみ、配置支援ツール列（1点／円周／直線／円弧／格子）と同じ場所に「画像から生成」ボタンが表示される。
+2. ボタン押下でOSの画像ファイル選択ダイアログが開く。決定すると画像が解析され、被写体のシルエットと色を反映した点群が現在の切断面へ配置される。
+3. 生成された点は通常の `ManualLayerPoint` であり、既存の手動編集（移動、削除、仮想星の置換、Undo/Redo）がそのまま使える。
+4. 同じ画像と同じ設定からは常に同じ点群が生成される（決定的）。
+5. 画像そのものは保存データへ含めない。保存形式はv4のまま変更しない。
+
+本機能は仮想花火の視覚設計だけを扱う。実物の材料、配合、寸法、点火条件、製造手順はデータ、UI、ヘルプへ導入しない。画像はブラウザ内でのみ処理し、外部送信・永続化を行わない。
+
+## 2. 現状調査
+
+| 項目 | 現状 | 本計画での利用 |
+| --- | --- | --- |
+| 手動レイヤーのデータ | `ManualLayerIntent.points: ManualLayerPoint[]`（`id` / `position` / `section` / `starId`、[firework.ts:328](../src/data/firework.ts)） | そのまま使用。スキーマ変更なし |
+| 配置支援ツール列 | `renderIntegratedPlacementWorkbench()` が `pointEditingAllowed`（= 手動レイヤー選択時）のときだけツール列を描画（[IntegratedPlacementWorkbench.ts:270](../src/ui/craft/IntegratedPlacementWorkbench.ts)） | ボタンの追加位置 |
+| 配置支援の適用処理 | `#applyManualRecipe()` が純粋関数 `createManualPlacementPoints()` の結果を `updateIntent()` で反映（[IntegratedCraftEditor.ts:987](../src/ui/craft/IntegratedCraftEditor.ts)） | 適用フローの雛形 |
+| 生成方法（置換／追加） | `#templateApplyMode`（`replace` / `append`）を配置支援全体で共有 | 画像生成でも同じ選択を尊重 |
+| 断面ローカル座標→3D | `pointFromSection()` / `clampSectionPoint()`（[SliceGeometry.ts](../src/ui/craft/SliceGeometry.ts)）、安全半径 `SAFETY_RADIUS = 0.94`、点数上限240（[ManualPlacementRecipe.ts](../src/ui/craft/ManualPlacementRecipe.ts)） | 同じ制約に従う |
+| 仮想星の定義 | `design.starDefinitions: Record<string, VirtualStarPreset>`。バリデーターは各レイヤーの `defaultStarId` が存在することだけを要求 | 画像色に対応する星の割当先 |
+| 履歴 | `CraftDocumentStore.updateIntent()` が1回の呼び出しを1つのUndo単位として記録 | 点群生成＋星定義追加を単一Undoにする |
+| テスト | vitest（jsdom）。`ManualPlacementRecipe.test.ts` など純粋関数の単体テストと、エディター統合テストが併存 | 同じ構成を踏襲 |
+
+制約として、jsdomにはCanvas 2Dの実装がないため、画像デコードに依存するコードはテスト対象の中心にできない。画素データを受け取る純粋ロジックと、FileからImageDataを得る薄いローダーを分離する。
+
+## 3. 設計方針
+
+### 3.1 パイプライン全体
+
+```text
+File (ダイアログで選択)
+  -> loadImagePixels(file)            … DOM依存の薄いローダー（canvas 2D）
+       縮小デコード: 最長辺 128px
+  -> extractImagePlacement(pixels, settings)   … 純粋関数・決定的
+       背景推定 -> 重要度マップ -> 点数上限つき決定的サンプリング
+       => { points: SectionPoint2D[], colors: number[] }[代表色つき点群]
+  -> resolveImageStars(colors, starDefinitions)  … 純粋関数
+       代表色の量子化(≤4色) -> 既存星への割当 or 派生星の生成
+  -> updateIntent("画像から配置")
+       pointFromSection(現在断面) で ManualLayerPoint 化し points へ反映
+```
+
+- `extractImagePlacement` と `resolveImageStars` は乱数を使わず、入力が同じなら出力が同じ。乱数的な散らしが必要になった場合も `core/random` の `seededRandom` を画素ハッシュ由来のseedで使い、決定性を守る。
+- レイヤー・点は既存の型のみで表現する。v4スキーマ、マイグレーション、バリデーターへの変更は行わない。
+
+### 3.2 点群抽出アルゴリズム
+
+1. **縮小**: 最長辺128pxへ縮小してImageDataを取得する（処理量の上限を固定）。
+2. **背景推定**: 外周1pxの画素から背景色を推定（中央値）。透過画像はアルファ0を背景とみなす。
+3. **重要度マップ**: 各画素の重要度 = 背景色とのRGB距離 × アルファ。しきい値以下は0にする。被写体が明るくても暗くても「背景と違う場所」が抽出されるため、白背景のロゴでも夜空写真でも同じ規則で動く。
+4. **正規化配置**: 画像のアスペクト比を保ったまま、画像全体が半径 `SAFETY_RADIUS`（0.94）の円へ内接するよう縮尺し、Y軸を反転して断面ローカル座標へ写す。
+5. **決定的サンプリング**: 重要度の降順に走査し、既採用点との最小距離（目標点数から算出）を満たす画素だけを採用する貪欲法。目標点数（既定96、上限240）に達したら終了。ソートは重要度→画素インデックスの順で安定させる。
+6. **失敗判定**: 採用点が8未満なら「被写体を検出できませんでした」としてレイヤーを変更しない。
+
+### 3.3 色→仮想星の割当
+
+1. 採用点の色を決定的なメディアンカットで最大4クラスタへ量子化する。
+2. 各クラスタ代表色について、`starDefinitions` 内の既存星（`colorStages` 中間色）とのRGB距離を計算し、距離がしきい値以下なら最も近い既存星を割り当てる。
+3. しきい値を超えるクラスタには派生星 `star-image-1`〜`star-image-4` を生成する。色ステージは `CraftController.updateColors()` と同じ構成（白 → 代表色 → 減光色 → 消灯）とし、既存IDと衝突する場合は連番を進める。
+4. 派生星の追加と点群の反映は同一の `updateIntent()` 内で行い、Undo 1回で点も星定義も元に戻るようにする。
+
+### 3.4 UI仕様
+
+- ボタン: 配置支援ツール列の末尾に `画像から生成`（`data-action="import-image-placement"`）。手動レイヤー選択時のみ表示。ロック中レイヤーでは実行時にトースト「レイヤーのロックを解除してください」。
+- ファイル選択: 非表示の `<input type="file" accept="image/*">` をエディターが1つ保持し、ボタン押下で `click()`。20MB超は拒否してトースト通知。
+- 生成方法: 既存の `生成方法`（置換／追加）セレクトを尊重する。
+- 点数: ツール列の `個数` と同系の入力 `目標点数`（8〜240、既定96）を「画像から生成」選択中のみ表示する。配置支援テンプレートと同様に `#placementTemplate` へ `"image"` を追加し、選択状態を表現する。
+- 結果通知: 成功時はトースト「画像から◯点を配置しました」、失敗時は理由（読み込み失敗／被写体なし／非対応形式）を通知する。処理中は多重起動を防ぐ。
+- アクセシビリティ: ボタンに `aria-label="画像から仮想星を生成"`。結果はトーストが既存の通知経路で読み上げられることを確認する。
+
+### 3.5 対象外（今回やらないこと）
+
+- 画像の輪郭線抽出モードや網点（ディザ）モードの選択UI。
+- 画像のプレビュー、トリミング、回転などの前処理UI。
+- 複数断面への立体的な展開（生成先は常に現在の切断面のみ）。
+- AI／外部APIによる被写体認識。処理はすべてローカルの画素統計で行う。
+- 保存データへの画像埋め込み、スキーマv5。
+
+## 4. 主なファイル変更
+
+| ファイル | 変更 |
+| --- | --- |
+| `src/ui/craft/ImagePlacementRecipe.ts` | 新規。`extractImagePlacement()`、`resolveImageStars()`、`ImagePlacementSettings`（純粋関数のみ） |
+| `src/ui/craft/ImagePlacementRecipe.test.ts` | 新規。合成ImageDataによる単体テスト |
+| `src/ui/craft/imagePixelLoader.ts` | 新規。`loadImagePixels(file): Promise<ImageDataLike>`（canvas依存を隔離） |
+| `src/ui/craft/IntegratedPlacementWorkbench.ts` | ツール列へ「画像から生成」ボタンと目標点数入力を追加。`PlacementTemplate` へ `"image"` を追加 |
+| `src/ui/craft/IntegratedPlacementWorkbench.test.ts` | ボタンの表示条件（手動レイヤー時のみ）の検証を追加 |
+| `src/ui/craft/IntegratedCraftEditor.ts` | `import-image-placement` アクション、隠しfile input、`#applyImagePlacement()`（ローダー→抽出→星割当→`updateIntent`） |
+| `src/ui/craft/IntegratedCraftEditor.test.ts`（相当の統合テスト） | 偽の画素データを注入して適用フローを検証 |
+| `Docs/IMAGE_TO_STARMINE.md` | 実装後、仕様確定内容と記録を追記 |
+
+コアの `src/core/**`、`src/data/**`、コンパイラ、保存系は変更しない。
+
+## 5. 実装フェーズ
+
+### Phase 1: 点群抽出コア（純粋ロジック）
+
+1. `ImagePlacementRecipe.ts` に `ImageDataLike`（`width` / `height` / `data`）を受ける `extractImagePlacement()` を実装する。
+2. 背景推定、重要度マップ、アスペクト比保存の座標変換、決定的サンプリングを実装する。
+3. `resolveImageStars()` で量子化と既存星／派生星の割当を実装する。
+
+完了条件:
+
+- 合成画像（中央の円、透過ロゴ、白背景の図形、全面一色）で期待どおりの点数・範囲・失敗判定になる単体テストが通る。
+- 同一入力を2回処理して結果が完全一致する（決定性テスト）。
+- すべての出力点が `Math.hypot(x, y) <= 0.94` を満たす。
+
+### Phase 2: 画像ローダーとワークベンチUI
+
+1. `imagePixelLoader.ts` を実装する（縮小デコード、形式・サイズガード、失敗時の例外）。
+2. ワークベンチのツール列へ「画像から生成」ボタンと目標点数入力を追加し、`PlacementTemplate` に `"image"` を追加する。
+3. 手動レイヤー以外では表示されないことをレンダリングテストで固定する。
+
+完了条件:
+
+- 手動レイヤー選択時のみボタンが描画される。
+- 型物・既定レイヤー選択時のワークベンチ描画が現状と変わらない（既存テストが通る）。
+
+### Phase 3: エディター統合
+
+1. `IntegratedCraftEditor` に `import-image-placement` アクションと隠しfile inputを追加する。
+2. `#applyImagePlacement()` で ローダー → `extractImagePlacement` → `resolveImageStars` → `updateIntent("画像から配置")` を接続する。置換／追加モード、現在断面への `pointFromSection`、派生星の同時追加を実装する。
+3. ロック中レイヤー、読み込み失敗、被写体なし、処理中の多重起動をトーストで処理する。
+
+完了条件:
+
+- 偽ローダーを注入した統合テストで、点群と派生星が1回のUndoで戻る。
+- 生成後の点が既存操作（ドラッグ移動、削除、星置換）で編集できる。
+- 生成結果が簡易確認（`CompiledBurstPreviewRenderer` 経路)へ追加操作なしで反映される。
+
+### Phase 4: 実機確認と仕上げ
+
+1. 開発サーバーで実画像（写真、透過PNG、白背景ロゴ、極端な縦横比）を使って確認する。
+2. モバイルレイアウト（ドロワー内ワークベンチ）でのダイアログ起動を確認する。
+3. `rtk npm run lint` / `rtk npm run build` / `rtk npm run test:run` を通し、基準資料へ実装記録を追記する。
+
+完了条件:
+
+- 上記3コマンドが成功する（着手前に基準の失敗有無を記録し、新規の失敗を持ち込まない）。
+- 湖面確認で、画像由来の配置が編集画面と同じ形で開花する。
+
+## 6. テスト計画
+
+| 種別 | 対象 | 内容 |
+| --- | --- | --- |
+| 単体 | `extractImagePlacement` | 円形シルエット→円形点群、透過背景、白背景、全面一色（失敗判定）、点数上限、安全半径、決定性 |
+| 単体 | `resolveImageStars` | 既存星への近色割当、派生星の生成と命名、ID衝突回避、最大4クラスタ |
+| レンダリング | ワークベンチ | ボタンと点数入力の表示条件、`"image"` テンプレート選択状態 |
+| 統合 | エディター | 偽画素データ注入→適用→`ManualLayerIntent.points` 検証、置換／追加、Undo/Redo、ロック時の拒否 |
+| 手動 | 実機 | 実画像各種、モバイル、簡易確認・湖面確認への反映 |
+
+## 7. 受け入れ基準
+
+1. 手動レイヤー選択時のみ「画像から生成」ボタンが表示される。
+2. 画像選択→決定で、被写体の形と色を反映した点群が現在の切断面へ配置される。
+3. 生成された点は1点ずつ移動・削除・星置換でき、Undo 1回で生成前へ戻る。
+4. 同じ画像・同じ設定で結果が再現する。
+5. 保存データはv4のままで、画像本体を含まない。既存作品の読み込みに影響がない。
+6. lint / build / test:run が成功する。
+
+## 8. リスクと対策
+
+| リスク | 対策 |
+| --- | --- |
+| 背景と被写体の分離が写真で不安定 | 背景推定を外周中央値＋アルファにとどめ、失敗時は点を置かずに理由を通知。しきい値は定数化し、テスト画像で調整 |
+| jsdomでcanvasが使えずローダーを自動テストできない | ローダーを最小限（デコードと縮小のみ）にし、ロジックは全てImageDataLike入力の純粋関数でテスト |
+| 派生星の増殖で星ライブラリが汚れる | 派生星は最大4、近色の既存星を優先。置換モードでは前回の `star-image-*` のうち未参照になったものを同じ `updateIntent` 内で除去 |
+| 大きい画像でUIが固まる | 最長辺128pxへの縮小を必須とし、処理量を固定。20MB超のファイルは拒否 |
+| 点数過多で打上時の負荷増 | 上限240（既存の配置支援と同じ）、既定96 |
+
+## 9. 実装記録
+
+（実装時に追記する）
