@@ -76,7 +76,7 @@ describe("ImagePlacementRecipe", () => {
     });
   });
 
-  it("keeps interior feature points such as eyes on the contour map", () => {
+  it("keeps the outline dominant while spending some budget on eyes", () => {
     const eyeCenters = [
       { x: 23, y: 25 },
       { x: 37, y: 25 },
@@ -106,7 +106,6 @@ describe("ImagePlacementRecipe", () => {
       Math.abs(Math.hypot(point.x, point.y) - 20 * pixelScale) <=
       4 * pixelScale;
 
-    expect(placement.points.length).toBeGreaterThan(0);
     eyeCenters.forEach((eye) => {
       const center = toSection(eye.x, eye.y);
       expect(
@@ -120,6 +119,27 @@ describe("ImagePlacementRecipe", () => {
     placement.points.forEach((point) => {
       expect(nearEye(point) || nearFaceRim(point)).toBe(true);
     });
+    const rimCount = placement.points.filter(nearFaceRim).length;
+    expect(rimCount).toBeGreaterThanOrEqual(Math.ceil(64 * 0.6));
+  });
+
+  it("paints the outline with one representative color", () => {
+    const source = image(48, 48, (x, y) => {
+      if (Math.hypot(x - 23.5, y - 23.5) > 17) return [0, 0, 0, 0];
+      return x < 20 ? [40, 80, 200, 255] : [220, 60, 50, 255];
+    });
+    const placement = extractImagePlacement(source, { targetCount: 60 });
+    const pixelScale = (IMAGE_PLACEMENT_SAFETY_RADIUS * 2) / Math.hypot(48, 48);
+    const rimColors = new Set(
+      placement.points
+        .map((point, index) => ({ color: placement.colors[index], point }))
+        .filter(
+          ({ point }) => Math.hypot(point.x, point.y) >= 15.8 * pixelScale,
+        )
+        .map(({ color }) => color),
+    );
+
+    expect(rimColors.size).toBe(1);
   });
 
   it("ignores faint detached strips and image crop edges", () => {
@@ -146,7 +166,7 @@ describe("ImagePlacementRecipe", () => {
     expect(extractImagePlacement(source).points).toEqual([]);
   });
 
-  it("reuses near existing stars and creates at most four derived stars", () => {
+  it("maps every color to an existing star and never creates derived stars", () => {
     const definitions = snapshotStarLibrary();
     expect(resolveImageStars([0xff3b42], definitions).starIds).toEqual([
       "star-solid-red",
@@ -159,14 +179,17 @@ describe("ImagePlacementRecipe", () => {
     const resolution = resolveImageStars(colors, definitions);
 
     expect(resolution.starIds).toHaveLength(colors.length);
-    expect(resolution.createdStarIds.length).toBeLessThanOrEqual(4);
-    expect(resolution.createdStarIds).not.toContain("star-image-1");
-    resolution.createdStarIds.forEach((starId) =>
-      expect(resolution.starDefinitions[starId].colorStages).toHaveLength(4),
+    expect(resolution.createdStarIds).toEqual([]);
+    expect(Object.keys(resolution.starDefinitions).sort()).toEqual(
+      Object.keys(definitions).sort(),
     );
+    resolution.starIds.forEach((starId) => {
+      expect(definitions[starId]).toBeDefined();
+      expect(starId).not.toMatch(/^star-image-/);
+    });
   });
 
-  it("applies points and derived stars as one undoable v4 edit", () => {
+  it("applies points as one undoable v4 edit without adding stars", () => {
     const store = new CraftDocumentStore(CHRYSANTHEMUM_PRESET);
     store.updateIntent("手動レイヤーを追加", (draft) => {
       draft.layers.push({
@@ -208,8 +231,8 @@ describe("ImagePlacementRecipe", () => {
     expect(layer?.authoringMode === "manual" ? layer.points : []).toHaveLength(
       2,
     );
-    expect(Object.keys(applied.starDefinitions).length).toBeGreaterThanOrEqual(
-      Object.keys(before.starDefinitions).length,
+    expect(Object.keys(applied.starDefinitions).sort()).toEqual(
+      Object.keys(before.starDefinitions).sort(),
     );
     store.undo();
     expect(store.intentDraft).toEqual(before);

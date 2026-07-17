@@ -1,7 +1,7 @@
 import type { ImageDataLike } from "./ImagePlacementRecipe";
 
 export const IMAGE_FILE_MAXIMUM_BYTES = 20 * 1024 * 1024;
-export const IMAGE_PIXEL_MAXIMUM_EDGE = 128;
+export const IMAGE_PIXEL_MAXIMUM_EDGE = 256;
 
 export type ImagePixelLoadErrorCode =
   | "canvas-unavailable"

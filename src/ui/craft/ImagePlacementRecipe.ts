@@ -33,12 +33,12 @@ export const IMAGE_PLACEMENT_MINIMUM_POINTS = 8;
 export const IMAGE_PLACEMENT_SAFETY_RADIUS = 0.94;
 
 const BACKGROUND_DIFFERENCE_THRESHOLD = 24;
-const EXISTING_STAR_COLOR_THRESHOLD = 72;
 const EDGE_SCORE_RELATIVE_THRESHOLD = 0.14;
 /* One 8-bit intensity step; below this a Sobel response is float noise. */
 const FEATURE_EDGE_MINIMUM = 1 / 255;
 const CONTOUR_RIM_THICKNESS_PX = 2;
-const SILHOUETTE_BUDGET_RATIO = 0.62;
+/* Share of the target count reserved for interior features such as eyes. */
+const FEATURE_BUDGET_RATIO = 0.25;
 /*
  * Subject components are scored by accumulated background contrast. Anything
  * far below the main subject (wall shading strips, detached scraps) is noise
@@ -164,13 +164,15 @@ interface ImageAnalysis {
   featureCandidates: PixelCandidate[];
   pixelScale: number;
   silhouetteCandidates: PixelCandidate[];
+  subjectColors: number[];
 }
 
 /**
- * Splits the subject into its outline against the background and interior
- * feature edges. The background is the border-connected region of pixels close
- * to the border color, so subject areas that share the background color (a
- * white shirt on white) stay part of the subject as long as they are enclosed.
+ * Builds the subject mask and returns its boundary pixels plus interior
+ * feature edges (eyes, markings). The background is the border-connected
+ * region of pixels close to the border color, so subject areas that share the
+ * background color (a white shirt on white) stay part of the mask as long as
+ * they are enclosed.
  */
 function analyzeImage(image: ImageDataLike): ImageAnalysis {
   const background = backgroundColor(image);
@@ -207,8 +209,14 @@ function analyzeImage(image: ImageDataLike): ImageAnalysis {
     channels.green[index] = (green / 255) * opacity;
     channels.blue[index] = (blue / 255) * opacity;
   }
-  const empty = { featureCandidates: [], pixelScale, silhouetteCandidates: [] };
-  if (maximumStrength <= 0) return empty;
+  if (maximumStrength <= 0) {
+    return {
+      featureCandidates: [],
+      pixelScale,
+      silhouetteCandidates: [],
+      subjectColors: [],
+    };
+  }
   const backgroundThreshold = Math.max(
     BACKGROUND_DIFFERENCE_THRESHOLD,
     maximumStrength * 0.08,
@@ -324,10 +332,19 @@ function analyzeImage(image: ImageDataLike): ImageAnalysis {
 
   const silhouetteCandidates: PixelCandidate[] = [];
   const scoredFeatures: PixelCandidate[] = [];
+  const subjectColors: number[] = [];
   let maximumFeature = 0;
   for (let y = 0; y < image.height; y += 1) {
     for (let x = 0; x < image.width; x += 1) {
       if (!isKeptSubject(x, y)) continue;
+      const colorOffset = (y * image.width + x) * 4;
+      subjectColors.push(
+        packColor({
+          blue: image.data[colorOffset + 2] ?? 0,
+          green: image.data[colorOffset + 1] ?? 0,
+          red: image.data[colorOffset] ?? 0,
+        }),
+      );
       if (
         isBackground(x - 1, y) ||
         isBackground(x + 1, y) ||
@@ -371,6 +388,7 @@ function analyzeImage(image: ImageDataLike): ImageAnalysis {
       ),
     pixelScale,
     silhouetteCandidates,
+    subjectColors,
   };
 }
 
@@ -422,6 +440,15 @@ function sampleCandidates(
   return [];
 }
 
+/** The subject's most common color, used to paint the whole outline evenly. */
+function dominantColor(colors: number[]): number | undefined {
+  if (colors.length === 0) return undefined;
+  const clusters = quantizeColors(colors, 4);
+  return clusters.reduce((best, cluster) =>
+    cluster.entries.length > best.entries.length ? cluster : best,
+  ).representative;
+}
+
 export function extractImagePlacement(
   image: ImageDataLike,
   settings: Partial<ImagePlacementSettings> = {},
@@ -442,14 +469,12 @@ export function extractImagePlacement(
       IMAGE_PLACEMENT_MAXIMUM_POINTS,
     ),
   );
-  const { featureCandidates, pixelScale, silhouetteCandidates } =
+  const { featureCandidates, pixelScale, silhouetteCandidates, subjectColors } =
     analyzeImage(image);
   const silhouetteLength = silhouetteCandidates.length * pixelScale;
 
-  const silhouetteBudget = Math.min(
-    Math.ceil(targetCount * SILHOUETTE_BUDGET_RATIO),
-    targetCount,
-  );
+  const silhouetteBudget =
+    targetCount - Math.floor(targetCount * FEATURE_BUDGET_RATIO);
   const silhouette = sampleCandidates(
     silhouetteCandidates,
     silhouetteBudget,
@@ -467,22 +492,27 @@ export function extractImagePlacement(
     silhouette,
   );
 
-  let selected = [...silhouette, ...features];
-  const backfillBudget = targetCount - selected.length;
-  if (backfillBudget > 0) {
-    selected = [
-      ...selected,
-      ...sampleCandidates(
-        silhouetteCandidates,
-        backfillBudget,
-        Math.max(pixelScale, silhouetteLength / targetCount),
-        selected,
-      ),
-    ];
-  }
+  const backfillBudget = targetCount - silhouette.length - features.length;
+  const outline =
+    backfillBudget > 0
+      ? [
+          ...silhouette,
+          ...sampleCandidates(
+            silhouetteCandidates,
+            backfillBudget,
+            Math.max(pixelScale, silhouetteLength / targetCount),
+            [...silhouette, ...features],
+          ),
+        ]
+      : silhouette;
+
+  const outlineColor = dominantColor(subjectColors) ?? 0xffffff;
   return {
-    colors: selected.map((candidate) => candidate.color),
-    points: selected.map((candidate) => candidate.point),
+    colors: [
+      ...outline.map(() => outlineColor),
+      ...features.map((candidate) => candidate.color),
+    ],
+    points: [...outline, ...features].map((candidate) => candidate.point),
   };
 }
 
@@ -559,82 +589,29 @@ function definitionRepresentative(star: VirtualStarPreset): number {
   );
 }
 
-function dimColor(color: number): number {
-  const value = rgb(color);
-  return packColor({
-    blue: Math.round(value.blue * 0.38),
-    green: Math.round(value.green * 0.38),
-    red: Math.round(value.red * 0.38),
-  });
-}
-
-function createImageStar(id: string, color: number): VirtualStarPreset {
-  const dimmed = dimColor(color);
-  return {
-    brightness: 1,
-    burnDuration: 2.5,
-    colorStages: [
-      {
-        color: 0xffffff,
-        intensity: 1.35,
-        normalizedTime: 0,
-        trailColor: color,
-      },
-      {
-        color,
-        intensity: 1.08,
-        normalizedTime: 0.14,
-        trailColor: color,
-      },
-      {
-        color: dimmed,
-        intensity: 0.72,
-        normalizedTime: 0.68,
-        trailColor: dimmed,
-      },
-      {
-        color: dimmed,
-        intensity: 0,
-        normalizedTime: 1,
-        trailColor: dimmed,
-      },
-    ],
-    displayName: `画像由来 ${id.replace("star-image-", "")}`,
-    drag: 0.55,
-    emissionKind: "point",
-    flicker: 0.08,
-    gravityScale: 0.8,
-    id,
-    smokeAmount: 0.35,
-    soundTag: "soft",
-    trailLifetime: 0.08,
-    trailWidth: 0.9,
-  };
-}
-
-function nextImageStarId(
-  definitions: Record<string, VirtualStarPreset>,
-): string {
-  let index = 1;
-  while (definitions[`star-image-${index}`]) index += 1;
-  return `star-image-${index}`;
-}
-
+/**
+ * Maps each quantized image color to the closest star already in the library.
+ * No star definitions are created; legacy `star-image-*` entries are ignored
+ * as mapping targets so older works converge back to library stars.
+ */
 export function resolveImageStars(
   colors: number[],
   starDefinitions: Record<string, VirtualStarPreset>,
   maximumColors = DEFAULT_IMAGE_PLACEMENT_SETTINGS.maximumColors,
 ): ImageStarResolution {
-  const definitions = structuredClone(starDefinitions);
   const clusters = quantizeColors(
     colors,
     Math.round(clamp(maximumColors, 1, 4)),
   );
-  const createdStarIds: string[] = [];
+  const libraryStars = Object.values(starDefinitions).filter(
+    (star) => !/^star-image-\d+$/.test(star.id),
+  );
+  const mappingTargets =
+    libraryStars.length > 0 ? libraryStars : Object.values(starDefinitions);
   const clusterStarIds = new Map<ColorCluster, string>();
 
   clusters.forEach((cluster) => {
-    const nearest = Object.values(definitions)
+    const nearest = mappingTargets
       .map((star) => ({
         distance: colorDistance(
           cluster.representative,
@@ -646,14 +623,7 @@ export function resolveImageStars(
         (left, right) =>
           left.distance - right.distance || left.id.localeCompare(right.id),
       )[0];
-    if (nearest && nearest.distance <= EXISTING_STAR_COLOR_THRESHOLD) {
-      clusterStarIds.set(cluster, nearest.id);
-      return;
-    }
-    const id = nextImageStarId(definitions);
-    definitions[id] = createImageStar(id, cluster.representative);
-    createdStarIds.push(id);
-    clusterStarIds.set(cluster, id);
+    if (nearest) clusterStarIds.set(cluster, nearest.id);
   });
 
   const starIds = Array.from({ length: colors.length }, () => "");
@@ -664,5 +634,9 @@ export function resolveImageStars(
       starIds[entry.index] = starId;
     });
   });
-  return { createdStarIds, starDefinitions: definitions, starIds };
+  return {
+    createdStarIds: [],
+    starDefinitions: structuredClone(starDefinitions),
+    starIds,
+  };
 }
