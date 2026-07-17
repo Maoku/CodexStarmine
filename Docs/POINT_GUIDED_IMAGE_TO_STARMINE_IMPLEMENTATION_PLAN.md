@@ -1,7 +1,7 @@
 # 点指定式「画像から仮想星配置」機能 実装計画書
 
 - 作成日: 2026-07-17
-- ステータス: 計画
+- ステータス: 軽量プロバイダ実装済み（任意モデルの採否ゲートは未実施）
 - 対象: 玉内配置ワークベンチの手動レイヤー
 - 基準実装: [IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md](IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md)
 - 技術調査: [IMAGE_TO_VIRTUAL_STARS_BROWSER_RESEARCH.md](IMAGE_TO_VIRTUAL_STARS_BROWSER_RESEARCH.md)
@@ -533,3 +533,13 @@ ViteではWorkerを `new Worker(new URL("./imageSegmentation.worker.ts", import.
 - 実ブラウザで確認した画面寸法、アクセシビリティ、コンソール、ネットワーク結果。
 - lint、テスト数、format check、production buildの結果。
 - `latte.png`、`mao.png` を含む固定回帰画像の最終結果。
+
+### 2026-07-17 実装記録
+
+- 採用プロバイダ: `alpha` / `fast` / `fallback`。点プロンプト式の軽量RGB分類と連結成分処理をWorkerへ分離した。追加ライブラリ、モデル、重み、WASMはなし。production buildのWorkerは3.34kB。
+- SlimSAM採否: 未採用。固定重み、ライセンス、ハッシュ、50枚評価、対象モバイル性能が未確定のため、外部取得を実装へ含めなかった。`PromptMaskProvider` 契約で将来差し替え可能。
+- 固定回帰画像: `latte.png` は被写体1点で240点。特徴点1点追加時は外形224点、特徴16点。`mao.png` は390×844の点指定ダイアログ表示と取消を確認した。
+- アクセシビリティ: `role="dialog"`、`aria-modal`、フォーカストラップ、Escape取消、フォーカス復帰、記号つき点種別、キーボード照準を実装した。
+- ブラウザQA: 390×844でダイアログ全体と固定フッターが画面内に収まり、内部スクロール可能。console warning/errorは0件。画像確定はUndo 1回、取消は履歴不変。
+- 自動検証: 48ファイル・180テスト、lint、format check、production buildが成功。
+- 未実施: WebGPU/WASMモデル推論、50枚評価、Chrome/Safari/FirefoxとiOS/Android実機の端末別性能・メモリ・ネットワーク計測。任意モデル採用前のPhase 0として残す。

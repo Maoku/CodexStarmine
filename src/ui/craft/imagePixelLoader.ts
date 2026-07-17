@@ -2,12 +2,15 @@ import type { ImageDataLike } from "./ImagePlacementRecipe";
 
 export const IMAGE_FILE_MAXIMUM_BYTES = 20 * 1024 * 1024;
 export const IMAGE_PIXEL_MAXIMUM_EDGE = 256;
+export const GUIDED_IMAGE_PIXEL_MAXIMUM_EDGE = 512;
+export const IMAGE_TOTAL_PIXEL_MAXIMUM = 24_000_000;
 
 export type ImagePixelLoadErrorCode =
   | "canvas-unavailable"
   | "decode-failed"
   | "empty-image"
   | "file-too-large"
+  | "pixel-count-too-large"
   | "unsupported-format";
 
 export class ImagePixelLoadError extends Error {
@@ -42,7 +45,7 @@ function loadImage(file: File): Promise<HTMLImageElement> {
   });
 }
 
-export async function loadImagePixels(file: File): Promise<ImageDataLike> {
+async function validateFile(file: File): Promise<void> {
   if (file.size > IMAGE_FILE_MAXIMUM_BYTES) {
     throw new ImagePixelLoadError(
       "file-too-large",
@@ -55,20 +58,23 @@ export async function loadImagePixels(file: File): Promise<ImageDataLike> {
       "対応している画像ファイルを選んでください。",
     );
   }
-  const image = await loadImage(file);
-  if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+}
+
+async function imagePixels(
+  image: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  maximumEdge: number,
+): Promise<ImageDataLike> {
+  if (sourceWidth * sourceHeight > IMAGE_TOTAL_PIXEL_MAXIMUM) {
     throw new ImagePixelLoadError(
-      "empty-image",
-      "画像の大きさを取得できませんでした。",
+      "pixel-count-too-large",
+      "総画素数が24メガピクセル以下の画像を選んでください。",
     );
   }
-  const scale = Math.min(
-    1,
-    IMAGE_PIXEL_MAXIMUM_EDGE /
-      Math.max(image.naturalWidth, image.naturalHeight),
-  );
-  const width = Math.max(1, Math.round(image.naturalWidth * scale));
-  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const scale = Math.min(1, maximumEdge / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -83,4 +89,94 @@ export async function loadImagePixels(file: File): Promise<ImageDataLike> {
   context.drawImage(image, 0, 0, width, height);
   const imageData = context.getImageData(0, 0, width, height);
   return { data: imageData.data, height, width };
+}
+
+export async function loadImagePixels(file: File): Promise<ImageDataLike> {
+  await validateFile(file);
+  const image = await loadImage(file);
+  if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+    throw new ImagePixelLoadError(
+      "empty-image",
+      "画像の大きさを取得できませんでした。",
+    );
+  }
+  return imagePixels(
+    image,
+    image.naturalWidth,
+    image.naturalHeight,
+    IMAGE_PIXEL_MAXIMUM_EDGE,
+  );
+}
+
+export interface GuidedImagePixels {
+  bitmap?: ImageBitmap;
+  pixels: ImageDataLike;
+  previewUrl: string;
+  sourceHeight: number;
+  sourceWidth: number;
+}
+
+export async function loadGuidedImagePixels(
+  file: File,
+): Promise<GuidedImagePixels> {
+  await validateFile(file);
+  const previewUrl = URL.createObjectURL(file);
+  try {
+    if (typeof createImageBitmap === "function") {
+      const sourceBitmap = await createImageBitmap(file, {
+        imageOrientation: "from-image",
+      });
+      let pixels: ImageDataLike;
+      let sourceHeight: number;
+      let sourceWidth: number;
+      try {
+        if (sourceBitmap.width <= 0 || sourceBitmap.height <= 0) {
+          throw new ImagePixelLoadError(
+            "empty-image",
+            "画像の大きさを取得できませんでした。",
+          );
+        }
+        sourceWidth = sourceBitmap.width;
+        sourceHeight = sourceBitmap.height;
+        pixels = await imagePixels(
+          sourceBitmap,
+          sourceWidth,
+          sourceHeight,
+          GUIDED_IMAGE_PIXEL_MAXIMUM_EDGE,
+        );
+      } finally {
+        sourceBitmap.close();
+      }
+      const bitmap = await createImageBitmap(
+        new ImageData(
+          Uint8ClampedArray.from(pixels.data),
+          pixels.width,
+          pixels.height,
+        ),
+      );
+      return {
+        bitmap,
+        pixels,
+        previewUrl,
+        sourceHeight,
+        sourceWidth,
+      };
+    }
+    const image = await loadImage(file);
+    const pixels = await imagePixels(
+      image,
+      image.naturalWidth,
+      image.naturalHeight,
+      GUIDED_IMAGE_PIXEL_MAXIMUM_EDGE,
+    );
+    return {
+      pixels,
+      previewUrl,
+      sourceHeight: image.naturalHeight,
+      sourceWidth: image.naturalWidth,
+    };
+  } catch (error) {
+    URL.revokeObjectURL(previewUrl);
+    throw error;
+  }
 }

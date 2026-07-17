@@ -77,7 +77,7 @@ function renderManualRecipeControls(
 ): string {
   if (kind === "manual") return "";
   if (kind === "image") {
-    return `<div class="manual-recipe-controls image-placement-controls"><label><span>目標点数</span><input name="image-target-count" type="number" min="8" max="240" value="${imageTargetCount}" /></label><span>画像を選び直すと、この点数を上限に再生成します。</span></div>`;
+    return `<div class="manual-recipe-controls image-placement-controls"><label><span>既定の目標点数</span><input name="image-target-count" type="number" min="8" max="240" value="${imageTargetCount}" /></label><span>画像を選ぶと、被写体・特徴・背景の点指定画面が開きます。</span></div>`;
   }
   const count = `<label><span>個数</span><input name="manual-count" type="number" min="2" max="240" value="${settings.count}" /></label>`;
   const rotation = `<label><span>回転</span><input name="manual-rotation" type="number" min="-360" max="360" value="${settings.rotationDegrees}" /></label>`;
@@ -280,7 +280,7 @@ export function renderIntegratedPlacementWorkbench(
             `<button type="button" data-action="placement-template" data-template="${template}" class="${placementTemplate === template ? "is-active" : ""}" aria-pressed="${placementTemplate === template}">${({ manual: "1点", circle: "円周", line: "直線", arc: "円弧", grid: "格子" } as const)[template]}</button>`,
         )
         .join("") +
-      `<button type="button" data-action="import-image-placement" data-template="image" class="${placementTemplate === "image" ? "is-active" : ""}" aria-pressed="${placementTemplate === "image"}" aria-label="画像から仮想星を生成" ${imageImporting ? "disabled" : ""}>${imageImporting ? "解析中…" : "画像から生成"}</button>`
+      `<button type="button" data-action="import-image-placement" data-template="image" class="${placementTemplate === "image" ? "is-active" : ""}" aria-pressed="${placementTemplate === "image"}" aria-label="画像から仮想星を生成" ${imageImporting ? "disabled" : ""}>${imageImporting ? "点指定中…" : "画像から生成"}</button>`
     : patternEditing
       ? PATTERN_TEMPLATES.map(
           (template: PatternTemplate) =>
@@ -313,7 +313,7 @@ export function renderIntegratedPlacementWorkbench(
       </svg>
       ${renderShellSliceNavigator(section)}
       <p class="slice-announcement" aria-live="polite">${escapeHTML(sliceAnnouncement)}</p>
-      <p>${pointEditingAllowed ? (placementTemplate === "manual" ? "断面円を押して1点追加。現在断面の点だけ移動できます。" : placementTemplate === "image" ? "画像の被写体を現在断面の編集可能な仮想星へ変換します。" : "現在断面へ等間隔配置し、その後は各点を編集できます。") : patternEditing ? "形状は上のボタン、サイズ・密度・回転は右のパラメーターで調整します。" : "生成点は参照表示です。右のパラメーターで調整してください。"}</p>
+      <p>${pointEditingAllowed ? (placementTemplate === "manual" ? "断面円を押して1点追加。現在断面の点だけ移動できます。" : placementTemplate === "image" ? "画像上で被写体・特徴・除外背景を指定し、確認後に現在断面へ配置します。" : "現在断面へ等間隔配置し、その後は各点を編集できます。") : patternEditing ? "形状は上のボタン、サイズ・密度・回転は右のパラメーターで調整します。" : "生成点は参照表示です。右のパラメーターで調整してください。"}</p>
     </div>
   </section>`;
 }

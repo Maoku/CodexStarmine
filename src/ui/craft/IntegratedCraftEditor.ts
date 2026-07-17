@@ -25,12 +25,14 @@ import {
   type ApplyImagePlacementResult,
 } from "./ImagePlacementApplication";
 import {
+  openGuidedImagePlacementDialog,
+  type GuidedImagePlacementDialogResult,
+} from "./GuidedImagePlacementDialog";
+import {
   DEFAULT_IMAGE_PLACEMENT_SETTINGS,
-  extractImagePlacement,
   IMAGE_PLACEMENT_MAXIMUM_POINTS,
   IMAGE_PLACEMENT_MINIMUM_POINTS,
 } from "./ImagePlacementRecipe";
-import { ImagePixelLoadError, loadImagePixels } from "./imagePixelLoader";
 import { renderLayerPanel } from "./LayerPanel";
 import {
   createManualPlacementPoints,
@@ -65,7 +67,7 @@ export interface IntegratedCraftEditorCallbacks {
 }
 
 export interface IntegratedCraftEditorDependencies {
-  loadImagePixels: typeof loadImagePixels;
+  openGuidedImagePlacementDialog: typeof openGuidedImagePlacementDialog;
 }
 
 interface PointDrag {
@@ -91,7 +93,7 @@ export class IntegratedCraftEditor {
   readonly element = document.createElement("section");
   readonly #callbacks: IntegratedCraftEditorCallbacks;
   readonly #controller: CraftController;
-  readonly #loadImagePixels: typeof loadImagePixels;
+  readonly #openGuidedImagePlacementDialog: typeof openGuidedImagePlacementDialog;
   readonly #mobileQuery: MediaQueryList;
   readonly #starLongPress = new StarLongPressGesture();
   #drawer?: MobileDrawer;
@@ -126,7 +128,9 @@ export class IntegratedCraftEditor {
   ) {
     this.#controller = controller;
     this.#callbacks = callbacks;
-    this.#loadImagePixels = dependencies.loadImagePixels ?? loadImagePixels;
+    this.#openGuidedImagePlacementDialog =
+      dependencies.openGuidedImagePlacementDialog ??
+      openGuidedImagePlacementDialog;
     this.#mobileQuery = window.matchMedia("(max-width: 900px)");
     this.element.className = "craft-workspace integrated-craft-editor";
     this.element.addEventListener("click", this.#handleClick);
@@ -1098,21 +1102,31 @@ export class IntegratedCraftEditor {
     }
 
     const section = { ...this.#section };
+    const restoreFocus = this.element.querySelector<HTMLElement>(
+      "[data-action='import-image-placement']",
+    );
     this.#imageImporting = true;
     this.#render();
     try {
-      const pixels = await this.#loadImagePixels(file);
-      const placement = extractImagePlacement(pixels, {
-        targetCount: this.#imageTargetCount,
-      });
-      if (placement.points.length < IMAGE_PLACEMENT_MINIMUM_POINTS) {
+      const dialogResult: GuidedImagePlacementDialogResult | undefined =
+        await this.#openGuidedImagePlacementDialog(file, {
+          applyMode: this.#templateApplyMode,
+          restoreFocus: restoreFocus ?? undefined,
+          targetCount: this.#imageTargetCount,
+        });
+      if (!dialogResult) return;
+      this.#imageTargetCount = dialogResult.settings.targetCount;
+      this.#templateApplyMode = dialogResult.settings.applyMode;
+      if (
+        dialogResult.placement.points.length < IMAGE_PLACEMENT_MINIMUM_POINTS
+      ) {
         this.#callbacks.onToast("画像から被写体を検出できませんでした");
         return;
       }
       let result: ApplyImagePlacementResult | undefined;
       this.#controller.document.updateIntent("画像から配置", (draft) => {
-        result = applyImagePlacementToDraft(draft, placement, {
-          applyMode: this.#templateApplyMode,
+        result = applyImagePlacementToDraft(draft, dialogResult.placement, {
+          applyMode: dialogResult.settings.applyMode,
           layerId,
           section,
         });
@@ -1127,15 +1141,16 @@ export class IntegratedCraftEditor {
           `画像から${result.appliedPointCount}点を配置しました`,
         );
       }
-    } catch (error) {
-      this.#callbacks.onToast(
-        error instanceof ImagePixelLoadError
-          ? error.message
-          : "画像の読み込みに失敗しました",
-      );
+    } catch {
+      this.#callbacks.onToast("画像の読み込みに失敗しました");
     } finally {
       this.#imageImporting = false;
       this.#render();
+      window.setTimeout(() =>
+        this.element
+          .querySelector<HTMLElement>("[data-action='import-image-placement']")
+          ?.focus(),
+      );
     }
   }
 
