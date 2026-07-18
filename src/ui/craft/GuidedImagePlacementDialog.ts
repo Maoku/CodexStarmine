@@ -30,7 +30,11 @@ import {
   ImageSegmentationClient,
   type ImageSegmentationClientOptions,
 } from "./ImageSegmentationClient";
-import type { ImagePlacementResult } from "./ImagePlacementRecipe";
+import {
+  IMAGE_PLACEMENT_MAXIMUM_POINTS,
+  IMAGE_PLACEMENT_MINIMUM_POINTS,
+  type ImagePlacementResult,
+} from "./ImagePlacementRecipe";
 import {
   ImagePixelLoadError,
   loadGuidedImagePixels,
@@ -43,6 +47,7 @@ export interface GuidedImagePlacementDialogResult {
   placement: ImagePlacementResult;
   settings: {
     applyMode: "append" | "replace";
+    fillInterior: boolean;
     targetCount: number;
   };
 }
@@ -52,6 +57,7 @@ export interface GuidedImagePlacementDialogOptions {
   createSegmentationClient?: (
     options: ImageSegmentationClientOptions,
   ) => ImageSegmentationClient;
+  fillInterior?: boolean;
   loadImage?: typeof loadGuidedImagePixels;
   restoreFocus?: HTMLElement;
   targetCount: number;
@@ -111,6 +117,7 @@ export function renderGuidedImagePlacementDialogShell(
   fileName: string,
   targetCount: number,
   applyMode: "append" | "replace",
+  fillInterior = DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.fillInterior,
 ): string {
   return `<section class="guided-image-dialog" role="dialog" aria-modal="true" aria-labelledby="guided-image-dialog-title" aria-describedby="guided-image-dialog-help">
     <header class="guided-image-dialog-header">
@@ -147,7 +154,8 @@ export function renderGuidedImagePlacementDialogShell(
         <p id="guided-image-dialog-help">最初に被写体をドラッグで囲むか、残したい部分へ＋点を置いてください。特徴点は指定した位置へそのまま仮想星1点になります。</p>
         <p class="guided-image-live" aria-live="polite" data-guided-live></p>
         <div class="guided-image-setting-grid">
-          <label><span>目標点数</span><input name="guided-target-count" type="number" min="8" max="240" value="${targetCount}" /></label>
+          <label><span>配置範囲</span><select name="guided-placement-style"><option value="outline" ${fillInterior ? "" : "selected"}>輪郭のみ</option><option value="filled" ${fillInterior ? "selected" : ""}>輪郭＋内部</option></select></label>
+          <label><span>目標点数</span><input name="guided-target-count" type="number" min="${IMAGE_PLACEMENT_MINIMUM_POINTS}" max="${IMAGE_PLACEMENT_MAXIMUM_POINTS}" value="${targetCount}" /></label>
           <label><span>生成方法</span><select name="guided-apply-mode"><option value="replace" ${applyMode === "replace" ? "selected" : ""}>置換</option><option value="append" ${applyMode === "append" ? "selected" : ""}>追加</option></select></label>
         </div>
         <section class="guided-image-prompt-list" aria-labelledby="guided-prompt-list-title">
@@ -215,6 +223,7 @@ class GuidedImagePlacementDialog {
   #generation = 0;
   #draftBox?: NormalizedImageRect;
   #draftPromptPoint?: NormalizedImagePoint;
+  #fillInterior: boolean;
   #inertSiblings: Array<{
     ariaHidden: string | null;
     element: HTMLElement;
@@ -245,8 +254,14 @@ class GuidedImagePlacementDialog {
     this.#file = file;
     this.#options = options;
     this.#applyMode = options.applyMode;
+    this.#fillInterior =
+      options.fillInterior ??
+      DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.fillInterior;
     this.#targetCount = Math.round(
-      Math.min(Math.max(options.targetCount, 8), 240),
+      Math.min(
+        Math.max(options.targetCount, IMAGE_PLACEMENT_MINIMUM_POINTS),
+        IMAGE_PLACEMENT_MAXIMUM_POINTS,
+      ),
     );
     this.#result = new Promise((resolve) => (this.#resolve = resolve));
     this.#backdrop.className = "guided-image-dialog-backdrop";
@@ -254,6 +269,7 @@ class GuidedImagePlacementDialog {
       file.name,
       this.#targetCount,
       this.#applyMode,
+      this.#fillInterior,
     );
     this.#backdrop.addEventListener("click", this.#handleClick);
     this.#backdrop.addEventListener("change", this.#handleChange);
@@ -362,9 +378,12 @@ class GuidedImagePlacementDialog {
         placement: {
           colors: [...this.#placement.colors],
           points: this.#placement.points.map((point) => ({ ...point })),
+          preserveColorAssignments:
+            this.#placement.preserveColorAssignments,
         },
         settings: {
           applyMode: this.#applyMode,
+          fillInterior: this.#fillInterior,
           targetCount: this.#targetCount,
         },
       });
@@ -457,9 +476,17 @@ class GuidedImagePlacementDialog {
     if (input.name === "guided-target-count") {
       const value = Number(input.value);
       if (Number.isFinite(value)) {
-        this.#targetCount = Math.round(Math.min(Math.max(value, 8), 240));
+        this.#targetCount = Math.round(
+          Math.min(
+            Math.max(value, IMAGE_PLACEMENT_MINIMUM_POINTS),
+            IMAGE_PLACEMENT_MAXIMUM_POINTS,
+          ),
+        );
       }
       input.value = String(this.#targetCount);
+      this.#rebuildPlacement();
+    } else if (input.name === "guided-placement-style") {
+      this.#fillInterior = input.value === "filled";
       this.#rebuildPlacement();
     } else if (input.name === "guided-apply-mode") {
       this.#applyMode = input.value === "append" ? "append" : "replace";
@@ -895,6 +922,7 @@ class GuidedImagePlacementDialog {
           this.#session.prompts,
           {
             ...DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS,
+            fillInterior: this.#fillInterior,
             targetCount: this.#targetCount,
           },
           this.#maskProvider,
@@ -982,7 +1010,7 @@ class GuidedImagePlacementDialog {
         this.#placement.diagnostics.featurePointCounts,
       ).reduce((sum, count) => sum + count, 0);
       const backend = this.#segmentationDiagnostics?.backend;
-      diagnostics.textContent = `外形 ${this.#placement.diagnostics.outlinePointCount}点 / 特徴 ${featureCount}点 / ${this.#providerLabel(this.#maskProvider, backend)}`;
+      diagnostics.textContent = `外形 ${this.#placement.diagnostics.outlinePointCount}点 / 内部 ${this.#placement.diagnostics.interiorPointCount}点 / 特徴 ${featureCount}点 / ${this.#providerLabel(this.#maskProvider, backend)}`;
       diagnostics.classList.toggle(
         "has-warning",
         this.#placement.warnings.length > 0 || !this.#constraintsSatisfied,

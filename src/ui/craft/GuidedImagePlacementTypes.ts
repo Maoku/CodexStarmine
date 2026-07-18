@@ -22,6 +22,7 @@ export interface ImagePrompt {
 }
 
 export interface GuidedImagePlacementSettings {
+  fillInterior: boolean;
   targetCount: number;
 }
 
@@ -75,6 +76,7 @@ export interface SegmentationDiagnostics {
 
 export interface GuidedPlacementDiagnostics {
   featurePointCounts: Record<string, number>;
+  interiorPointCount: number;
   maskProvider: SegmentationProvider;
   maskRevision: number;
   outlinePointCount: number;

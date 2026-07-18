@@ -63,7 +63,9 @@ export function applyImagePlacementToDraft(
     return { appliedPointCount: 0, createdStarIds: [], status: "locked" };
   }
 
-  const resolution = resolveImageStars(placement.colors, draft.starDefinitions);
+  const resolution = resolveImageStars(placement.colors, draft.starDefinitions, {
+    preserveColorAssignments: placement.preserveColorAssignments,
+  });
   draft.starDefinitions = resolution.starDefinitions;
   const existingIds = new Set(
     options.applyMode === "append" ? layer.points.map((point) => point.id) : [],

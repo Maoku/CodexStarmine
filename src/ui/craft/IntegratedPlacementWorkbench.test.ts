@@ -163,6 +163,7 @@ describe("IntegratedPlacementWorkbench", () => {
       128,
     );
     expect(imageMarkup).toContain('name="image-target-count"');
+    expect(imageMarkup).toContain('max="1024"');
     expect(imageMarkup).toContain('value="128"');
     expect(imageMarkup).toContain('data-template="image" class="is-active"');
     expect(imageMarkup).not.toContain('data-action="apply-manual-recipe"');

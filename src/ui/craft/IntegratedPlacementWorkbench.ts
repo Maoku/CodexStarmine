@@ -12,6 +12,11 @@ import {
   type ManualPlacementKind,
   type ManualPlacementSettings,
 } from "./ManualPlacementRecipe";
+import {
+  DEFAULT_IMAGE_PLACEMENT_SETTINGS,
+  IMAGE_PLACEMENT_MAXIMUM_POINTS,
+  IMAGE_PLACEMENT_MINIMUM_POINTS,
+} from "./ImagePlacementRecipe";
 import { PATTERN_TEMPLATE_LABELS, PATTERN_TEMPLATES } from "./PatternRecipe";
 import { colorToCSS, escapeHTML } from "./viewUtils";
 import {
@@ -77,7 +82,7 @@ function renderManualRecipeControls(
 ): string {
   if (kind === "manual") return "";
   if (kind === "image") {
-    return `<div class="manual-recipe-controls image-placement-controls"><label><span>既定の目標点数</span><input name="image-target-count" type="number" min="8" max="240" value="${imageTargetCount}" /></label><span>画像を選ぶと、被写体・特徴・背景の点指定画面が開きます。</span></div>`;
+    return `<div class="manual-recipe-controls image-placement-controls"><label><span>既定の目標点数</span><input name="image-target-count" type="number" min="${IMAGE_PLACEMENT_MINIMUM_POINTS}" max="${IMAGE_PLACEMENT_MAXIMUM_POINTS}" value="${imageTargetCount}" /></label><span>画像を選ぶと、被写体・特徴・背景の点指定画面が開きます。</span></div>`;
   }
   const count = `<label><span>個数</span><input name="manual-count" type="number" min="2" max="240" value="${settings.count}" /></label>`;
   const rotation = `<label><span>回転</span><input name="manual-rotation" type="number" min="-360" max="360" value="${settings.rotationDegrees}" /></label>`;
@@ -236,7 +241,7 @@ export function renderIntegratedPlacementWorkbench(
   templateApplyMode: TemplateApplyMode = "replace",
   sliceAnnouncement = "",
   manualPlacementSettings: ManualPlacementSettings = DEFAULT_MANUAL_PLACEMENT_SETTINGS,
-  imageTargetCount = 240,
+  imageTargetCount = DEFAULT_IMAGE_PLACEMENT_SETTINGS.targetCount,
   imageImporting = false,
 ): string {
   const pointEditingAllowed = selectedIntent?.authoringMode === "manual";

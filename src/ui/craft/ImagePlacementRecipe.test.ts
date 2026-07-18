@@ -189,6 +189,34 @@ describe("ImagePlacementRecipe", () => {
     });
   });
 
+  it("maps dark neutral and chromatic colors to visible nearby stars", () => {
+    const definitions = snapshotStarLibrary();
+    const resolution = resolveImageStars(
+      [0x202124, 0x152d58],
+      definitions,
+      { preserveColorAssignments: true },
+    );
+
+    expect(resolution.starIds).toEqual(["star-silver", "star-change-blue"]);
+  });
+
+  it("preserves palette membership assigned by the guided recipe", () => {
+    const definitions = snapshotStarLibrary();
+    const resolution = resolveImageStars(
+      [0xff3b42, 0x397dff, 0xe43e32, 0xffb52d, 0xbfe4ff],
+      definitions,
+      { preserveColorAssignments: true },
+    );
+
+    expect(resolution.starIds).toEqual([
+      "star-solid-red",
+      "star-change-blue",
+      "star-charcoal",
+      "star-gold",
+      "star-silver",
+    ]);
+  });
+
   it("applies points as one undoable v4 edit without adding stars", () => {
     const store = new CraftDocumentStore(CHRYSANTHEMUM_PRESET);
     store.updateIntent("手動レイヤーを追加", (draft) => {

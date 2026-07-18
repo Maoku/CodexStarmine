@@ -8,9 +8,11 @@ import type {
   SubjectMask,
 } from "./GuidedImagePlacementTypes";
 import {
+  DEFAULT_IMAGE_PLACEMENT_SETTINGS,
   IMAGE_PLACEMENT_MAXIMUM_POINTS,
   IMAGE_PLACEMENT_MINIMUM_POINTS,
   IMAGE_PLACEMENT_SAFETY_RADIUS,
+  quantizeImageColors,
   type ImageDataLike,
 } from "./ImagePlacementRecipe";
 import type { SectionPoint2D } from "./SliceGeometry";
@@ -18,8 +20,13 @@ import { cleanBinarySubjectMask } from "./SubjectMaskPostprocessor";
 
 export const DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS: GuidedImagePlacementSettings =
   {
-    targetCount: IMAGE_PLACEMENT_MAXIMUM_POINTS,
+    fillInterior: false,
+    targetCount: DEFAULT_IMAGE_PLACEMENT_SETTINGS.targetCount,
   };
+
+export const GUIDED_FILLED_OUTLINE_MAXIMUM_POINTS = 240;
+export const GUIDED_INTERIOR_MAXIMUM_COLORS = 4;
+export const GUIDED_OUTLINE_MAXIMUM_COLORS = 3;
 
 interface GridPoint {
   x: number;
@@ -204,6 +211,108 @@ function sampleContour(contour: MaskContour, count: number): GridPoint[] {
   return result;
 }
 
+function halton(index: number, base: number): number {
+  let fraction = 1;
+  let result = 0;
+  let value = index;
+  while (value > 0) {
+    fraction /= base;
+    result += fraction * (value % base);
+    value = Math.floor(value / base);
+  }
+  return result;
+}
+
+function interiorPixel(mask: SubjectMask, x: number, y: number): boolean {
+  if (x <= 0 || y <= 0 || x >= mask.width - 1 || y >= mask.height - 1) {
+    return false;
+  }
+  for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+    for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+      if (!mask.data[(y + offsetY) * mask.width + x + offsetX]) return false;
+    }
+  }
+  return true;
+}
+
+/*
+ * A low-discrepancy sequence keeps the fill even without making placement
+ * random. Pixel centers are used so every generated point remains inside the
+ * cleaned subject mask. A scan-order fallback covers unusually thin masks.
+ */
+function sampleInterior(
+  mask: SubjectMask,
+  count: number,
+  excluded: GridPoint[],
+): GridPoint[] {
+  if (count <= 0) return [];
+  const candidates: number[] = [];
+  let maximumX = -1;
+  let maximumY = -1;
+  let minimumX = mask.width;
+  let minimumY = mask.height;
+  for (let y = 1; y < mask.height - 1; y += 1) {
+    for (let x = 1; x < mask.width - 1; x += 1) {
+      if (!interiorPixel(mask, x, y)) continue;
+      const tooCloseToFeature = excluded.some(
+        (point) => Math.hypot(x + 0.5 - point.x, y + 0.5 - point.y) < 1,
+      );
+      if (tooCloseToFeature) continue;
+      candidates.push(y * mask.width + x);
+      minimumX = Math.min(minimumX, x);
+      maximumX = Math.max(maximumX, x);
+      minimumY = Math.min(minimumY, y);
+      maximumY = Math.max(maximumY, y);
+    }
+  }
+  if (candidates.length <= count) {
+    return candidates.map((index) => ({
+      x: (index % mask.width) + 0.5,
+      y: Math.floor(index / mask.width) + 0.5,
+    }));
+  }
+
+  const candidateSet = new Set(candidates);
+  const selected = new Set<number>();
+  const maximumAttempts = Math.max(count * 64, 4096);
+  for (
+    let sequenceIndex = 1;
+    selected.size < count && sequenceIndex <= maximumAttempts;
+    sequenceIndex += 1
+  ) {
+    const x = Math.min(
+      maximumX,
+      minimumX +
+        Math.floor(halton(sequenceIndex, 2) * (maximumX - minimumX + 1)),
+    );
+    const y = Math.min(
+      maximumY,
+      minimumY +
+        Math.floor(halton(sequenceIndex, 3) * (maximumY - minimumY + 1)),
+    );
+    const index = y * mask.width + x;
+    if (candidateSet.has(index)) selected.add(index);
+  }
+  if (selected.size < count) {
+    const remaining = candidates.filter((index) => !selected.has(index));
+    const needed = count - selected.size;
+    for (let sample = 0; sample < needed; sample += 1) {
+      selected.add(
+        remaining[
+          Math.min(
+            remaining.length - 1,
+            Math.floor(((sample + 0.5) / needed) * remaining.length),
+          )
+        ],
+      );
+    }
+  }
+  return [...selected].map((index) => ({
+    x: (index % mask.width) + 0.5,
+    y: Math.floor(index / mask.width) + 0.5,
+  }));
+}
+
 function allocateByWeight(weights: number[], total: number): number[] {
   if (weights.length === 0) return [];
   const counts = Array.from({ length: weights.length }, () => 0);
@@ -295,6 +404,24 @@ function representativeColor(image: ImageDataLike, indices: number[]): number {
   return packColor(median(red), median(green), median(blue));
 }
 
+function sampleOutlineColor(
+  image: ImageDataLike,
+  mask: SubjectMask,
+  point: GridPoint,
+): number {
+  const maskIndices: number[] = [];
+  const radius = 2;
+  for (let y = Math.floor(point.y - radius); y <= point.y + radius; y += 1) {
+    for (let x = Math.floor(point.x - radius); x <= point.x + radius; x += 1) {
+      if (x < 0 || y < 0 || x >= mask.width || y >= mask.height) continue;
+      if (Math.hypot(x + 0.5 - point.x, y + 0.5 - point.y) > radius) continue;
+      const maskIndex = y * mask.width + x;
+      if (mask.data[maskIndex]) maskIndices.push(maskIndex);
+    }
+  }
+  return representativeColor(image, maskIndices);
+}
+
 interface FeatureSample {
   color: number;
   point: GridPoint;
@@ -357,6 +484,7 @@ export function createGuidedImagePlacement(
     colors: [],
     diagnostics: {
       featurePointCounts: {},
+      interiorPointCount: 0,
       maskProvider: provider,
       maskRevision,
       outlinePointCount: 0,
@@ -365,6 +493,7 @@ export function createGuidedImagePlacement(
     },
     mask: cleaned,
     points: [],
+    preserveColorAssignments: true,
     warnings,
   });
   if (!transform || contours.length === 0) return empty();
@@ -377,11 +506,13 @@ export function createGuidedImagePlacement(
     return Boolean(inside);
   });
   const featurePoints: SectionPoint2D[] = [];
+  const featureGridPoints: GridPoint[] = [];
   const featureColors: number[] = [];
   const featurePointCounts: Record<string, number> = {};
   validFeatures.forEach((prompt) => {
     const sampled = sampleFeature(image, cleaned, prompt);
     featurePointCounts[prompt.id] = 1;
+    featureGridPoints.push(sampled.point);
     featurePoints.push(transform.toSection(sampled.point));
     featureColors.push(sampled.color);
   });
@@ -389,7 +520,23 @@ export function createGuidedImagePlacement(
     .filter((prompt) => prompt.kind === "feature")
     .forEach((prompt) => (featurePointCounts[prompt.id] ??= 0));
 
-  const outlineBudget = targetCount - featurePoints.length;
+  const placementBudget = Math.max(0, targetCount - featurePoints.length);
+  const requestedInteriorCount =
+    (settings.fillInterior ??
+      DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.fillInterior) &&
+    placementBudget > 1
+      ? placementBudget -
+        Math.min(
+          GUIDED_FILLED_OUTLINE_MAXIMUM_POINTS,
+          Math.max(1, Math.round(placementBudget * 0.4)),
+        )
+      : 0;
+  const interiorGridPoints = sampleInterior(
+    cleaned,
+    requestedInteriorCount,
+    featureGridPoints,
+  );
+  const outlineBudget = placementBudget - interiorGridPoints.length;
   const perContour = allocateByWeight(
     contours.map((contour) => contour.length),
     outlineBudget,
@@ -397,24 +544,34 @@ export function createGuidedImagePlacement(
   const outlineGridPoints = contours.flatMap((contour, index) =>
     sampleContour(contour, perContour[index]),
   );
-  const subjectIndices: number[] = [];
-  cleaned.data.forEach((value, index) => {
-    if (value) subjectIndices.push(index);
-  });
-  const outlineColor = representativeColor(image, subjectIndices);
+  const outlineColors = quantizeImageColors(
+    outlineGridPoints.map((point) =>
+      sampleOutlineColor(image, cleaned, point),
+    ),
+    GUIDED_OUTLINE_MAXIMUM_COLORS,
+  );
   const outlinePoints = outlineGridPoints.map(transform.toSection);
-  const points = [...outlinePoints, ...featurePoints].filter(
+  const interiorColors = quantizeImageColors(
+    interiorGridPoints.map((point) =>
+      sampleOutlineColor(image, cleaned, point),
+    ),
+    GUIDED_INTERIOR_MAXIMUM_COLORS,
+  );
+  const interiorPoints = interiorGridPoints.map(transform.toSection);
+  const points = [...outlinePoints, ...interiorPoints, ...featurePoints].filter(
     (point) =>
       Math.hypot(point.x, point.y) <= IMAGE_PLACEMENT_SAFETY_RADIUS + 1e-9,
   );
   const colors = [
-    ...outlinePoints.map(() => outlineColor),
+    ...outlineColors,
+    ...interiorColors,
     ...featureColors,
   ].slice(0, points.length);
   return {
     colors,
     diagnostics: {
       featurePointCounts,
+      interiorPointCount: interiorPoints.length,
       maskProvider: provider,
       maskRevision,
       outlinePointCount: outlinePoints.length,
@@ -423,6 +580,7 @@ export function createGuidedImagePlacement(
     },
     mask: cleaned,
     points,
+    preserveColorAssignments: true,
     warnings,
   };
 }

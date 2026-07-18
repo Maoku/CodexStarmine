@@ -7,6 +7,7 @@ import {
 } from "./GuidedImagePlacementRecipe";
 import type { ImagePrompt, SubjectMask } from "./GuidedImagePlacementTypes";
 import {
+  IMAGE_PLACEMENT_MAXIMUM_POINTS,
   IMAGE_PLACEMENT_SAFETY_RADIUS,
   type ImageDataLike,
 } from "./ImagePlacementRecipe";
@@ -100,6 +101,7 @@ describe("GuidedImagePlacementRecipe", () => {
     expect(first.points).toHaveLength(64);
     expect(first.colors).toHaveLength(64);
     expect(first.diagnostics.outlinePointCount).toBe(62);
+    expect(first.diagnostics.interiorPointCount).toBe(0);
     expect(first.diagnostics.featurePointCounts).toEqual({
       "left-eye": 1,
       "right-eye": 1,
@@ -109,6 +111,85 @@ describe("GuidedImagePlacementRecipe", () => {
         IMAGE_PLACEMENT_SAFETY_RADIUS,
       ),
     );
+  });
+
+  it("defaults outline-only placement to 240 points", () => {
+    const result = createGuidedImagePlacement(
+      coloredImage(64, 48),
+      rectangleMask(64, 48, 8, 6, 55, 41),
+      [{ id: "subject", kind: "subject", point: { x: 0.5, y: 0.5 } }],
+    );
+
+    expect(result.points).toHaveLength(240);
+    expect(result.diagnostics.outlinePointCount).toBe(240);
+    expect(result.diagnostics.interiorPointCount).toBe(0);
+  });
+
+  it("fills the subject interior deterministically up to 1024 points", () => {
+    const image = coloredImage(80, 64);
+    const mask = rectangleMask(80, 64, 4, 4, 75, 59);
+    const prompts: ImagePrompt[] = [
+      { id: "subject", kind: "subject", point: { x: 0.5, y: 0.5 } },
+    ];
+    const first = createGuidedImagePlacement(image, mask, prompts, {
+      fillInterior: true,
+      targetCount: 4096,
+    });
+    const second = createGuidedImagePlacement(image, mask, prompts, {
+      fillInterior: true,
+      targetCount: 4096,
+    });
+
+    expect(first).toEqual(second);
+    expect(first.points).toHaveLength(IMAGE_PLACEMENT_MAXIMUM_POINTS);
+    expect(first.diagnostics.outlinePointCount).toBe(240);
+    expect(first.diagnostics.interiorPointCount).toBe(784);
+    const interiorPoints = first.points.slice(
+      first.diagnostics.outlinePointCount,
+      first.diagnostics.outlinePointCount +
+        first.diagnostics.interiorPointCount,
+    );
+    expect(
+      interiorPoints.some((point) => Math.hypot(point.x, point.y) < 0.1),
+    ).toBe(true);
+  });
+
+  it("colors the outline from the image using at most three colors", () => {
+    const width = 72;
+    const height = 48;
+    const data = new Uint8ClampedArray(width * height * 4);
+    const sourceColors = [0xe0443e, 0x4a76df, 0x44b96a, 0xf1b63c];
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const color = sourceColors[Math.min(3, Math.floor(x / 18))];
+        const offset = (y * width + x) * 4;
+        data.set(
+          [(color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff, 255],
+          offset,
+        );
+      }
+    }
+    const result = createGuidedImagePlacement(
+      { data, height, width },
+      rectangleMask(width, height, 4, 4, 67, 43),
+      [{ id: "subject", kind: "subject", point: { x: 0.5, y: 0.5 } }],
+      { targetCount: 72 },
+    );
+    const outlineColors = result.colors.slice(
+      0,
+      result.diagnostics.outlinePointCount,
+    );
+
+    expect(new Set(outlineColors).size).toBeGreaterThan(1);
+    expect(new Set(outlineColors).size).toBeLessThanOrEqual(3);
+    expect(result.preserveColorAssignments).toBe(true);
+    const leftmost = result.points.reduce((best, point, index) =>
+      point.x < result.points[best].x ? index : best,
+    0);
+    const rightmost = result.points.reduce((best, point, index) =>
+      point.x > result.points[best].x ? index : best,
+    0);
+    expect(result.colors[leftmost]).not.toBe(result.colors[rightmost]);
   });
 
   it("places the feature star exactly at the specified point", () => {

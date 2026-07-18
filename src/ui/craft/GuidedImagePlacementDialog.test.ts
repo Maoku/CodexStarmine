@@ -25,8 +25,24 @@ describe("GuidedImagePlacementDialog", () => {
     expect(markup).toContain("−");
     expect(markup).toContain("★");
     expect(markup).toContain('value="128"');
+    expect(markup).toContain('max="1024"');
+    expect(markup).toContain('<option value="outline" selected>輪郭のみ</option>');
+    expect(markup).toContain('<option value="filled" >輪郭＋内部</option>');
     expect(markup).toContain('<option value="append" selected>追加</option>');
     expect(markup).toContain('alt="sample&quot;.png"');
+  });
+
+  it("renders the interior fill option as selected", () => {
+    const markup = renderGuidedImagePlacementDialogShell(
+      "filled.png",
+      1024,
+      "replace",
+      true,
+    );
+
+    expect(markup).toContain('<option value="outline" >輪郭のみ</option>');
+    expect(markup).toContain('<option value="filled" selected>輪郭＋内部</option>');
+    expect(markup).toContain('value="1024"');
   });
 
   it("keeps normalized coordinates independent of rendered size", () => {

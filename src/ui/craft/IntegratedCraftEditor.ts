@@ -28,6 +28,7 @@ import {
   openGuidedImagePlacementDialog,
   type GuidedImagePlacementDialogResult,
 } from "./GuidedImagePlacementDialog";
+import { DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS } from "./GuidedImagePlacementRecipe";
 import {
   DEFAULT_IMAGE_PLACEMENT_SETTINGS,
   IMAGE_PLACEMENT_MAXIMUM_POINTS,
@@ -97,6 +98,7 @@ export class IntegratedCraftEditor {
   readonly #mobileQuery: MediaQueryList;
   readonly #starLongPress = new StarLongPressGesture();
   #drawer?: MobileDrawer;
+  #imageFillInterior = DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.fillInterior;
   #imageImporting = false;
   #imageTargetCount = DEFAULT_IMAGE_PLACEMENT_SETTINGS.targetCount;
   #section: SectionRef = { plane: "xy", ratio: 0.5 };
@@ -1111,10 +1113,12 @@ export class IntegratedCraftEditor {
       const dialogResult: GuidedImagePlacementDialogResult | undefined =
         await this.#openGuidedImagePlacementDialog(file, {
           applyMode: this.#templateApplyMode,
+          fillInterior: this.#imageFillInterior,
           restoreFocus: restoreFocus ?? undefined,
           targetCount: this.#imageTargetCount,
         });
       if (!dialogResult) return;
+      this.#imageFillInterior = dialogResult.settings.fillInterior;
       this.#imageTargetCount = dialogResult.settings.targetCount;
       this.#templateApplyMode = dialogResult.settings.applyMode;
       if (

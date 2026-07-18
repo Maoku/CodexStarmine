@@ -15,6 +15,8 @@ export interface ImagePlacementSettings {
 export interface ImagePlacementResult {
   colors: number[];
   points: SectionPoint2D[];
+  /** The recipe already assigned a bounded palette and its point membership. */
+  preserveColorAssignments?: boolean;
 }
 
 export interface ImageStarResolution {
@@ -23,12 +25,17 @@ export interface ImageStarResolution {
   starIds: string[];
 }
 
+export interface ResolveImageStarsOptions {
+  maximumColors?: number;
+  preserveColorAssignments?: boolean;
+}
+
 export const DEFAULT_IMAGE_PLACEMENT_SETTINGS: ImagePlacementSettings = {
   maximumColors: 4,
   targetCount: 240,
 };
 
-export const IMAGE_PLACEMENT_MAXIMUM_POINTS = 240;
+export const IMAGE_PLACEMENT_MAXIMUM_POINTS = 1024;
 export const IMAGE_PLACEMENT_MINIMUM_POINTS = 8;
 export const IMAGE_PLACEMENT_SAFETY_RADIUS = 0.94;
 
@@ -581,6 +588,57 @@ function quantizeColors(
   }));
 }
 
+/** Assigns every input color to one of at most `maximumColors` representatives. */
+export function quantizeImageColors(
+  colors: number[],
+  maximumColors: number,
+): number[] {
+  const clusters = quantizeColors(
+    colors,
+    Math.max(1, Math.round(maximumColors)),
+  );
+  const result = Array.from({ length: colors.length }, () => 0xffffff);
+  clusters.forEach((cluster) => {
+    cluster.entries.forEach((entry) => {
+      result[entry.index] = cluster.representative;
+    });
+  });
+  return result;
+}
+
+function exactColorClusters(colors: number[]): ColorCluster[] {
+  const byColor = new Map<number, ColorEntry[]>();
+  colors.forEach((color, index) => {
+    const entries = byColor.get(color) ?? [];
+    entries.push({ ...rgb(color), color, index });
+    byColor.set(color, entries);
+  });
+  return [...byColor.entries()].map(([color, entries]) => ({
+    entries,
+    representative: color,
+  }));
+}
+
+/*
+ * A dark RGB sample is a poor target for an emissive firework. Brighten it
+ * while retaining its hue; nearly neutral samples become a cool silver so
+ * black and gray outlines remain visible against the night sky.
+ */
+function visibleFireworkColor(color: number): number {
+  const channels = rgb(color);
+  const maximum = Math.max(channels.red, channels.green, channels.blue);
+  const minimum = Math.min(channels.red, channels.green, channels.blue);
+  if (maximum - minimum <= 24 && maximum < 210) return 0xd8e8f2;
+  if (maximum >= 176) return color;
+  if (maximum <= 0) return 0xd8e8f2;
+  const scale = 210 / maximum;
+  return packColor({
+    blue: Math.round(channels.blue * scale),
+    green: Math.round(channels.green * scale),
+    red: Math.round(channels.red * scale),
+  });
+}
+
 function definitionRepresentative(star: VirtualStarPreset): number {
   return (
     star.colorStages[Math.floor(star.colorStages.length / 2)]?.color ??
@@ -597,12 +655,21 @@ function definitionRepresentative(star: VirtualStarPreset): number {
 export function resolveImageStars(
   colors: number[],
   starDefinitions: Record<string, VirtualStarPreset>,
-  maximumColors = DEFAULT_IMAGE_PLACEMENT_SETTINGS.maximumColors,
+  options: ResolveImageStarsOptions = {},
 ): ImageStarResolution {
-  const clusters = quantizeColors(
-    colors,
-    Math.round(clamp(maximumColors, 1, 4)),
-  );
+  const clusters = options.preserveColorAssignments
+    ? exactColorClusters(colors)
+    : quantizeColors(
+        colors,
+        Math.round(
+          clamp(
+            options.maximumColors ??
+              DEFAULT_IMAGE_PLACEMENT_SETTINGS.maximumColors,
+            1,
+            4,
+          ),
+        ),
+      );
   const libraryStars = Object.values(starDefinitions).filter(
     (star) => !/^star-image-\d+$/.test(star.id),
   );
@@ -614,7 +681,7 @@ export function resolveImageStars(
     const nearest = mappingTargets
       .map((star) => ({
         distance: colorDistance(
-          cluster.representative,
+          visibleFireworkColor(cluster.representative),
           definitionRepresentative(star),
         ),
         id: star.id,
