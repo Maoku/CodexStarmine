@@ -18,7 +18,6 @@ import { cleanBinarySubjectMask } from "./SubjectMaskPostprocessor";
 
 export const DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS: GuidedImagePlacementSettings =
   {
-    featureBudgetRatio: 0.25,
     targetCount: IMAGE_PLACEMENT_MAXIMUM_POINTS,
   };
 
@@ -296,50 +295,20 @@ function representativeColor(image: ImageDataLike, indices: number[]): number {
   return packColor(median(red), median(green), median(blue));
 }
 
-function luminance(image: ImageDataLike, index: number): number {
-  const offset = index * 4;
-  return (
-    (image.data[offset] ?? 0) * 0.2126 +
-    (image.data[offset + 1] ?? 0) * 0.7152 +
-    (image.data[offset + 2] ?? 0) * 0.0722
-  );
-}
-
-function sobel(image: ImageDataLike, x: number, y: number): number {
-  const at = (sampleX: number, sampleY: number): number =>
-    luminance(
-      image,
-      clamp(sampleY, 0, image.height - 1) * image.width +
-        clamp(sampleX, 0, image.width - 1),
-    );
-  const horizontal =
-    at(x + 1, y - 1) +
-    2 * at(x + 1, y) +
-    at(x + 1, y + 1) -
-    at(x - 1, y - 1) -
-    2 * at(x - 1, y) -
-    at(x - 1, y + 1);
-  const vertical =
-    at(x - 1, y + 1) +
-    2 * at(x, y + 1) +
-    at(x + 1, y + 1) -
-    at(x - 1, y - 1) -
-    2 * at(x, y - 1) -
-    at(x + 1, y - 1);
-  return Math.hypot(horizontal, vertical);
-}
-
 interface FeatureSample {
   color: number;
-  points: GridPoint[];
+  point: GridPoint;
 }
 
+/*
+ * A feature prompt marks the exact spot the user wants preserved, so it maps
+ * to a single star at that spot. Only the color comes from the neighborhood,
+ * as the median of the masked pixels around the prompt.
+ */
 function sampleFeature(
   image: ImageDataLike,
   mask: SubjectMask,
   prompt: ImagePrompt,
-  count: number,
-  used: Set<string>,
 ): FeatureSample {
   const centerX = clamp(prompt.point.x * mask.width, 0.5, mask.width - 0.5);
   const centerY = clamp(prompt.point.y * mask.height, 0.5, mask.height - 0.5);
@@ -347,9 +316,7 @@ function sampleFeature(
     2,
     Math.round(Math.min(mask.width, mask.height) * 0.06),
   );
-  const candidates: Array<GridPoint & { score: number }> = [];
   const localIndices: number[] = [];
-  let maximumScore = 0;
   for (let y = Math.floor(centerY - radius); y <= centerY + radius; y += 1) {
     for (let x = Math.floor(centerX - radius); x <= centerX + radius; x += 1) {
       if (x < 0 || y < 0 || x >= mask.width || y >= mask.height) continue;
@@ -357,72 +324,12 @@ function sampleFeature(
       const index = y * mask.width + x;
       if (!mask.data[index]) continue;
       localIndices.push(index);
-      const score = sobel(image, x, y);
-      maximumScore = Math.max(maximumScore, score);
-      candidates.push({ score, x: x + 0.5, y: y + 0.5 });
-    }
-  }
-  const strong = candidates
-    .filter((candidate) => candidate.score >= Math.max(12, maximumScore * 0.28))
-    .sort(
-      (left, right) =>
-        Math.atan2(left.y - centerY, left.x - centerX) -
-          Math.atan2(right.y - centerY, right.x - centerX) ||
-        right.score - left.score ||
-        left.y - right.y ||
-        left.x - right.x,
-    );
-  const source = strong.length > 0 ? strong : [];
-  const result: GridPoint[] = [];
-  for (let index = 0; index < count && source.length > 0; index += 1) {
-    const candidate = source[Math.floor((index * source.length) / count)];
-    const candidateKey = `${candidate.x.toFixed(3)},${candidate.y.toFixed(3)}`;
-    if (!used.has(candidateKey)) {
-      used.add(candidateKey);
-      result.push({ x: candidate.x, y: candidate.y });
-    }
-  }
-  for (let index = 0; result.length < count && index < count * 4; index += 1) {
-    const angle = (index / Math.max(count, 4)) * Math.PI * 2;
-    const ringRadius = Math.max(0.75, Math.min(radius * 0.48, 4));
-    const point = {
-      x: clamp(centerX + Math.cos(angle) * ringRadius, 0.5, mask.width - 0.5),
-      y: clamp(centerY + Math.sin(angle) * ringRadius, 0.5, mask.height - 0.5),
-    };
-    const pointIndex =
-      clamp(Math.floor(point.y), 0, mask.height - 1) * mask.width +
-      clamp(Math.floor(point.x), 0, mask.width - 1);
-    const pointKey = `${point.x.toFixed(3)},${point.y.toFixed(3)}`;
-    if (mask.data[pointIndex] && !used.has(pointKey)) {
-      used.add(pointKey);
-      result.push(point);
-    }
-  }
-  if (result.length === 0 && count > 0) {
-    const center = { x: centerX, y: centerY };
-    const centerKey = `${center.x.toFixed(3)},${center.y.toFixed(3)}`;
-    if (!used.has(centerKey)) {
-      used.add(centerKey);
-      result.push(center);
     }
   }
   return {
     color: representativeColor(image, localIndices),
-    points: result,
+    point: { x: centerX, y: centerY },
   };
-}
-
-function featureBudget(
-  targetCount: number,
-  featureCount: number,
-  ratio: number,
-) {
-  if (featureCount === 0) return 0;
-  const desired = Math.min(Math.floor(targetCount * ratio), featureCount * 16);
-  return Math.min(
-    Math.floor(targetCount * 0.4),
-    Math.max(featureCount, desired),
-  );
 }
 
 export function createGuidedImagePlacement(
@@ -441,12 +348,6 @@ export function createGuidedImagePlacement(
       IMAGE_PLACEMENT_MINIMUM_POINTS,
       IMAGE_PLACEMENT_MAXIMUM_POINTS,
     ),
-  );
-  const ratio = clamp(
-    settings.featureBudgetRatio ??
-      DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.featureBudgetRatio,
-    0,
-    0.4,
   );
   const cleaned = cleanSubjectMask(mask, prompts);
   const contours = traceMaskContours(cleaned);
@@ -475,28 +376,14 @@ export function createGuidedImagePlacement(
     if (!inside) warnings.push(`特徴点「${prompt.id}」は被写体の外側です。`);
     return Boolean(inside);
   });
-  const budget = featureBudget(targetCount, validFeatures.length, ratio);
-  const perFeature = allocateByWeight(
-    validFeatures.map(() => 1),
-    budget,
-  );
   const featurePoints: SectionPoint2D[] = [];
   const featureColors: number[] = [];
   const featurePointCounts: Record<string, number> = {};
-  const usedFeaturePoints = new Set<string>();
-  validFeatures.forEach((prompt, index) => {
-    const sampled = sampleFeature(
-      image,
-      cleaned,
-      prompt,
-      perFeature[index],
-      usedFeaturePoints,
-    );
-    featurePointCounts[prompt.id] = sampled.points.length;
-    sampled.points.forEach((point) => {
-      featurePoints.push(transform.toSection(point));
-      featureColors.push(sampled.color);
-    });
+  validFeatures.forEach((prompt) => {
+    const sampled = sampleFeature(image, cleaned, prompt);
+    featurePointCounts[prompt.id] = 1;
+    featurePoints.push(transform.toSection(sampled.point));
+    featureColors.push(sampled.color);
   });
   prompts
     .filter((prompt) => prompt.kind === "feature")

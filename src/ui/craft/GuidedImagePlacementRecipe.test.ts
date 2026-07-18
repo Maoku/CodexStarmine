@@ -71,7 +71,7 @@ describe("GuidedImagePlacementRecipe", () => {
     expect(cleaned.data[10 * 32 + 24]).toBe(0);
   });
 
-  it("reserves at least 60 percent for outlines and samples each feature", () => {
+  it("spends one point per feature and the rest on the outline", () => {
     const image = coloredImage(64, 48);
     const mask = rectangleMask(64, 48, 8, 6, 55, 41);
     const prompts: ImagePrompt[] = [
@@ -99,18 +99,32 @@ describe("GuidedImagePlacementRecipe", () => {
     expect(first).toEqual(second);
     expect(first.points).toHaveLength(64);
     expect(first.colors).toHaveLength(64);
-    expect(first.diagnostics.outlinePointCount).toBeGreaterThanOrEqual(
-      Math.ceil(64 * 0.6),
-    );
+    expect(first.diagnostics.outlinePointCount).toBe(62);
     expect(first.diagnostics.featurePointCounts).toEqual({
-      "left-eye": 8,
-      "right-eye": 8,
+      "left-eye": 1,
+      "right-eye": 1,
     });
     first.points.forEach((point) =>
       expect(Math.hypot(point.x, point.y)).toBeLessThanOrEqual(
         IMAGE_PLACEMENT_SAFETY_RADIUS,
       ),
     );
+  });
+
+  it("places the feature star exactly at the specified point", () => {
+    const image = coloredImage(64, 48);
+    const mask = rectangleMask(64, 48, 8, 6, 55, 41);
+    const result = createGuidedImagePlacement(image, mask, [
+      { id: "subject", kind: "subject", point: { x: 0.5, y: 0.5 } },
+      { id: "center", kind: "feature", point: { x: 0.5, y: 0.5 } },
+    ]);
+
+    // The mask bounding box is centered on (0.5, 0.5), so the feature prompt
+    // there must land on the section origin.
+    expect(result.diagnostics.featurePointCounts).toEqual({ center: 1 });
+    const featurePoint = result.points.at(-1);
+    expect(featurePoint?.x).toBeCloseTo(0, 9);
+    expect(featurePoint?.y).toBeCloseTo(0, 9);
   });
 
   it("warns and spends no budget for a feature outside the mask", () => {

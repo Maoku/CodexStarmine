@@ -144,7 +144,7 @@ export function renderGuidedImagePlacementDialogShell(
         </div>
       </section>
       <aside class="guided-image-settings">
-        <p id="guided-image-dialog-help">最初に被写体をドラッグで囲むか、残したい部分へ＋点を置いてください。特徴点は輪郭とは別に優先配点されます。</p>
+        <p id="guided-image-dialog-help">最初に被写体をドラッグで囲むか、残したい部分へ＋点を置いてください。特徴点は指定した位置へそのまま仮想星1点になります。</p>
         <p class="guided-image-live" aria-live="polite" data-guided-live></p>
         <div class="guided-image-setting-grid">
           <label><span>目標点数</span><input name="guided-target-count" type="number" min="8" max="240" value="${targetCount}" /></label>
@@ -769,20 +769,6 @@ class GuidedImagePlacementDialog {
     }
     this.#session = result.state;
     this.#selectedPromptId = this.#session.prompts.at(-1)?.id;
-    if (this.#activeMode === "feature") {
-      const featureCount = this.#session.prompts.filter(
-        (prompt) => prompt.kind === "feature",
-      ).length;
-      const minimumTarget = Math.ceil(featureCount / 0.4);
-      if (this.#targetCount < minimumTarget) {
-        this.#targetCount = minimumTarget;
-        this.#query<HTMLInputElement>("[name='guided-target-count']").value =
-          String(this.#targetCount);
-        this.#announce(
-          `すべての特徴を残すため、目標点数を${minimumTarget}へ変更しました。`,
-        );
-      }
-    }
     this.#refreshForPromptChange(this.#activeMode !== "feature");
   }
 

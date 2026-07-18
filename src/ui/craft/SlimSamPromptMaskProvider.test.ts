@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  ensureProcessorInputLabels,
   SLIMSAM_MODEL_ID,
   SlimSamPromptMaskProvider,
   type SlimSamModelLike,
@@ -136,5 +137,33 @@ describe("SlimSamPromptMaskProvider", () => {
     expect(imageEmbedding.disposed).toBe(true);
     expect(positionalEmbedding.disposed).toBe(true);
     expect(model.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("bridges add_input_labels from the image_processor like Transformers 3.8", () => {
+    const labelsTensor = tensor(new Float32Array(1), [1, 1, 1]);
+    const addInputLabels = vi.fn(() => labelsTensor);
+    const processor = Object.assign(vi.fn(), {
+      image_processor: { add_input_labels: addInputLabels },
+      post_process_masks: vi.fn(),
+      reshape_input_points: vi.fn(),
+    }) as unknown as Parameters<typeof ensureProcessorInputLabels>[0];
+
+    const adapted = ensureProcessorInputLabels(processor);
+    const points = tensor(new Float32Array(2), [1, 1, 1, 2]);
+
+    expect(adapted.add_input_labels([[1]], points)).toBe(labelsTensor);
+    expect(addInputLabels).toHaveBeenCalledWith([[1]], points);
+  });
+
+  it("keeps an own add_input_labels untouched", () => {
+    const own = vi.fn();
+    const processor = Object.assign(vi.fn(), {
+      add_input_labels: own,
+      image_processor: { add_input_labels: vi.fn() },
+      post_process_masks: vi.fn(),
+      reshape_input_points: vi.fn(),
+    }) as unknown as Parameters<typeof ensureProcessorInputLabels>[0];
+
+    expect(ensureProcessorInputLabels(processor).add_input_labels).toBe(own);
   });
 });

@@ -22,7 +22,6 @@ export interface ImagePrompt {
 }
 
 export interface GuidedImagePlacementSettings {
-  featureBudgetRatio: number;
   targetCount: number;
 }
 

@@ -114,6 +114,27 @@ function normalizedProgress(value: unknown): number | undefined {
   return undefined;
 }
 
+interface SamProcessorWithImageProcessor extends SlimSamProcessorLike {
+  image_processor?: Pick<SlimSamProcessorLike, "add_input_labels">;
+}
+
+/*
+ * Transformers.js 3.8 exposes reshape_input_points and post_process_masks on
+ * SamProcessor itself but add_input_labels only on its image_processor.
+ * Without this bridge every mask decode throws and the worker silently falls
+ * back to the fast provider on opaque images.
+ */
+export function ensureProcessorInputLabels(
+  processor: SamProcessorWithImageProcessor,
+): SlimSamProcessorLike {
+  const imageProcessor = processor.image_processor;
+  if (typeof processor.add_input_labels !== "function" && imageProcessor) {
+    processor.add_input_labels = (labels, points) =>
+      imageProcessor.add_input_labels(labels, points);
+  }
+  return processor;
+}
+
 async function loadTransformersRuntime(): Promise<SlimSamRuntime> {
   const transformers = await import("@huggingface/transformers");
   return {
@@ -138,9 +159,11 @@ async function loadTransformersRuntime(): Promise<SlimSamRuntime> {
         progress_callback: (value) => onProgress?.(normalizedProgress(value)),
       })) as unknown as SlimSamModelLike,
     loadProcessor: async (modelId) =>
-      (await transformers.AutoProcessor.from_pretrained(modelId, {
-        local_files_only: true,
-      })) as unknown as SlimSamProcessorLike,
+      ensureProcessorInputLabels(
+        (await transformers.AutoProcessor.from_pretrained(modelId, {
+          local_files_only: true,
+        })) as unknown as SamProcessorWithImageProcessor,
+      ),
   };
 }
 
