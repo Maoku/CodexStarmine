@@ -16,6 +16,8 @@ describe("GuidedImagePlacementDialog", () => {
 
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('aria-modal="true"');
+    expect(markup).toContain('data-input-mode="box"');
+    expect(markup).toContain("被写体を囲む");
     expect(markup).toContain('data-prompt-kind="subject"');
     expect(markup).toContain('data-prompt-kind="background"');
     expect(markup).toContain('data-prompt-kind="feature"');

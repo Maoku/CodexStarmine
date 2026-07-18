@@ -2,7 +2,8 @@ import type { ImageDataLike } from "./ImagePlacementRecipe";
 
 export const IMAGE_FILE_MAXIMUM_BYTES = 20 * 1024 * 1024;
 export const IMAGE_PIXEL_MAXIMUM_EDGE = 256;
-export const GUIDED_IMAGE_PIXEL_MAXIMUM_EDGE = 512;
+export const GUIDED_IMAGE_PIXEL_MAXIMUM_EDGE = 256;
+export const SEGMENTATION_IMAGE_PIXEL_MAXIMUM_EDGE = 1024;
 export const IMAGE_TOTAL_PIXEL_MAXIMUM = 24_000_000;
 
 export type ImagePixelLoadErrorCode =
@@ -109,6 +110,7 @@ export async function loadImagePixels(file: File): Promise<ImageDataLike> {
 }
 
 export interface GuidedImagePixels {
+  analysisPixels: ImageDataLike;
   bitmap?: ImageBitmap;
   pixels: ImageDataLike;
   previewUrl: string;
@@ -126,6 +128,7 @@ export async function loadGuidedImagePixels(
       const sourceBitmap = await createImageBitmap(file, {
         imageOrientation: "from-image",
       });
+      let analysisPixels: ImageDataLike;
       let pixels: ImageDataLike;
       let sourceHeight: number;
       let sourceWidth: number;
@@ -144,17 +147,24 @@ export async function loadGuidedImagePixels(
           sourceHeight,
           GUIDED_IMAGE_PIXEL_MAXIMUM_EDGE,
         );
+        analysisPixels = await imagePixels(
+          sourceBitmap,
+          sourceWidth,
+          sourceHeight,
+          SEGMENTATION_IMAGE_PIXEL_MAXIMUM_EDGE,
+        );
       } finally {
         sourceBitmap.close();
       }
       const bitmap = await createImageBitmap(
         new ImageData(
-          Uint8ClampedArray.from(pixels.data),
-          pixels.width,
-          pixels.height,
+          Uint8ClampedArray.from(analysisPixels.data),
+          analysisPixels.width,
+          analysisPixels.height,
         ),
       );
       return {
+        analysisPixels,
         bitmap,
         pixels,
         previewUrl,
@@ -169,7 +179,14 @@ export async function loadGuidedImagePixels(
       image.naturalHeight,
       GUIDED_IMAGE_PIXEL_MAXIMUM_EDGE,
     );
+    const analysisPixels = await imagePixels(
+      image,
+      image.naturalWidth,
+      image.naturalHeight,
+      SEGMENTATION_IMAGE_PIXEL_MAXIMUM_EDGE,
+    );
     return {
+      analysisPixels,
       pixels,
       previewUrl,
       sourceHeight: image.naturalHeight,

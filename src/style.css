@@ -547,6 +547,12 @@ body.has-guided-image-dialog {
   color: #f0d6aa;
 }
 
+.guided-image-mode-row [data-input-mode="box"].is-active {
+  border-color: #79b7e0;
+  background: #172632;
+  color: #b9def7;
+}
+
 .guided-image-mode-row [data-prompt-kind="feature"].is-active {
   border-color: #eacb69;
   background: #292715;
@@ -612,6 +618,99 @@ body.has-guided-image-dialog {
   pointer-events: none;
 }
 
+.guided-image-subject-box {
+  position: absolute;
+  z-index: 1;
+  min-width: 0.35rem;
+  min-height: 0.35rem;
+  border: 2px solid #72bde9;
+  background: rgb(50 151 207 / 9%);
+  box-shadow:
+    0 0 0 1px rgb(4 18 28 / 78%),
+    inset 0 0 0 1px rgb(255 255 255 / 24%);
+  pointer-events: none;
+}
+
+.guided-image-subject-box.is-editing {
+  border-style: dashed;
+}
+
+.guided-image-box-label {
+  position: absolute;
+  top: 0.2rem;
+  left: 50%;
+  padding: 0.12rem 0.35rem;
+  border-radius: 0.25rem;
+  background: rgb(8 28 40 / 84%);
+  color: #b9e3fb;
+  cursor: move;
+  font-size: 0.58rem;
+  line-height: 1.25;
+  pointer-events: auto;
+  transform: translateX(-50%);
+  user-select: none;
+}
+
+.guided-image-box-handle {
+  position: absolute;
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 1px solid #0b3148;
+  border-radius: 50%;
+  background: #b7e4fb;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 55%);
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+}
+
+.guided-image-box-handle.is-north-west {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.guided-image-box-handle.is-north {
+  top: 0;
+  left: 50%;
+  cursor: ns-resize;
+}
+
+.guided-image-box-handle.is-north-east {
+  top: 0;
+  left: 100%;
+  cursor: nesw-resize;
+}
+
+.guided-image-box-handle.is-east {
+  top: 50%;
+  left: 100%;
+  cursor: ew-resize;
+}
+
+.guided-image-box-handle.is-south-east {
+  top: 100%;
+  left: 100%;
+  cursor: nwse-resize;
+}
+
+.guided-image-box-handle.is-south {
+  top: 100%;
+  left: 50%;
+  cursor: ns-resize;
+}
+
+.guided-image-box-handle.is-south-west {
+  top: 100%;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.guided-image-box-handle.is-west {
+  top: 50%;
+  left: 0;
+  cursor: ew-resize;
+}
+
 .guided-image-prompt {
   position: absolute;
   display: grid;
@@ -625,6 +724,8 @@ body.has-guided-image-dialog {
   transform: translate(-50%, -50%);
   background: rgb(11 18 22 / 88%) !important;
   box-shadow: 0 0.2rem 0.7rem rgb(0 0 0 / 48%);
+  cursor: move;
+  touch-action: none;
 }
 
 .guided-image-prompt b {

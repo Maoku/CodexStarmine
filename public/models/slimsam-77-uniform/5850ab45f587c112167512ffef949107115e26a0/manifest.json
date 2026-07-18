@@ -1,0 +1,71 @@
+{
+  "files": [
+    {
+      "path": "config.json",
+      "sha256": "6339884f168658d3ca6473b486973913fb33e84e625e06ae2dd7b4a808187419",
+      "size": 379
+    },
+    {
+      "path": "preprocessor_config.json",
+      "sha256": "225545a743c654e3c495ec6f545a0eaba57c8ba3fbbd8483b3cb1c0fc58db517",
+      "size": 466
+    },
+    {
+      "path": "onnx/prompt_encoder_mask_decoder_fp16.onnx",
+      "sha256": "df24d49a6f1a5dc0dbbecd84ca0fff9f14c76e63b81fd35c2b92c1321b007f71",
+      "size": 8550118
+    },
+    {
+      "path": "onnx/prompt_encoder_mask_decoder_quantized.onnx",
+      "sha256": "cb90b279f549d2cab7fd6e20c38522438c65d84bdcca3d2a764cff7d857fdce2",
+      "size": 4903810
+    },
+    {
+      "path": "onnx/vision_encoder_fp16.onnx",
+      "sha256": "11aaeb49c75e7b3f4cbf8a32c2c819406520c6b3affb4068ff474b2240c8aa38",
+      "size": 12170657
+    },
+    {
+      "path": "onnx/vision_encoder_quantized.onnx",
+      "sha256": "cce23c7b2e5d4f330932738fb67ba518e04b0d99ccdd1cccd22a7da4e01f2971",
+      "size": 8882165
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "size": 11358
+    },
+    {
+      "path": "../../../wasm/ort-wasm-simd-threaded.jsep.mjs",
+      "sha256": "08fb86ec433c78bfb032c5d84a68b8e8e5a8d81268fa39e24314179a5767a5b9",
+      "size": 44484,
+      "source": "onnxruntime-web@1.22.0-dev.20250409-89f8206ba4"
+    },
+    {
+      "path": "../../../wasm/ort-wasm-simd-threaded.jsep.wasm",
+      "sha256": "c46655e8a94afc45338d4cb2b840475f88e5012d524509916e505079c00bfa39",
+      "size": 21596019,
+      "source": "onnxruntime-web@1.22.0-dev.20250409-89f8206ba4"
+    },
+    {
+      "path": "../../../wasm/ort-wasm-simd-threaded.mjs",
+      "sha256": "43c25054b6b9ac000f786c65545ff83a45f871e0e310e8c2f4d48a363bb66db4",
+      "size": 20856,
+      "source": "onnxruntime-web@1.22.0-dev.20250409-89f8206ba4"
+    },
+    {
+      "path": "../../../wasm/ort-wasm-simd-threaded.wasm",
+      "sha256": "f061472c6e77d6d50d079aacdc0ff9b63fee287ddd2cbf46cf62438d3891de2b",
+      "size": 11133407,
+      "source": "onnxruntime-web@1.22.0-dev.20250409-89f8206ba4"
+    }
+  ],
+  "license": "Apache-2.0",
+  "modelFormats": {
+    "wasm": "q8",
+    "webgpu": "fp16"
+  },
+  "repository": "Xenova/slimsam-77-uniform",
+  "revision": "5850ab45f587c112167512ffef949107115e26a0",
+  "transformersJs": "3.8.1"
+}

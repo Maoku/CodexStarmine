@@ -5,12 +5,13 @@
 
 ## 確定仕様
 
-- 点指定式では解析用画像を最長辺512pxへ縮小する。従来の即時抽出関数は互換テストのため最長辺256pxを維持する。いずれもブラウザ内だけで解析し、外部送信・保存データへの埋め込みは行わない。
+- 点指定式ではSlimSAM解析用画像を最長辺1024pxへ縮小する。即時fastプレビューは最長辺256pxを維持する。いずれもブラウザ内だけで解析し、外部送信・保存データへの埋め込みは行わない。
 - デコード前は20MB、デコード後は24メガピクセルを上限とし、EXIF向きを反映した `ImageBitmap` から表示用・解析用データを作る。
 - 被写体点は1〜3点、背景除外点と特徴点は各0〜5点とする。被写体／背景点だけをマスクへ渡し、特徴点は仮想星の優先配点だけに使う。
 - 点は元画像基準の正規化座標で保持する。CSS表示寸法、ズーム、パン、devicePixelRatioが変わっても座標は変えない。
-- マスクはWorker内の点プロンプト対応軽量プロバイダで生成する。透過画像はアルファを優先し、不透明画像は被写体色、背景色、外周色、連結成分を使う。WorkerまたはOffscreenCanvasが使えない場合は同じ処理をメインスレッドのフォールバックで実行する。
-- マスクはOpening/Closing後、被写体点を含む成分を保持する。順序付き輪郭を累積弧長で等間隔再サンプリングし、採用マスクの外接矩形を安全半径0.94へ収める。
+- マスクはWorker内で生成する。有効alphaを最優先し、不透明画像は `SlimSAM WebGPU (fp16) → SlimSAM WASM (q8) → fast` の順で実行する。各高精度backendの画像エンコードは30秒、マスクデコードは15秒で打ち切り、操作全体を停止させない。WorkerまたはOffscreenCanvasが使えない場合はfastをメインスレッドで実行する。
+- SlimSAMは画像ごとに1024px埋め込みを1回だけ計算し、点・矩形の変更時はデコーダーだけを再実行する。3候補をプロンプト充足、predicted IoU、閾値安定性、矩形・境界整合、前回マスクとの連続性で採点する。
+- 選択候補は0.35〜0.65の閾値を探索し、正点・負点制約を修復してから適応的に連結成分を整理する。順序付き輪郭を累積弧長で等間隔再サンプリングし、採用マスクの外接矩形を安全半径0.94へ収める。
 - 特徴点の局所Sobelエッジへ優先配点する。通常は目標点数の25%、最大40%を特徴へ使い、外形へ常に60%以上を残す。局所エッジがない場合は特徴中心の小さな輪で示す。
 - ダイアログは `role="dialog"`、`aria-modal="true"`、フォーカストラップ、Escape取消、元ボタンへのフォーカス復帰を持つ。画像キャンバスは矢印キー、Enter、Spaceでも操作できる。
 - 確定前はdraftとUndo履歴を変更しない。確定時に開始時のレイヤーと切断面を使い、レイヤーの存在、手動種別、ロックを再検証して、成功時だけ1回の `updateIntent("画像から配置")` を行う。
@@ -28,9 +29,17 @@
 
 ## マスクプロバイダ
 
-2026-07-17時点では、追加のモデル重み、推論ライブラリ、WASM資産を配布せず、`PromptMaskProvider` 契約の `alpha` / `fast` / `fallback` 実装を採用した。画像データの外部通信はなく、通常起動時にモデルコードや重みを取得しない。Worker成果物はproduction buildで3.34kBだった。
+2026-07-18にSlimSAMを高精度プロバイダとして採用した。`@huggingface/transformers` 3.8.1をWorker内で動的importし、通常起動bundleから分離する。既定は `auto` で、`?segmentation=fast` を付けると回帰比較用にfastを強制できる。
 
-SlimSAMなどの高精度モデルは、ライセンス、固定重み、ハッシュ、対象モバイルでのメモリと5秒以内の性能、50枚評価を満たす資産が確定していないため未採用である。後から `PromptMaskProvider` を差し替えられるよう、UI、点セッション、輪郭・特徴配点、保存形式をプロバイダから分離している。
+- モデル: `Xenova/slimsam-77-uniform`
+- 固定revision: `5850ab45f587c112167512ffef949107115e26a0`
+- WebGPU: fp16画像エンコーダー／プロンプトデコーダー
+- WASM: q8画像エンコーダー／プロンプトデコーダー
+- ライセンス: Apache-2.0
+- 配布量: モデル34,518,953 bytes、ONNX Runtime WASM 32,794,766 bytes
+- 完全なファイル名、容量、SHA-256: [`public/models/slimsam-77-uniform/5850ab45f587c112167512ffef949107115e26a0/manifest.json`](../public/models/slimsam-77-uniform/5850ab45f587c112167512ffef949107115e26a0/manifest.json)
+
+モデル、設定、WASM、ライセンスは同一オリジンから配信し、`allowRemoteModels = false` を設定する。取得スクリプトは固定revisionと固定SHA-256だけを受理し、production buildも全資産のhashと容量を検証する。有効alpha画像ではモデルをロードしない。
 
 ## 実装・確認記録
 
@@ -47,6 +56,9 @@ SlimSAMなどの高精度モデルは、ライセンス、固定重み、ハッ�
 - 2026-07-17 点指定式実装: `latte.png` を被写体1点で240点へ変換し、特徴点1点をキーボードで追加すると外形224点・特徴16点になった。確定後はUndo 1回で元に戻り、取消ではUndo/Redo状態が変わらず、Escape後は「画像から生成」へフォーカスが戻ることを確認した。
 - 2026-07-17 レスポンシブ確認: 390×844でダイアログは390×844内、画像ビューポートは約370×354、固定フッターは画面下端内に収まった。本文は内部スクロールでき、配置操作を完了できる。ブラウザのconsole warning/errorは0件だった。
 - 2026-07-17 自動検証: 48テストファイル、180テストが成功した。`lint`、`format:check`、TypeScript、production buildも成功した。
-- 未実施の採否ゲート: SlimSAM/WebGPU/WASMの端末別時間、モデル重みハッシュと配布容量、難易度別50枚の成功率、iOS Safari/Android Chrome実機のメモリ計測。これらは高精度モデル採用前に別途実施する。
+- 2026-07-18 SlimSAM実装: 固定revisionのfp16/q8 ONNX、自己ホストWASM、SHA-256検証、画像埋め込み再利用、3候補選択、WebGPU→WASM→fast降格、Tensor/Worker破棄を実装した。production buildではWorker 20.32kB、遅延Transformers.js chunk 876.37kBとして通常bundleから分離された。
+- 2026-07-18 実ブラウザ確認: 512×512の不透明PNGへ正点1個を入力した。検証ブラウザではWebGPU/WASMの画像エンコードが各30秒の上限を超えたためfastへ降格したが、約35秒後に240点生成と配置可能状態へ復帰し、console warning/errorは0件だった。高精度backendが時間内に完了する対象端末の実測は継続する。
+- 2026-07-18 自動検証: 52テストファイル・193テスト、lint、format check、TypeScript、モデル資産検証、production build、git diff checkが成功した。
+- 未実施の品質ゲート: 難易度別50枚のMask IoU／Boundary F1／操作数、iOS Safari・Android Chrome実機の性能とメモリ、オフライン再訪、GPU device lost、連続10画像後のメモリを計測する。GrabCut境界補正と局所再推論もPhase 4として残る。
 
 詳細設計と検証条件は [IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md](IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md) を参照。

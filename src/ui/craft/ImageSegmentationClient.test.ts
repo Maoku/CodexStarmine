@@ -74,6 +74,12 @@ describe("ImageSegmentationClient", () => {
       { close: () => undefined, height: 4, width: 4 } as ImageBitmap,
       pixels(),
     );
+    expect(worker.messages[0]).toMatchObject({
+      mode: "auto",
+      modelBaseUrl: "http://localhost/models/",
+      type: "initialize",
+      wasmBaseUrl: "http://localhost/wasm/",
+    });
     const prompts = [
       { id: "subject", kind: "subject" as const, point: { x: 0.3, y: 0.3 } },
     ];
@@ -87,18 +93,52 @@ describe("ImageSegmentationClient", () => {
         message.type === "segment",
     );
     worker.respond({
+      constraintsSatisfied: true,
+      diagnostics: {
+        backend: "cpu",
+        candidateScores: [],
+        constraintRepairApplied: false,
+        inputEdge: 4,
+        localRefinementCount: 0,
+        provider: "fast",
+        selectedCandidate: 0,
+        selectedThreshold: 0.5,
+      },
+      imageId: "image-1",
       mask: { data: new Uint8Array(16), height: 4, width: 4 },
-      provider: "fast",
+      maskId: "mask-1",
+      probabilityMask: {
+        data: new Float32Array(16),
+        height: 4,
+        width: 4,
+      },
       requestId: segmentRequests[0].requestId,
       revision: 1,
-      type: "mask",
+      type: "segmentation",
     });
     worker.respond({
+      constraintsSatisfied: true,
+      diagnostics: {
+        backend: "cpu",
+        candidateScores: [],
+        constraintRepairApplied: false,
+        inputEdge: 4,
+        localRefinementCount: 0,
+        provider: "fast",
+        selectedCandidate: 0,
+        selectedThreshold: 0.5,
+      },
+      imageId: "image-1",
       mask: { data: new Uint8Array(16).fill(255), height: 4, width: 4 },
-      provider: "fast",
+      maskId: "mask-2",
+      probabilityMask: {
+        data: new Float32Array(16).fill(1),
+        height: 4,
+        width: 4,
+      },
       requestId: segmentRequests[1].requestId,
       revision: 2,
-      type: "mask",
+      type: "segmentation",
     });
 
     await firstRejected;

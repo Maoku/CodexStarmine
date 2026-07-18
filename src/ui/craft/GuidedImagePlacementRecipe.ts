@@ -4,6 +4,7 @@ import type {
   GuidedMaskProvider,
   ImagePrompt,
   NormalizedImagePoint,
+  SegmentationDiagnostics,
   SubjectMask,
 } from "./GuidedImagePlacementTypes";
 import {
@@ -13,6 +14,7 @@ import {
   type ImageDataLike,
 } from "./ImagePlacementRecipe";
 import type { SectionPoint2D } from "./SliceGeometry";
+import { cleanBinarySubjectMask } from "./SubjectMaskPostprocessor";
 
 export const DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS: GuidedImagePlacementSettings =
   {
@@ -50,88 +52,6 @@ function promptIndex(
   return y * width + x;
 }
 
-function morph(
-  source: Uint8Array,
-  width: number,
-  height: number,
-  operation: "dilate" | "erode",
-): Uint8Array {
-  const output = new Uint8Array(source.length);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      let matches = operation === "erode";
-      for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
-        for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
-          const sampleX = x + offsetX;
-          const sampleY = y + offsetY;
-          const foreground =
-            sampleX >= 0 &&
-            sampleY >= 0 &&
-            sampleX < width &&
-            sampleY < height &&
-            source[sampleY * width + sampleX] > 0;
-          if (operation === "dilate" && foreground) matches = true;
-          if (operation === "erode" && !foreground) matches = false;
-        }
-      }
-      if (matches) output[y * width + x] = 255;
-    }
-  }
-  return output;
-}
-
-interface MaskComponent {
-  indices: number[];
-  touchesBackgroundPrompt: boolean;
-  touchesSubjectPrompt: boolean;
-}
-
-function maskComponents(
-  data: Uint8Array,
-  width: number,
-  subjectSeeds: Set<number>,
-  backgroundSeeds: Set<number>,
-): MaskComponent[] {
-  const visited = new Uint8Array(data.length);
-  const components: MaskComponent[] = [];
-  for (let start = 0; start < data.length; start += 1) {
-    if (!data[start] || visited[start]) continue;
-    const indices = [start];
-    visited[start] = 1;
-    let touchesBackgroundPrompt = false;
-    let touchesSubjectPrompt = false;
-    for (let head = 0; head < indices.length; head += 1) {
-      const index = indices[head];
-      touchesBackgroundPrompt ||= backgroundSeeds.has(index);
-      touchesSubjectPrompt ||= subjectSeeds.has(index);
-      const x = index % width;
-      const neighbors = [
-        x > 0 ? index - 1 : -1,
-        x < width - 1 ? index + 1 : -1,
-        index - width,
-        index + width,
-      ];
-      for (const neighbor of neighbors) {
-        if (
-          neighbor >= 0 &&
-          neighbor < data.length &&
-          data[neighbor] &&
-          !visited[neighbor]
-        ) {
-          visited[neighbor] = 1;
-          indices.push(neighbor);
-        }
-      }
-    }
-    components.push({
-      indices,
-      touchesBackgroundPrompt,
-      touchesSubjectPrompt,
-    });
-  }
-  return components;
-}
-
 export function cleanSubjectMask(
   mask: SubjectMask,
   prompts: ImagePrompt[],
@@ -143,72 +63,14 @@ export function cleanSubjectMask(
   ) {
     return { data: new Uint8Array(), height: 0, width: 0 };
   }
-  const binary = Uint8Array.from(
-    mask.data.slice(0, mask.width * mask.height),
-    (value) => (value > 0 ? 255 : 0),
-  );
-  const opened = morph(
-    morph(binary, mask.width, mask.height, "erode"),
-    mask.width,
-    mask.height,
-    "dilate",
-  );
-  const shaped = morph(
-    morph(opened, mask.width, mask.height, "dilate"),
-    mask.width,
-    mask.height,
-    "erode",
-  );
-  const subjectSeeds = new Set(
-    prompts
-      .filter((prompt) => prompt.kind === "subject")
-      .map((prompt) => promptIndex(prompt.point, mask.width, mask.height)),
-  );
-  const backgroundSeeds = new Set(
-    prompts
-      .filter((prompt) => prompt.kind === "background")
-      .map((prompt) => promptIndex(prompt.point, mask.width, mask.height)),
-  );
-
-  subjectSeeds.forEach((index) => {
-    shaped[index] = 255;
-    const x = index % mask.width;
-    const y = Math.floor(index / mask.width);
-    for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
-      for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
-        const sampleX = x + offsetX;
-        const sampleY = y + offsetY;
-        if (
-          sampleX >= 0 &&
-          sampleY >= 0 &&
-          sampleX < mask.width &&
-          sampleY < mask.height &&
-          binary[sampleY * mask.width + sampleX]
-        ) {
-          shaped[sampleY * mask.width + sampleX] = 255;
-        }
-      }
-    }
-  });
-  backgroundSeeds.forEach((index) => (shaped[index] = 0));
-
-  const output = new Uint8Array(shaped.length);
-  const components = maskComponents(
-    shaped,
-    mask.width,
-    subjectSeeds,
-    backgroundSeeds,
-  );
-  const keepAll = subjectSeeds.size === 0;
-  components.forEach((component) => {
-    const keep =
-      (keepAll || component.touchesSubjectPrompt) &&
-      (!component.touchesBackgroundPrompt || component.touchesSubjectPrompt);
-    if (keep) component.indices.forEach((index) => (output[index] = 255));
-  });
-  subjectSeeds.forEach((index) => (output[index] = 255));
-  backgroundSeeds.forEach((index) => (output[index] = 0));
-  return { data: output, height: mask.height, width: mask.width };
+  return cleanBinarySubjectMask(
+    {
+      data: mask.data.slice(0, mask.width * mask.height),
+      height: mask.height,
+      width: mask.width,
+    },
+    prompts,
+  ).mask;
 }
 
 function key(point: GridPoint): string {
@@ -570,6 +432,7 @@ export function createGuidedImagePlacement(
   settings: Partial<GuidedImagePlacementSettings> = {},
   provider: GuidedMaskProvider = "fast",
   maskRevision = 0,
+  segmentation?: SegmentationDiagnostics,
 ): GuidedImagePlacementResult {
   const targetCount = Math.round(
     clamp(
@@ -596,6 +459,7 @@ export function createGuidedImagePlacement(
       maskProvider: provider,
       maskRevision,
       outlinePointCount: 0,
+      segmentation,
       totalPointCount: 0,
     },
     mask: cleaned,
@@ -667,6 +531,7 @@ export function createGuidedImagePlacement(
       maskProvider: provider,
       maskRevision,
       outlinePointCount: outlinePoints.length,
+      segmentation,
       totalPointCount: points.length,
     },
     mask: cleaned,

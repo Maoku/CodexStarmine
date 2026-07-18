@@ -8,15 +8,18 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run model:slimsam:verify && tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "model:slimsam:fetch": "node scripts/fetch-slimsam-assets.mjs",
+    "model:slimsam:verify": "node scripts/verify-slimsam-assets.mjs",
     "test": "vitest",
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@huggingface/transformers": "3.8.1",
     "three": "^0.185.1"
   },
   "devDependencies": {
