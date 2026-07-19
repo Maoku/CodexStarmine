@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { snapshotStarLibrary } from "../../data";
 import {
   moveImageCrosshair,
   normalizedImagePoint,
@@ -21,28 +22,90 @@ describe("GuidedImagePlacementDialog", () => {
     expect(markup).toContain('data-prompt-kind="subject"');
     expect(markup).toContain('data-prompt-kind="background"');
     expect(markup).toContain('data-prompt-kind="feature"');
+    expect(markup).toContain(
+      'data-input-mode="feature" data-prompt-kind="feature" aria-pressed="false" hidden',
+    );
     expect(markup).toContain("＋");
     expect(markup).toContain("−");
     expect(markup).toContain("★");
     expect(markup).toContain('value="128"');
-    expect(markup).toContain('max="1024"');
-    expect(markup).toContain('<option value="outline" selected>輪郭のみ</option>');
-    expect(markup).toContain('<option value="filled" >輪郭＋内部</option>');
+    expect(markup).toContain('max="2048"');
+    expect(markup).toContain('type="range"');
+    expect(markup).toContain('step="8"');
+    expect(markup).toContain('aria-valuetext="128点"');
+    expect(markup).toContain(
+      '<option value="outline-internal-boundary" selected>輪郭＋内部境界</option>',
+    );
+    expect(markup).toContain(
+      '<option value="outline-internal-boundary-filled" >輪郭＋内部境界＋内部</option>',
+    );
     expect(markup).toContain('<option value="append" selected>追加</option>');
     expect(markup).toContain('alt="sample&quot;.png"');
   });
 
-  it("renders the interior fill option as selected", () => {
+  it("renders the interior fill placement mode as selected", () => {
     const markup = renderGuidedImagePlacementDialogShell(
       "filled.png",
       1024,
       "replace",
-      true,
+      "outline-internal-boundary-filled",
     );
 
-    expect(markup).toContain('<option value="outline" >輪郭のみ</option>');
-    expect(markup).toContain('<option value="filled" selected>輪郭＋内部</option>');
+    expect(markup).toContain(
+      '<option value="outline-internal-boundary-filled" selected>輪郭＋内部境界＋内部</option>',
+    );
     expect(markup).toContain('value="1024"');
+  });
+
+  it("keeps processing status in the footer with accessible progress", () => {
+    const markup = renderGuidedImagePlacementDialogShell(
+      "status.png",
+      1024,
+      "replace",
+    );
+    const header = markup.slice(
+      markup.indexOf('<header class="guided-image-dialog-header">'),
+      markup.indexOf("</header>"),
+    );
+    const footer = markup.slice(
+      markup.indexOf('<footer class="guided-image-dialog-footer">'),
+    );
+
+    expect(header).not.toContain("data-guided-status");
+    expect(footer).toContain('role="status"');
+    expect(footer).toContain("data-guided-status");
+    expect(footer).toContain("data-guided-progress");
+    expect(footer).toContain("guided-image-spinner");
+    expect(markup).toContain("data-guided-point-legend");
+  });
+
+  it("renders an eight-color image palette and a separate outline star", () => {
+    const markup = renderGuidedImagePlacementDialogShell(
+      "palette.png",
+      240,
+      "replace",
+      "outline",
+      {
+        enhanceDarkColors: false,
+        imageStarKind: "trail",
+        outlineStarId: "star-gold",
+        starDefinitions: snapshotStarLibrary(),
+      },
+    );
+
+    expect(markup).toContain("内部・特徴を8色以内にまとめます");
+    expect(markup).toContain('name="guided-image-star-kind"');
+    expect(markup).toContain('<option value="solid" >単色星</option>');
+    expect(markup).toContain('<option value="changing" >変化星</option>');
+    expect(markup).toContain('<option value="trail" selected>引星</option>');
+    expect(markup).toContain('name="guided-enhance-dark-colors"');
+    expect(markup).not.toContain(
+      'name="guided-enhance-dark-colors" type="checkbox" checked',
+    );
+    expect(markup).toContain('name="guided-outline-star"');
+    expect(markup).toContain('value="star-gold" selected');
+    expect(markup).not.toContain('name="guided-outline-color-source"');
+    expect(markup).not.toContain('name="guided-outline-color-count"');
   });
 
   it("keeps normalized coordinates independent of rendered size", () => {

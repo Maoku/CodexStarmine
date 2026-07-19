@@ -1,15 +1,22 @@
+import type { VirtualStarPreset } from "../../data";
 import {
   createGuidedImagePlacement,
   DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS,
 } from "./GuidedImagePlacementRecipe";
 import type {
   GuidedImagePlacementResult,
+  GuidedImagePlacementSettings,
+  GuidedOutlineStar,
+  GuidedPlacementMode,
   ImageInputMode,
   ImagePromptKind,
   NormalizedImagePoint,
   NormalizedImageRect,
   ProbabilityMask,
+  PlacementWorkerRequest,
+  PlacementWorkerResponse,
   SegmentationDiagnostics,
+  SegmentationInteractionProfile,
   SegmentationProvider,
   SubjectMask,
 } from "./GuidedImagePlacementTypes";
@@ -31,8 +38,11 @@ import {
   type ImageSegmentationClientOptions,
 } from "./ImageSegmentationClient";
 import {
+  DEFAULT_IMAGE_DERIVED_STAR_KIND,
   IMAGE_PLACEMENT_MAXIMUM_POINTS,
   IMAGE_PLACEMENT_MINIMUM_POINTS,
+  virtualStarRepresentativeColor,
+  type ImageDerivedStarKind,
   type ImagePlacementResult,
 } from "./ImagePlacementRecipe";
 import {
@@ -41,24 +51,35 @@ import {
   type GuidedImagePixels,
 } from "./imagePixelLoader";
 import { createFastPromptMask } from "./PromptMaskProvider";
-import { escapeHTML } from "./viewUtils";
+import { colorToCSS, escapeHTML } from "./viewUtils";
+
+export interface GuidedImagePlacementColorOptions {
+  enhanceDarkColors?: boolean;
+  imageStarKind?: ImageDerivedStarKind;
+  outlineStarId?: string;
+  starDefinitions?: Record<string, VirtualStarPreset>;
+}
 
 export interface GuidedImagePlacementDialogResult {
   placement: ImagePlacementResult;
   settings: {
     applyMode: "append" | "replace";
-    fillInterior: boolean;
+    enhanceDarkColors: boolean;
+    imageStarKind: ImageDerivedStarKind;
+    outlineStarId: string;
+    placementMode: GuidedPlacementMode;
     targetCount: number;
   };
 }
 
-export interface GuidedImagePlacementDialogOptions {
+export interface GuidedImagePlacementDialogOptions extends GuidedImagePlacementColorOptions {
   applyMode: "append" | "replace";
   createSegmentationClient?: (
     options: ImageSegmentationClientOptions,
   ) => ImageSegmentationClient;
-  fillInterior?: boolean;
+  createPlacementWorker?: () => Worker;
   loadImage?: typeof loadGuidedImagePixels;
+  placementMode?: GuidedPlacementMode;
   restoreFocus?: HTMLElement;
   targetCount: number;
 }
@@ -69,8 +90,11 @@ type DialogStatus =
   | "encoding"
   | "error"
   | "loading-model"
+  | "placing-stars"
+  | "quantizing-colors"
   | "ready"
-  | "segmenting";
+  | "segmenting"
+  | "tracing-boundaries";
 
 const PROMPT_LABELS: Record<ImagePromptKind, string> = {
   background: "背景",
@@ -83,6 +107,31 @@ const PROMPT_SYMBOLS: Record<ImagePromptKind, string> = {
   feature: "★",
   subject: "+",
 };
+
+function clampDialogValue(
+  value: number,
+  minimum: number,
+  maximum: number,
+): number {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function availableOutlineStars(
+  definitions: Record<string, VirtualStarPreset> = {},
+): VirtualStarPreset[] {
+  return Object.values(definitions).filter(
+    (star) => !star.id.startsWith("star-image-"),
+  );
+}
+
+function normalizedOutlineStarId(
+  requested: string | undefined,
+  stars: VirtualStarPreset[],
+): string {
+  const validIds = new Set(stars.map((star) => star.id));
+  if (requested && validIds.has(requested)) return requested;
+  return stars[0]?.id ?? "";
+}
 
 export function normalizedImagePoint(
   clientX: number,
@@ -117,12 +166,29 @@ export function renderGuidedImagePlacementDialogShell(
   fileName: string,
   targetCount: number,
   applyMode: "append" | "replace",
-  fillInterior = DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.fillInterior,
+  placementMode = DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.placementMode,
+  colorOptions: GuidedImagePlacementColorOptions = {},
 ): string {
+  const stars = availableOutlineStars(colorOptions.starDefinitions);
+  const outlineStarId = normalizedOutlineStarId(
+    colorOptions.outlineStarId,
+    stars,
+  );
+  const outlineStar = stars.find((star) => star.id === outlineStarId);
+  const enhanceDarkColors =
+    colorOptions.enhanceDarkColors ??
+    DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.enhanceDarkColors;
+  const imageStarKind =
+    colorOptions.imageStarKind ?? DEFAULT_IMAGE_DERIVED_STAR_KIND;
+  const starOptions = stars
+    .map(
+      (star) =>
+        `<option value="${escapeHTML(star.id)}" ${star.id === outlineStarId ? "selected" : ""}>${escapeHTML(star.displayName)}</option>`,
+    )
+    .join("");
   return `<section class="guided-image-dialog" role="dialog" aria-modal="true" aria-labelledby="guided-image-dialog-title" aria-describedby="guided-image-dialog-help">
     <header class="guided-image-dialog-header">
       <div><p>POINT-GUIDED IMAGE</p><h2 id="guided-image-dialog-title">画像から仮想星を作る</h2></div>
-      <span class="guided-image-status" role="status" aria-live="polite" data-guided-status>画像を読み込み中…</span>
       <button type="button" data-guided-action="close" aria-label="画像から仮想星を作る画面を閉じる">×</button>
     </header>
     <div class="guided-image-dialog-body">
@@ -130,8 +196,8 @@ export function renderGuidedImagePlacementDialogShell(
         <div class="guided-image-mode-row" role="group" aria-label="入力方法">
           <button type="button" data-input-mode="box" class="is-active" aria-pressed="true"><b>□</b> 被写体を囲む</button>
           <button type="button" data-input-mode="subject" data-prompt-kind="subject" aria-pressed="false"><b>＋</b> 被写体</button>
-          <button type="button" data-input-mode="feature" data-prompt-kind="feature" aria-pressed="false"><b>★</b> 特徴</button>
-          <button type="button" data-input-mode="background" data-prompt-kind="background" aria-pressed="false"><b>−</b> 背景を除外</button>
+          <button type="button" data-input-mode="feature" data-prompt-kind="feature" aria-pressed="false" hidden><b>★</b> 特徴</button>
+          <button type="button" data-input-mode="background" data-prompt-kind="background" aria-pressed="false" hidden><b>−</b> 背景を除外</button>
         </div>
         <div class="guided-image-viewport" data-guided-viewport>
           <div class="guided-image-stage" data-guided-stage tabindex="0" role="application" aria-label="画像上の被写体範囲と点指定。矢印キーで照準を動かし、EnterまたはSpaceで入力できます">
@@ -151,13 +217,29 @@ export function renderGuidedImagePlacementDialogShell(
         </div>
       </section>
       <aside class="guided-image-settings">
-        <p id="guided-image-dialog-help">最初に被写体をドラッグで囲むか、残したい部分へ＋点を置いてください。特徴点は指定した位置へそのまま仮想星1点になります。</p>
+        <p id="guided-image-dialog-help" data-guided-help>最初に被写体をドラッグで囲むか、残したい部分へ＋点を置いてください。</p>
         <p class="guided-image-live" aria-live="polite" data-guided-live></p>
         <div class="guided-image-setting-grid">
-          <label><span>配置範囲</span><select name="guided-placement-style"><option value="outline" ${fillInterior ? "" : "selected"}>輪郭のみ</option><option value="filled" ${fillInterior ? "selected" : ""}>輪郭＋内部</option></select></label>
-          <label><span>目標点数</span><input name="guided-target-count" type="number" min="${IMAGE_PLACEMENT_MINIMUM_POINTS}" max="${IMAGE_PLACEMENT_MAXIMUM_POINTS}" value="${targetCount}" /></label>
+          <label><span>配置範囲</span><select name="guided-placement-mode"><option value="outline" ${placementMode === "outline" ? "selected" : ""}>輪郭のみ</option><option value="outline-internal-boundary" ${placementMode === "outline-internal-boundary" ? "selected" : ""}>輪郭＋内部境界</option><option value="outline-internal-boundary-filled" ${placementMode === "outline-internal-boundary-filled" ? "selected" : ""}>輪郭＋内部境界＋内部</option></select></label>
+          <label class="guided-target-count-setting"><span>目標点数 <output data-guided-target-output>${targetCount}点</output></span><input name="guided-target-count-range" type="range" min="${IMAGE_PLACEMENT_MINIMUM_POINTS}" max="${IMAGE_PLACEMENT_MAXIMUM_POINTS}" step="8" value="${targetCount}" aria-label="目標点数" aria-valuetext="${targetCount}点" /><input name="guided-target-count" type="number" min="${IMAGE_PLACEMENT_MINIMUM_POINTS}" max="${IMAGE_PLACEMENT_MAXIMUM_POINTS}" value="${targetCount}" aria-label="目標点数の数値入力" /></label>
           <label><span>生成方法</span><select name="guided-apply-mode"><option value="replace" ${applyMode === "replace" ? "selected" : ""}>置換</option><option value="append" ${applyMode === "append" ? "selected" : ""}>追加</option></select></label>
         </div>
+        <div class="guided-placement-legend" data-guided-point-legend aria-label="仮配置点の凡例">
+          <span data-point-kind="outline"><i></i>外形</span>
+          <span data-point-kind="internal-boundary"><i></i>内部境界</span>
+          <span data-point-kind="interior"><i></i>内部</span>
+          <span data-point-kind="feature"><i></i>特徴</span>
+        </div>
+        <fieldset class="guided-image-color-settings">
+          <legend>配色</legend>
+          <p class="guided-image-palette-summary"><b>画像の代表色</b><span>内部・特徴を8色以内にまとめます</span></p>
+          <label class="guided-image-star-kind-option"><span>内部・特徴の仮想星</span><select name="guided-image-star-kind"><option value="solid" ${imageStarKind === "solid" ? "selected" : ""}>単色星</option><option value="changing" ${imageStarKind === "changing" ? "selected" : ""}>変化星</option><option value="trail" ${imageStarKind === "trail" ? "selected" : ""}>引星</option></select></label>
+          <div class="guided-image-setting-grid guided-image-color-option-grid">
+            <label class="guided-image-check-setting" data-guided-dark-color-option><input name="guided-enhance-dark-colors" type="checkbox" ${enhanceDarkColors ? "checked" : ""} /><span>画像由来の黒・灰色・暗い色を花火向けに明るく補正</span></label>
+          </div>
+          <label class="guided-outline-star-option"><span>輪郭の仮想星色</span><span class="guided-outline-star-control"><i data-guided-outline-star-swatch style="--star:${colorToCSS(outlineStar ? virtualStarRepresentativeColor(outlineStar) : 0xffffff)}"></i><select name="guided-outline-star" ${stars.length === 0 ? "disabled" : ""}>${starOptions}</select></span></label>
+          <p class="guided-image-color-help">輪郭は画像の代表8色と分け、ここで選んだ仮想星を使用します。</p>
+        </fieldset>
         <section class="guided-image-prompt-list" aria-labelledby="guided-prompt-list-title">
           <header><h3 id="guided-prompt-list-title">指定内容</h3><span data-guided-point-summary>指定なし</span></header>
           <ol data-guided-prompt-list><li class="is-empty">被写体を囲むか、画像上へ点を追加します。</li></ol>
@@ -166,8 +248,15 @@ export function renderGuidedImagePlacementDialogShell(
       </aside>
     </div>
     <footer class="guided-image-dialog-footer">
-      <button type="button" data-guided-action="cancel">取消</button>
-      <button type="button" class="guided-image-apply" data-guided-action="apply" disabled>配置</button>
+      <div class="guided-image-processing" role="status" aria-live="polite">
+        <span class="guided-image-spinner" aria-hidden="true"></span>
+        <span data-guided-status>画像を読み込み中…</span>
+        <progress data-guided-progress></progress>
+      </div>
+      <div class="guided-image-footer-actions">
+        <button type="button" data-guided-action="cancel">取消</button>
+        <button type="button" class="guided-image-apply" data-guided-action="apply" disabled>配置</button>
+      </div>
     </footer>
   </section>`;
 }
@@ -223,7 +312,9 @@ class GuidedImagePlacementDialog {
   #generation = 0;
   #draftBox?: NormalizedImageRect;
   #draftPromptPoint?: NormalizedImagePoint;
-  #fillInterior: boolean;
+  #enhanceDarkColors: boolean;
+  #imageStarKind: ImageDerivedStarKind;
+  #interactionProfile: SegmentationInteractionProfile = "model";
   #inertSiblings: Array<{
     ariaHidden: string | null;
     element: HTMLElement;
@@ -235,12 +326,20 @@ class GuidedImagePlacementDialog {
   #maskRevision = 0;
   #probabilityMask?: ProbabilityMask;
   #segmentationDiagnostics?: SegmentationDiagnostics;
+  #segmentationPending = false;
   #constraintsSatisfied = false;
   #keyboardBoxStart?: NormalizedImagePoint;
   #nextPromptId = 1;
+  #outlineStarId: string;
+  readonly #outlineStars: VirtualStarPreset[];
   #pan = { x: 0, y: 0 };
   #panGesture?: PanGesture;
   #placement?: GuidedImagePlacementResult;
+  #placementDebounceTimer = 0;
+  #placementRequestId = 0;
+  #placementWorker?: Worker;
+  #placementWorkerFailed = false;
+  #placementMode: GuidedPlacementMode;
   #promptDrag?: PromptDragGesture;
   #resolve!: (value: GuidedImagePlacementDialogResult | undefined) => void;
   #selectedPromptId?: string;
@@ -254,9 +353,20 @@ class GuidedImagePlacementDialog {
     this.#file = file;
     this.#options = options;
     this.#applyMode = options.applyMode;
-    this.#fillInterior =
-      options.fillInterior ??
-      DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.fillInterior;
+    this.#enhanceDarkColors =
+      options.enhanceDarkColors ??
+      DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.enhanceDarkColors;
+    this.#placementMode =
+      options.placementMode ??
+      DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.placementMode;
+    this.#imageStarKind =
+      options.imageStarKind ??
+      DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.imageStarKind;
+    this.#outlineStars = availableOutlineStars(options.starDefinitions);
+    this.#outlineStarId = normalizedOutlineStarId(
+      options.outlineStarId,
+      this.#outlineStars,
+    );
     this.#targetCount = Math.round(
       Math.min(
         Math.max(options.targetCount, IMAGE_PLACEMENT_MINIMUM_POINTS),
@@ -269,10 +379,17 @@ class GuidedImagePlacementDialog {
       file.name,
       this.#targetCount,
       this.#applyMode,
-      this.#fillInterior,
+      this.#placementMode,
+      {
+        enhanceDarkColors: this.#enhanceDarkColors,
+        imageStarKind: this.#imageStarKind,
+        outlineStarId: this.#outlineStarId,
+        starDefinitions: options.starDefinitions,
+      },
     );
     this.#backdrop.addEventListener("click", this.#handleClick);
     this.#backdrop.addEventListener("change", this.#handleChange);
+    this.#backdrop.addEventListener("input", this.#handleInput);
     this.#backdrop.addEventListener("keydown", this.#handleKeyDown);
     const viewport = this.#query<HTMLElement>("[data-guided-viewport]");
     viewport.addEventListener("pointerdown", this.#handlePointerDown);
@@ -320,12 +437,33 @@ class GuidedImagePlacementDialog {
         this.#options.createSegmentationClient ??
         ((options) => new ImageSegmentationClient(options))
       )({
+        onProviderChange: (profile, _provider, fallbackReason) => {
+          if (this.#closed || profile === this.#interactionProfile) return;
+          this.#interactionProfile = profile;
+          if (
+            profile === "model" &&
+            (this.#activeMode === "feature" ||
+              this.#activeMode === "background")
+          ) {
+            this.#activeMode = "box";
+          }
+          if (profile === "classic" && fallbackReason) {
+            this.#announce(
+              "軽量方式へ切り替えました。必要なら特徴・背景を追加できます。",
+            );
+          }
+          this.#renderState();
+        },
         onProgress: (stage, progress) => {
           if (this.#closed) return;
           if (stage === "loading-model") {
             const percent =
               progress === undefined ? "" : ` ${Math.round(progress * 100)}%`;
-            this.#setStatus("loading-model", `高精度モデルを準備中…${percent}`);
+            this.#setStatus(
+              "loading-model",
+              `高精度モデルを準備中…${percent}`,
+              progress,
+            );
           } else if (stage === "encoding") {
             this.#setStatus(
               progress === 1 ? "awaiting-subject" : "encoding",
@@ -377,13 +515,20 @@ class GuidedImagePlacementDialog {
       this.#close({
         placement: {
           colors: [...this.#placement.colors],
+          enhanceDarkColors: this.#placement.enhanceDarkColors,
+          imageStarKind: this.#placement.imageStarKind,
           points: this.#placement.points.map((point) => ({ ...point })),
-          preserveColorAssignments:
-            this.#placement.preserveColorAssignments,
+          preserveColorAssignments: this.#placement.preserveColorAssignments,
+          starIds: this.#placement.starIds
+            ? [...this.#placement.starIds]
+            : undefined,
         },
         settings: {
           applyMode: this.#applyMode,
-          fillInterior: this.#fillInterior,
+          enhanceDarkColors: this.#enhanceDarkColors,
+          imageStarKind: this.#imageStarKind,
+          outlineStarId: this.#outlineStarId,
+          placementMode: this.#placementMode,
           targetCount: this.#targetCount,
         },
       });
@@ -483,14 +628,67 @@ class GuidedImagePlacementDialog {
           ),
         );
       }
-      input.value = String(this.#targetCount);
+      this.#renderTargetCountInputs();
       this.#rebuildPlacement();
-    } else if (input.name === "guided-placement-style") {
-      this.#fillInterior = input.value === "filled";
+    } else if (input.name === "guided-placement-mode") {
+      if (
+        input.value === "outline" ||
+        input.value === "outline-internal-boundary" ||
+        input.value === "outline-internal-boundary-filled"
+      ) {
+        this.#placementMode = input.value;
+      }
       this.#rebuildPlacement();
+    } else if (input.name === "guided-enhance-dark-colors") {
+      this.#enhanceDarkColors = (input as HTMLInputElement).checked;
+      this.#updatePlacementAppearance();
+    } else if (input.name === "guided-image-star-kind") {
+      if (
+        input.value === "solid" ||
+        input.value === "changing" ||
+        input.value === "trail"
+      ) {
+        this.#imageStarKind = input.value;
+        this.#updatePlacementAppearance();
+      }
+    } else if (input.name === "guided-outline-star") {
+      if (this.#outlineStars.some((star) => star.id === input.value)) {
+        this.#outlineStarId = input.value;
+        this.#updatePlacementAppearance();
+      }
     } else if (input.name === "guided-apply-mode") {
       this.#applyMode = input.value === "append" ? "append" : "replace";
     }
+  };
+
+  readonly #handleInput = (event: Event): void => {
+    const input = event.target as HTMLInputElement;
+    const value = Number(input.value);
+    if (!Number.isFinite(value) || input.value === "") return;
+    if (input.name === "guided-target-count-range") {
+      this.#targetCount = Math.round(
+        clampDialogValue(
+          value,
+          IMAGE_PLACEMENT_MINIMUM_POINTS,
+          IMAGE_PLACEMENT_MAXIMUM_POINTS,
+        ),
+      );
+      this.#renderTargetCountInputs();
+    } else if (
+      input.name === "guided-target-count" &&
+      value >= IMAGE_PLACEMENT_MINIMUM_POINTS &&
+      value <= IMAGE_PLACEMENT_MAXIMUM_POINTS
+    ) {
+      this.#targetCount = Math.round(value);
+      this.#renderTargetCountRange();
+    } else {
+      return;
+    }
+    window.clearTimeout(this.#placementDebounceTimer);
+    this.#placementDebounceTimer = window.setTimeout(
+      () => this.#rebuildPlacement(),
+      100,
+    );
   };
 
   readonly #handleKeyDown = (event: KeyboardEvent): void => {
@@ -507,6 +705,23 @@ class GuidedImagePlacementDialog {
       return;
     }
     const target = event.target as HTMLElement;
+    if (
+      target instanceof HTMLInputElement &&
+      target.name === "guided-target-count-range" &&
+      (event.key === "PageUp" || event.key === "PageDown")
+    ) {
+      event.preventDefault();
+      this.#targetCount = Math.round(
+        clampDialogValue(
+          this.#targetCount + (event.key === "PageUp" ? 128 : -128),
+          IMAGE_PLACEMENT_MINIMUM_POINTS,
+          IMAGE_PLACEMENT_MAXIMUM_POINTS,
+        ),
+      );
+      this.#renderTargetCountInputs();
+      this.#rebuildPlacement();
+      return;
+    }
     if (target.closest("[data-guided-stage]")) {
       if (event.key.startsWith("Arrow")) {
         event.preventDefault();
@@ -783,6 +998,12 @@ class GuidedImagePlacementDialog {
   #addPrompt(point: NormalizedImagePoint): void {
     if (!this.#loaded || this.#status === "error") return;
     if (this.#activeMode === "box") return;
+    if (
+      this.#interactionProfile === "model" &&
+      (this.#activeMode === "feature" || this.#activeMode === "background")
+    ) {
+      return;
+    }
     const result = addImagePrompt(this.#session, {
       id: `image-prompt-${this.#nextPromptId++}`,
       kind: this.#activeMode,
@@ -822,6 +1043,7 @@ class GuidedImagePlacementDialog {
       this.#session.prompts.some((prompt) => prompt.kind === "subject");
     if (!hasSubjectInput) {
       this.#generation += 1;
+      this.#placementRequestId += 1;
       this.#client?.cancel();
       if (this.#loaded) {
         const provisional = createFastPromptMask(this.#loaded.pixels, []);
@@ -846,8 +1068,9 @@ class GuidedImagePlacementDialog {
 
   async #segmentLatest(generation: number): Promise<void> {
     if (!this.#loaded || !this.#client) return;
+    this.#segmentationPending = true;
     const revision = this.#session.revision;
-    const prompts = structuredClone(this.#session.prompts);
+    const prompts = structuredClone(this.#effectivePrompts());
     const subjectBox = this.#session.subjectBox
       ? { ...this.#session.subjectBox }
       : undefined;
@@ -881,17 +1104,15 @@ class GuidedImagePlacementDialog {
       this.#segmentationDiagnostics = result.diagnostics;
       this.#constraintsSatisfied = result.constraintsSatisfied;
       this.#maskRevision = result.revision;
+      this.#segmentationPending = false;
       this.#rebuildPlacement();
-      this.#setStatus(
-        result.constraintsSatisfied ? "ready" : "awaiting-subject",
-        result.constraintsSatisfied
-          ? `${this.#placement?.points.length ?? 0}点を生成しました`
-          : "指定が競合しています。点または範囲を修正してください",
-      );
-      this.#renderState();
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
+      if (error instanceof DOMException && error.name === "AbortError") {
+        if (generation === this.#generation) this.#segmentationPending = false;
+        return;
+      }
       if (this.#closed || generation !== this.#generation) return;
+      this.#segmentationPending = false;
       this.#maskProvider = "fast";
       this.#constraintsSatisfied = provisional.constraintsSatisfied;
       this.#segmentationDiagnostics = {
@@ -899,7 +1120,6 @@ class GuidedImagePlacementDialog {
         fallbackReason: "segmentation-client-failed",
       };
       this.#rebuildPlacement();
-      this.#setStatus("ready", "軽量方式でプレビューしています");
       this.#announce(
         "高精度処理を利用できないため、軽量方式へ切り替えました。",
       );
@@ -912,35 +1132,252 @@ class GuidedImagePlacementDialog {
     const hasSubjectInput =
       Boolean(this.#session.subjectBox) ||
       this.#session.prompts.some((prompt) => prompt.kind === "subject");
-    this.#placement = hasSubjectInput
-      ? createGuidedImagePlacement(
-          this.#mask.width === this.#loaded.analysisPixels.width &&
-            this.#mask.height === this.#loaded.analysisPixels.height
-            ? this.#loaded.analysisPixels
-            : this.#loaded.pixels,
-          this.#mask,
-          this.#session.prompts,
-          {
-            ...DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS,
-            fillInterior: this.#fillInterior,
-            targetCount: this.#targetCount,
-          },
-          this.#maskProvider,
-          this.#maskRevision,
-          this.#segmentationDiagnostics,
-        )
-      : undefined;
+    if (!hasSubjectInput) {
+      this.#placement = undefined;
+      this.#renderState();
+      return;
+    }
+    const requestId = ++this.#placementRequestId;
+    this.#placement = undefined;
+    if (!this.#segmentationPending) {
+      this.#setStatus("quantizing-colors", "画像を8色へ整理中…");
+    }
+    const request: PlacementWorkerRequest = {
+      image: this.#placementImage(),
+      mask: this.#mask,
+      maskProvider: this.#maskProvider,
+      prompts: structuredClone(this.#effectivePrompts()),
+      requestId,
+      revision: this.#maskRevision,
+      segmentation: this.#segmentationDiagnostics,
+      settings: this.#placementSettings(),
+      type: "build-placement",
+    };
+    const worker = this.#ensurePlacementWorker();
+    if (worker) {
+      worker.postMessage(request);
+    } else {
+      this.#buildPlacementFallback(request);
+    }
+    this.#renderState();
+  }
+
+  #placementImage(): GuidedImagePixels["pixels"] {
+    if (!this.#loaded || !this.#mask) {
+      throw new Error("Guided placement image is not ready.");
+    }
+    return this.#mask.width === this.#loaded.analysisPixels.width &&
+      this.#mask.height === this.#loaded.analysisPixels.height
+      ? this.#loaded.analysisPixels
+      : this.#loaded.pixels;
+  }
+
+  #placementSettings(): GuidedImagePlacementSettings {
+    return {
+      ...DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS,
+      enhanceDarkColors: this.#enhanceDarkColors,
+      imageStarKind: this.#imageStarKind,
+      outlineStar: this.#selectedOutlineStar(),
+      placementMode: this.#placementMode,
+      targetCount: this.#targetCount,
+    };
+  }
+
+  #updatePlacementAppearance(): void {
+    if (!this.#placement) {
+      this.#rebuildPlacement();
+      return;
+    }
+    this.#placement.enhanceDarkColors = this.#enhanceDarkColors;
+    this.#placement.imageStarKind = this.#imageStarKind;
+    const outlineStar = this.#selectedOutlineStar();
+    if (outlineStar) {
+      this.#placement.pointKinds.forEach((kind, index) => {
+        if (kind !== "outline") return;
+        this.#placement!.colors[index] = outlineStar.color;
+        this.#placement!.starIds ??= Array.from(
+          { length: this.#placement!.points.length },
+          () => undefined,
+        );
+        this.#placement!.starIds[index] = outlineStar.starId;
+      });
+    }
+    this.#renderState();
+  }
+
+  #ensurePlacementWorker(): Worker | undefined {
+    if (this.#placementWorkerFailed) return undefined;
+    if (this.#placementWorker) return this.#placementWorker;
+    if (!this.#options.createPlacementWorker && typeof Worker === "undefined") {
+      return undefined;
+    }
+    try {
+      this.#placementWorker = this.#options.createPlacementWorker
+        ? this.#options.createPlacementWorker()
+        : new Worker(new URL("./GuidedPlacementWorker.ts", import.meta.url), {
+            type: "module",
+          });
+      this.#placementWorker.addEventListener(
+        "message",
+        this.#handlePlacementWorkerMessage,
+      );
+      this.#placementWorker.addEventListener(
+        "error",
+        this.#handlePlacementWorkerError,
+      );
+      return this.#placementWorker;
+    } catch {
+      this.#placementWorkerFailed = true;
+      this.#placementWorker = undefined;
+      return undefined;
+    }
+  }
+
+  readonly #handlePlacementWorkerMessage = (
+    event: MessageEvent<PlacementWorkerResponse>,
+  ): void => {
+    const response = event.data;
+    if (this.#closed || response.requestId !== this.#placementRequestId) return;
+    if (response.type === "progress") {
+      if (this.#segmentationPending) return;
+      if (response.stage === "quantizing-colors") {
+        this.#setStatus(
+          "quantizing-colors",
+          "画像を8色へ整理中…",
+          response.progress,
+        );
+      } else if (response.stage === "tracing-boundaries") {
+        this.#setStatus(
+          "tracing-boundaries",
+          "内部境界を検出中…",
+          response.progress,
+        );
+      } else {
+        this.#setStatus("placing-stars", "仮想星を配置中…", response.progress);
+      }
+      this.#renderState();
+      return;
+    }
+    if (response.type === "error") {
+      this.#placementWorkerFailed = true;
+      this.#placementWorker?.terminate();
+      this.#placementWorker = undefined;
+      this.#buildPlacementFallback({
+        image: this.#placementImage(),
+        mask: this.#mask!,
+        maskProvider: this.#maskProvider,
+        prompts: structuredClone(this.#effectivePrompts()),
+        requestId: response.requestId,
+        revision: this.#maskRevision,
+        segmentation: this.#segmentationDiagnostics,
+        settings: this.#placementSettings(),
+        type: "build-placement",
+      });
+      return;
+    }
+    if (response.revision !== this.#maskRevision) return;
+    this.#acceptPlacement(response.placement);
+  };
+
+  readonly #handlePlacementWorkerError = (): void => {
+    if (this.#closed) return;
+    this.#placementWorkerFailed = true;
+    this.#placementWorker?.terminate();
+    this.#placementWorker = undefined;
+    const requestId = this.#placementRequestId;
+    this.#buildPlacementFallback({
+      image: this.#placementImage(),
+      mask: this.#mask!,
+      maskProvider: this.#maskProvider,
+      prompts: structuredClone(this.#effectivePrompts()),
+      requestId,
+      revision: this.#maskRevision,
+      segmentation: this.#segmentationDiagnostics,
+      settings: this.#placementSettings(),
+      type: "build-placement",
+    });
+  };
+
+  #buildPlacementFallback(request: PlacementWorkerRequest): void {
+    const run = (): void => {
+      if (this.#closed || request.requestId !== this.#placementRequestId)
+        return;
+      this.#setStatus("placing-stars", "仮想星を配置中…");
+      const placement = createGuidedImagePlacement(
+        request.image,
+        request.mask,
+        request.prompts,
+        request.settings,
+        request.maskProvider,
+        request.revision,
+        request.segmentation,
+      );
+      if (request.requestId === this.#placementRequestId) {
+        this.#acceptPlacement(placement);
+      }
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
+    else setTimeout(run, 0);
+  }
+
+  #acceptPlacement(placement: GuidedImagePlacementResult): void {
+    this.#placement = placement;
+    if (this.#segmentationPending) {
+      this.#setStatus("segmenting", "被写体マスクを更新中…");
+    } else if (!this.#constraintsSatisfied) {
+      this.#setStatus(
+        "awaiting-subject",
+        "指定が競合しています。点または範囲を修正してください",
+      );
+    } else {
+      this.#setStatus("ready", `${placement.points.length}点を生成しました`);
+    }
     this.#renderState();
   }
 
   #renderState(): void {
     if (this.#closed) return;
+    this.#renderOutlineStarState();
+    this.#renderTargetCountInputs();
+    this.#backdrop.setAttribute(
+      "aria-busy",
+      String(
+        this.#status === "decoding" ||
+          this.#status === "loading-model" ||
+          this.#status === "encoding" ||
+          this.#status === "segmenting" ||
+          this.#status === "quantizing-colors" ||
+          this.#status === "tracing-boundaries" ||
+          this.#status === "placing-stars",
+      ),
+    );
     this.#backdrop
       .querySelectorAll<HTMLElement>("[data-input-mode]")
       .forEach((button) => {
+        const mode = button.dataset.inputMode as ImageInputMode;
+        const hidden =
+          this.#interactionProfile === "model" &&
+          (mode === "feature" || mode === "background");
+        button.hidden = hidden;
         const active = button.dataset.inputMode === this.#activeMode;
         button.classList.toggle("is-active", active);
         button.setAttribute("aria-pressed", String(active));
+      });
+    this.#query<HTMLElement>("[data-guided-help]").textContent =
+      this.#interactionProfile === "model"
+        ? "最初に被写体をドラッグで囲むか、残したい部分へ＋点を置いてください。内部の主要な色境界は自動で検出します。"
+        : "被写体を囲むか＋点を置き、必要なら特徴点と背景除外点を追加してください。特徴点は指定位置へ仮想星1点を残します。";
+    this.#backdrop
+      .querySelectorAll<HTMLElement>(
+        "[data-guided-point-legend] [data-point-kind]",
+      )
+      .forEach((item) => {
+        const kind = item.dataset.pointKind;
+        item.hidden =
+          (kind === "internal-boundary" && this.#placementMode === "outline") ||
+          (kind === "interior" &&
+            this.#placementMode !== "outline-internal-boundary-filled") ||
+          (kind === "feature" && this.#interactionProfile === "model");
       });
     const markers = this.#query<HTMLElement>("[data-guided-prompts]");
     const subjectBox = this.#draftBox ?? this.#session.subjectBox;
@@ -957,7 +1394,7 @@ class GuidedImagePlacementDialog {
     };
     markers.innerHTML =
       boxMarkup +
-      this.#session.prompts
+      this.#visiblePrompts()
         .map((prompt) => {
           kindCounts[prompt.kind] += 1;
           const number = kindCounts[prompt.kind];
@@ -973,7 +1410,8 @@ class GuidedImagePlacementDialog {
       feature: 0,
       subject: 0,
     };
-    const pointList = this.#session.prompts
+    const visiblePrompts = this.#visiblePrompts();
+    const pointList = visiblePrompts
       .map((prompt) => {
         listCounts[prompt.kind] += 1;
         const number = listCounts[prompt.kind];
@@ -988,11 +1426,11 @@ class GuidedImagePlacementDialog {
         ? boxList + pointList
         : '<li class="is-empty">被写体を囲むか、画像上へ点を追加します。</li>';
     this.#query<HTMLElement>("[data-guided-point-summary]").textContent =
-      `${this.#session.subjectBox ? "範囲 + " : ""}${this.#session.prompts.length}点`;
+      `${this.#session.subjectBox ? "範囲 + " : ""}${visiblePrompts.length}点`;
     this.#query<HTMLButtonElement>("[data-guided-action='undo']").disabled =
       this.#session.history.length === 0;
     this.#query<HTMLButtonElement>("[data-guided-action='clear']").disabled =
-      this.#session.prompts.length === 0 && !this.#session.subjectBox;
+      visiblePrompts.length === 0 && !this.#session.subjectBox;
     this.#query<HTMLButtonElement>(
       "[data-guided-action='delete-selected']",
     ).disabled = !this.#selectedPromptId;
@@ -1010,7 +1448,7 @@ class GuidedImagePlacementDialog {
         this.#placement.diagnostics.featurePointCounts,
       ).reduce((sum, count) => sum + count, 0);
       const backend = this.#segmentationDiagnostics?.backend;
-      diagnostics.textContent = `外形 ${this.#placement.diagnostics.outlinePointCount}点 / 内部 ${this.#placement.diagnostics.interiorPointCount}点 / 特徴 ${featureCount}点 / ${this.#providerLabel(this.#maskProvider, backend)}`;
+      diagnostics.textContent = `外形 ${this.#placement.diagnostics.outlinePointCount}点 / 内部境界 ${this.#placement.diagnostics.internalBoundaryPointCount}点（${this.#placement.diagnostics.internalBoundaryCount}本） / 内部 ${this.#placement.diagnostics.interiorPointCount}点 / 特徴 ${featureCount}点 / 代表色 ${this.#placement.diagnostics.paletteColorCount}色 / ${this.#providerLabel(this.#maskProvider, backend)}`;
       diagnostics.classList.toggle(
         "has-warning",
         this.#placement.warnings.length > 0 || !this.#constraintsSatisfied,
@@ -1029,6 +1467,51 @@ class GuidedImagePlacementDialog {
     }
     this.#drawOverlay();
     this.#renderCrosshair();
+  }
+
+  #renderOutlineStarState(): void {
+    const enhance = this.#query<HTMLInputElement>(
+      "[name='guided-enhance-dark-colors']",
+    );
+    enhance.checked = this.#enhanceDarkColors;
+    this.#query<HTMLSelectElement>("[name='guided-image-star-kind']").value =
+      this.#imageStarKind;
+    this.#query<HTMLSelectElement>("[name='guided-outline-star']").value =
+      this.#outlineStarId;
+    const star = this.#outlineStars.find(
+      (candidate) => candidate.id === this.#outlineStarId,
+    );
+    this.#query<HTMLElement>(
+      "[data-guided-outline-star-swatch]",
+    ).style.setProperty(
+      "--star",
+      colorToCSS(star ? virtualStarRepresentativeColor(star) : 0xffffff),
+    );
+  }
+
+  #renderTargetCountInputs(): void {
+    this.#renderTargetCountRange();
+    this.#query<HTMLInputElement>("[name='guided-target-count']").value =
+      String(this.#targetCount);
+  }
+
+  #renderTargetCountRange(): void {
+    const range = this.#query<HTMLInputElement>(
+      "[name='guided-target-count-range']",
+    );
+    range.value = String(this.#targetCount);
+    range.setAttribute("aria-valuetext", `${this.#targetCount}点`);
+    this.#query<HTMLOutputElement>("[data-guided-target-output]").value =
+      `${this.#targetCount}点`;
+  }
+
+  #selectedOutlineStar(): GuidedOutlineStar | undefined {
+    const star = this.#outlineStars.find(
+      (candidate) => candidate.id === this.#outlineStarId,
+    );
+    return star
+      ? { color: virtualStarRepresentativeColor(star), starId: star.id }
+      : undefined;
   }
 
   #providerLabel(
@@ -1088,13 +1571,26 @@ class GuidedImagePlacementDialog {
       1,
     );
     const scale = 0.94 / maximumRadius;
-    context.fillStyle = "rgba(255, 224, 150, 0.95)";
-    this.#placement.points.forEach((point) => {
+    const previewColors: Record<string, string> = {
+      feature: "#8CFF72",
+      interior: "#FFD84D",
+      "internal-boundary": "#FF5CC8",
+      outline: "#57D9FF",
+    };
+    const radius = clampDialogValue(mask.width / 300, 1.5, 4);
+    this.#placement.points.forEach((point, index) => {
       const x = centerX + point.x / scale;
       const y = centerY - point.y / scale;
+      context.shadowBlur = radius * 2.8;
+      context.shadowColor = previewColors[this.#placement!.pointKinds[index]];
+      context.fillStyle = previewColors[this.#placement!.pointKinds[index]];
+      context.strokeStyle = "rgba(4, 9, 13, 0.88)";
+      context.lineWidth = 1;
       context.beginPath();
-      context.arc(x, y, Math.max(1.1, mask.width / 300), 0, Math.PI * 2);
+      context.arc(x, y, radius, 0, Math.PI * 2);
       context.fill();
+      context.shadowBlur = 0;
+      context.stroke();
     });
   }
 
@@ -1136,10 +1632,27 @@ class GuidedImagePlacementDialog {
     stage.classList.toggle("is-zoomed", this.#zoom > 1);
   }
 
-  #setStatus(status: DialogStatus, message: string): void {
+  #setStatus(status: DialogStatus, message: string, progress?: number): void {
     this.#status = status;
-    this.#query<HTMLElement>("[data-guided-status]").textContent = message;
+    const statusElement = this.#query<HTMLElement>("[data-guided-status]");
+    if (statusElement.textContent !== message)
+      statusElement.textContent = message;
+    const progressElement = this.#query<HTMLProgressElement>(
+      "[data-guided-progress]",
+    );
+    const processing =
+      status === "decoding" ||
+      status === "loading-model" ||
+      status === "encoding" ||
+      status === "segmenting" ||
+      status === "quantizing-colors" ||
+      status === "tracing-boundaries" ||
+      status === "placing-stars";
+    progressElement.hidden = !processing;
+    if (progress === undefined) progressElement.removeAttribute("value");
+    else progressElement.value = clampDialogValue(progress, 0, 1);
     this.#backdrop.dataset.status = status;
+    this.#backdrop.setAttribute("aria-busy", String(processing));
   }
 
   #announce(message: string): void {
@@ -1150,7 +1663,12 @@ class GuidedImagePlacementDialog {
     state: Pick<ImagePromptSessionState, "prompts" | "subjectBox">,
   ): string {
     const prompts = state.prompts
-      .filter((prompt) => prompt.kind !== "feature")
+      .filter(
+        (prompt) =>
+          prompt.kind !== "feature" &&
+          (this.#interactionProfile === "classic" ||
+            prompt.kind !== "background"),
+      )
       .map(
         (prompt) =>
           `${prompt.id}:${prompt.kind}:${prompt.point.x}:${prompt.point.y}`,
@@ -1162,11 +1680,27 @@ class GuidedImagePlacementDialog {
       : prompts;
   }
 
+  #effectivePrompts(): ImagePromptSessionState["prompts"] {
+    return this.#interactionProfile === "model"
+      ? this.#session.prompts.filter((prompt) => prompt.kind === "subject")
+      : this.#session.prompts;
+  }
+
+  #visiblePrompts(): ImagePromptSessionState["prompts"] {
+    return this.#interactionProfile === "model"
+      ? this.#session.prompts.filter((prompt) => prompt.kind === "subject")
+      : this.#session.prompts;
+  }
+
   #close(result?: GuidedImagePlacementDialogResult): void {
     if (this.#closed) return;
     this.#closed = true;
     this.#generation += 1;
+    window.clearTimeout(this.#placementDebounceTimer);
     this.#client?.dispose();
+    this.#placementRequestId += 1;
+    this.#placementWorker?.terminate();
+    this.#placementWorker = undefined;
     this.#loaded?.bitmap?.close();
     if (this.#loaded) URL.revokeObjectURL(this.#loaded.previewUrl);
     this.#backdrop.remove();

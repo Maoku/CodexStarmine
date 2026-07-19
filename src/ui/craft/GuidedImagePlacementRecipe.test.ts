@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  allocateGuidedPlacementBudgets,
   cleanSubjectMask,
   createGuidedImagePlacement,
+  quantizeSubjectMap,
+  refineQuantizedSubjectMap,
+  traceInternalColorBoundaries,
   traceMaskContours,
 } from "./GuidedImagePlacementRecipe";
 import type { ImagePrompt, SubjectMask } from "./GuidedImagePlacementTypes";
@@ -84,7 +88,7 @@ describe("GuidedImagePlacementRecipe", () => {
       image,
       mask,
       prompts,
-      { targetCount: 64 },
+      { placementMode: "outline", targetCount: 64 },
       "fast",
       3,
     );
@@ -92,7 +96,7 @@ describe("GuidedImagePlacementRecipe", () => {
       image,
       mask,
       prompts,
-      { targetCount: 64 },
+      { placementMode: "outline", targetCount: 64 },
       "fast",
       3,
     );
@@ -113,37 +117,40 @@ describe("GuidedImagePlacementRecipe", () => {
     );
   });
 
-  it("defaults outline-only placement to 240 points", () => {
+  it("defaults to 1024 outline and internal-boundary points", () => {
     const result = createGuidedImagePlacement(
       coloredImage(64, 48),
       rectangleMask(64, 48, 8, 6, 55, 41),
       [{ id: "subject", kind: "subject", point: { x: 0.5, y: 0.5 } }],
     );
 
-    expect(result.points).toHaveLength(240);
-    expect(result.diagnostics.outlinePointCount).toBe(240);
+    expect(result.points).toHaveLength(1024);
+    expect(result.diagnostics.outlinePointCount).toBe(461);
+    expect(result.diagnostics.internalBoundaryPointCount).toBe(563);
     expect(result.diagnostics.interiorPointCount).toBe(0);
+    expect(result.pointKinds).toHaveLength(result.points.length);
   });
 
-  it("fills the subject interior deterministically up to 1024 points", () => {
+  it("fills the subject interior deterministically up to 2048 points", () => {
     const image = coloredImage(80, 64);
     const mask = rectangleMask(80, 64, 4, 4, 75, 59);
     const prompts: ImagePrompt[] = [
       { id: "subject", kind: "subject", point: { x: 0.5, y: 0.5 } },
     ];
     const first = createGuidedImagePlacement(image, mask, prompts, {
-      fillInterior: true,
+      placementMode: "outline-internal-boundary-filled",
       targetCount: 4096,
     });
     const second = createGuidedImagePlacement(image, mask, prompts, {
-      fillInterior: true,
+      placementMode: "outline-internal-boundary-filled",
       targetCount: 4096,
     });
 
     expect(first).toEqual(second);
     expect(first.points).toHaveLength(IMAGE_PLACEMENT_MAXIMUM_POINTS);
-    expect(first.diagnostics.outlinePointCount).toBe(240);
-    expect(first.diagnostics.interiorPointCount).toBe(784);
+    expect(first.diagnostics.outlinePointCount).toBe(615);
+    expect(first.diagnostics.internalBoundaryPointCount).toBe(819);
+    expect(first.diagnostics.interiorPointCount).toBe(614);
     const interiorPoints = first.points.slice(
       first.diagnostics.outlinePointCount,
       first.diagnostics.outlinePointCount +
@@ -154,7 +161,7 @@ describe("GuidedImagePlacementRecipe", () => {
     ).toBe(true);
   });
 
-  it("colors the outline from the image using at most three colors", () => {
+  it("falls back to one representative image color without an outline star", () => {
     const width = 72;
     const height = 48;
     const data = new Uint8ClampedArray(width * height * 4);
@@ -180,16 +187,69 @@ describe("GuidedImagePlacementRecipe", () => {
       result.diagnostics.outlinePointCount,
     );
 
-    expect(new Set(outlineColors).size).toBeGreaterThan(1);
-    expect(new Set(outlineColors).size).toBeLessThanOrEqual(3);
+    expect(new Set(outlineColors).size).toBe(1);
     expect(result.preserveColorAssignments).toBe(true);
-    const leftmost = result.points.reduce((best, point, index) =>
-      point.x < result.points[best].x ? index : best,
-    0);
-    const rightmost = result.points.reduce((best, point, index) =>
-      point.x > result.points[best].x ? index : best,
-    0);
-    expect(result.colors[leftmost]).not.toBe(result.colors[rightmost]);
+  });
+
+  it("limits image-derived interior colors to eight representatives", () => {
+    const width = 100;
+    const height = 64;
+    const sourceColors = [
+      0xe53935, 0xfb8c00, 0xfdd835, 0x7cb342, 0x00897b, 0x039be5, 0x3949ab,
+      0x8e24aa, 0xd81b60, 0x795548,
+    ];
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const color = sourceColors[Math.floor(x / 10)];
+        const offset = (y * width + x) * 4;
+        data.set(
+          [(color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff, 255],
+          offset,
+        );
+      }
+    }
+    const result = createGuidedImagePlacement(
+      { data, height, width },
+      rectangleMask(width, height, 2, 2, width - 3, height - 3),
+      [{ id: "subject", kind: "subject", point: { x: 0.5, y: 0.5 } }],
+      {
+        placementMode: "outline-internal-boundary-filled",
+        imageStarKind: "trail",
+        outlineStar: { color: 0xbfe4ff, starId: "star-silver" },
+        targetCount: 512,
+      },
+    );
+    const interiorStart = result.diagnostics.outlinePointCount;
+    const interiorEnd = interiorStart + result.diagnostics.interiorPointCount;
+    const imagePalette = new Set(
+      result.colors.slice(interiorStart, interiorEnd),
+    );
+
+    expect(imagePalette.size).toBeGreaterThan(1);
+    expect(imagePalette.size).toBeLessThanOrEqual(8);
+    expect(result.imageStarKind).toBe("trail");
+    expect(
+      result.colors
+        .slice(0, interiorStart)
+        .every((color) => color === 0xbfe4ff),
+    ).toBe(true);
+  });
+
+  it("assigns one separately selected existing star across the outline", () => {
+    const result = createGuidedImagePlacement(
+      coloredImage(64, 48),
+      rectangleMask(64, 48, 8, 6, 55, 41),
+      [{ id: "subject", kind: "subject", point: { x: 0.5, y: 0.5 } }],
+      {
+        outlineStar: { color: 0xbfe4ff, starId: "star-silver" },
+        placementMode: "outline",
+        targetCount: 64,
+      },
+    );
+
+    expect(new Set(result.starIds)).toEqual(new Set(["star-silver"]));
+    expect(new Set(result.colors)).toEqual(new Set([0xbfe4ff]));
   });
 
   it("places the feature star exactly at the specified point", () => {
@@ -217,12 +277,106 @@ describe("GuidedImagePlacementRecipe", () => {
         { id: "subject", kind: "subject", point: { x: 0.5, y: 0.5 } },
         { id: "outside", kind: "feature", point: { x: 0.02, y: 0.02 } },
       ],
-      { targetCount: 32 },
+      { placementMode: "outline", targetCount: 32 },
     );
 
     expect(result.points).toHaveLength(32);
     expect(result.diagnostics.featurePointCounts.outside).toBe(0);
     expect(result.warnings).toHaveLength(1);
     expect(result.diagnostics.outlinePointCount).toBe(32);
+  });
+
+  it("labels a two-color subject and traces one deterministic internal boundary", () => {
+    const image = coloredImage(64, 48);
+    const mask = rectangleMask(64, 48, 4, 4, 59, 43);
+    const firstMap = refineQuantizedSubjectMap(
+      quantizeSubjectMap(image, mask),
+      mask,
+    );
+    const secondMap = refineQuantizedSubjectMap(
+      quantizeSubjectMap(image, mask),
+      mask,
+    );
+    const first = traceInternalColorBoundaries(firstMap, mask);
+    const second = traceInternalColorBoundaries(secondMap, mask);
+
+    expect(firstMap.palette).toHaveLength(2);
+    expect(firstMap.labels).toEqual(secondMap.labels);
+    expect(first).toEqual(second);
+    expect(first).toHaveLength(1);
+    expect(first[0].points.every((point) => point.x === 32)).toBe(true);
+    expect(first[0].length).toBeGreaterThan(30);
+  });
+
+  it("produces one palette color and no internal boundary for a flat subject", () => {
+    const image = coloredImage(48, 40);
+    const data = image.data as Uint8ClampedArray;
+    for (let index = 0; index < 48 * 40; index += 1) {
+      data.set([90, 140, 210, 255], index * 4);
+    }
+    const mask = rectangleMask(48, 40, 4, 4, 43, 35);
+    const map = refineQuantizedSubjectMap(
+      quantizeSubjectMap(image, mask),
+      mask,
+    );
+
+    expect(map.palette).toHaveLength(1);
+    expect(traceInternalColorBoundaries(map, mask)).toEqual([]);
+  });
+
+  it("removes isolated color noise before tracing boundaries", () => {
+    const image = coloredImage(64, 48);
+    const mask = rectangleMask(64, 48, 4, 4, 59, 43);
+    const noisyOffset = (24 * 64 + 16) * 4;
+    const mutableData = image.data as Uint8ClampedArray;
+    mutableData.set([0, 255, 0, 255], noisyOffset);
+    const map = refineQuantizedSubjectMap(
+      quantizeSubjectMap(image, mask),
+      mask,
+    );
+    const boundaries = traceInternalColorBoundaries(map, mask);
+
+    expect(map.palette.length).toBeLessThanOrEqual(3);
+    expect(boundaries).toHaveLength(1);
+  });
+
+  it("allocates category budgets according to all three placement modes", () => {
+    expect(allocateGuidedPlacementBudgets("outline", 100, true)).toEqual({
+      interior: 0,
+      internalBoundary: 0,
+      outline: 100,
+    });
+    expect(
+      allocateGuidedPlacementBudgets("outline-internal-boundary", 100, true),
+    ).toEqual({ interior: 0, internalBoundary: 55, outline: 45 });
+    expect(
+      allocateGuidedPlacementBudgets(
+        "outline-internal-boundary-filled",
+        100,
+        false,
+      ),
+    ).toEqual({ interior: 58, internalBoundary: 0, outline: 42 });
+  });
+
+  it("does not change geometry when dark-color enhancement is toggled", () => {
+    const image = coloredImage(64, 48);
+    const mask = rectangleMask(64, 48, 4, 4, 59, 43);
+    const prompts: ImagePrompt[] = [
+      { id: "subject", kind: "subject", point: { x: 0.5, y: 0.5 } },
+    ];
+    const enhanced = createGuidedImagePlacement(image, mask, prompts, {
+      enhanceDarkColors: true,
+      targetCount: 256,
+    });
+    const original = createGuidedImagePlacement(image, mask, prompts, {
+      enhanceDarkColors: false,
+      targetCount: 256,
+    });
+
+    expect(enhanced.points).toEqual(original.points);
+    expect(enhanced.pointKinds).toEqual(original.pointKinds);
+    expect(enhanced.diagnostics.internalBoundaryCount).toBe(
+      original.diagnostics.internalBoundaryCount,
+    );
   });
 });

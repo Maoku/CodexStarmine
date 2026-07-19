@@ -52,6 +52,40 @@ function pixels(): ImageDataLike {
 }
 
 describe("ImageSegmentationClient", () => {
+  it("reports model and classic interaction profiles as providers settle", () => {
+    const worker = new FakeWorker();
+    const profiles: string[] = [];
+    const client = new ImageSegmentationClient({
+      onProviderChange: (profile, provider) =>
+        profiles.push(`${profile}:${provider ?? "pending"}`),
+      workerFactory: () => worker as unknown as Worker,
+    });
+    client.setImage(
+      { close: () => undefined, height: 4, width: 4 } as ImageBitmap,
+      pixels(),
+    );
+    worker.respond({
+      backend: "wasm",
+      provider: "slimsam",
+      requestId: 1,
+      type: "initialized",
+    });
+
+    expect(profiles).toEqual(["model:pending", "model:slimsam"]);
+    client.dispose();
+  });
+
+  it("uses the classic interaction profile when fast mode is requested", () => {
+    const profiles: string[] = [];
+    const client = new ImageSegmentationClient({
+      mode: "fast",
+      onProviderChange: (profile) => profiles.push(profile),
+    });
+
+    expect(profiles).toEqual(["classic"]);
+    client.dispose();
+  });
+
   it("falls back without a worker and returns the requested revision", async () => {
     const client = new ImageSegmentationClient();
     client.setImage(undefined, pixels());

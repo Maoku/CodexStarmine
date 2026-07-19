@@ -5,6 +5,7 @@ import type {
   NormalizedImageRect,
   ProbabilityMask,
   SegmentationDiagnostics,
+  SegmentationInteractionProfile,
   SegmentationMode,
   SegmentationProvider,
   SubjectMask,
@@ -36,6 +37,11 @@ export interface ImageSegmentationClientOptions {
   mode?: SegmentationMode;
   modelBaseUrl?: string;
   onProgress?: (stage: string, progress?: number) => void;
+  onProviderChange?: (
+    profile: SegmentationInteractionProfile,
+    provider?: SegmentationProvider,
+    fallbackReason?: string,
+  ) => void;
   wasmBaseUrl?: string;
   workerFactory?: () => Worker;
 }
@@ -68,6 +74,7 @@ export class ImageSegmentationClient {
   readonly #mode: SegmentationMode;
   readonly #modelBaseUrl: string;
   readonly #onProgress?: (stage: string, progress?: number) => void;
+  readonly #onProviderChange?: ImageSegmentationClientOptions["onProviderChange"];
   readonly #wasmBaseUrl: string;
   readonly #workerFactory: () => Worker;
   readonly #workerSupported: boolean;
@@ -86,6 +93,7 @@ export class ImageSegmentationClient {
     this.#mode = options.mode ?? defaultSegmentationMode();
     this.#modelBaseUrl = options.modelBaseUrl ?? localAssetUrl("models/");
     this.#onProgress = options.onProgress;
+    this.#onProviderChange = options.onProviderChange;
     this.#wasmBaseUrl = options.wasmBaseUrl ?? localAssetUrl("wasm/");
     this.#workerSupported =
       options.workerFactory !== undefined || typeof Worker !== "undefined";
@@ -95,6 +103,7 @@ export class ImageSegmentationClient {
         new Worker(new URL("./imageSegmentation.worker.ts", import.meta.url), {
           type: "module",
         }));
+    this.#onProviderChange?.(this.#mode === "fast" ? "classic" : "model");
   }
 
   setImage(bitmap: ImageBitmap | undefined, pixels: ImageDataLike): string {
@@ -224,11 +233,15 @@ export class ImageSegmentationClient {
     }
     if (response.type === "embedding-ready") {
       if (response.imageId === this.#currentImageId) {
+        this.#notifyProvider(response.provider);
         this.#onProgress?.("embedding-ready", 1);
       }
       return;
     }
     if (response.type === "initialized") {
+      if (this.#mode === "fast" || response.provider !== "fast") {
+        this.#notifyProvider(response.provider, response.fallbackReason);
+      }
       return;
     }
     const pending = this.#pending.get(response.requestId);
@@ -258,6 +271,10 @@ export class ImageSegmentationClient {
       return;
     }
     this.#latestMaskId = response.maskId;
+    this.#notifyProvider(
+      response.diagnostics.provider,
+      response.diagnostics.fallbackReason,
+    );
     this.#fallbackPreviousMask = {
       data: response.mask.data.slice(),
       height: response.mask.height,
@@ -322,6 +339,7 @@ export class ImageSegmentationClient {
       height: result.mask.height,
       width: result.mask.width,
     };
+    this.#notifyProvider(result.provider, fallbackReason);
     return {
       ...result,
       diagnostics: {
@@ -336,5 +354,14 @@ export class ImageSegmentationClient {
 
   #assertActive(): void {
     if (this.#disposed) throw new Error("Segmentation client was disposed.");
+  }
+
+  #notifyProvider(
+    provider: SegmentationProvider,
+    fallbackReason?: string,
+  ): void {
+    const profile: SegmentationInteractionProfile =
+      provider === "slimsam" || provider === "alpha" ? "model" : "classic";
+    this.#onProviderChange?.(profile, provider, fallbackReason);
   }
 }

@@ -166,58 +166,108 @@ describe("ImagePlacementRecipe", () => {
     expect(extractImagePlacement(source).points).toEqual([]);
   });
 
-  it("maps every color to an existing star and never creates derived stars", () => {
+  it("creates and reuses exact image-derived solid stars", () => {
     const definitions = snapshotStarLibrary();
-    expect(resolveImageStars([0xff3b42], definitions).starIds).toEqual([
-      "star-solid-red",
-    ]);
-    definitions["star-image-1"] = {
-      ...structuredClone(definitions["star-solid-red"]),
-      id: "star-image-1",
-    };
-    const colors = [0x010203, 0x123456, 0x10e090, 0xe010d0, 0xf0e010];
-    const resolution = resolveImageStars(colors, definitions);
-
-    expect(resolution.starIds).toHaveLength(colors.length);
-    expect(resolution.createdStarIds).toEqual([]);
-    expect(Object.keys(resolution.starDefinitions).sort()).toEqual(
-      Object.keys(definitions).sort(),
-    );
-    resolution.starIds.forEach((starId) => {
-      expect(definitions[starId]).toBeDefined();
-      expect(starId).not.toMatch(/^star-image-/);
+    const colors = [0x123456, 0x10e090];
+    const resolution = resolveImageStars(colors, definitions, {
+      enhanceDarkColors: false,
+      imageStarKind: "solid",
+      preserveColorAssignments: true,
     });
-  });
-
-  it("maps dark neutral and chromatic colors to visible nearby stars", () => {
-    const definitions = snapshotStarLibrary();
-    const resolution = resolveImageStars(
-      [0x202124, 0x152d58],
-      definitions,
-      { preserveColorAssignments: true },
-    );
-
-    expect(resolution.starIds).toEqual(["star-silver", "star-change-blue"]);
-  });
-
-  it("preserves palette membership assigned by the guided recipe", () => {
-    const definitions = snapshotStarLibrary();
-    const resolution = resolveImageStars(
-      [0xff3b42, 0x397dff, 0xe43e32, 0xffb52d, 0xbfe4ff],
-      definitions,
-      { preserveColorAssignments: true },
-    );
 
     expect(resolution.starIds).toEqual([
-      "star-solid-red",
-      "star-change-blue",
-      "star-charcoal",
-      "star-gold",
-      "star-silver",
+      "star-image-solid-123456",
+      "star-image-solid-10e090",
     ]);
+    expect(resolution.createdStarIds).toEqual(resolution.starIds);
+    resolution.starIds.forEach((starId, index) => {
+      const star = resolution.starDefinitions[starId];
+      expect(star.displayName).toContain("単色星");
+      expect(
+        star.colorStages.every((stage) => stage.color === colors[index]),
+      ).toBe(true);
+    });
+    const reused = resolveImageStars(colors, resolution.starDefinitions, {
+      enhanceDarkColors: false,
+      imageStarKind: "solid",
+      preserveColorAssignments: true,
+    });
+    expect(reused.createdStarIds).toEqual([]);
+    expect(reused.starIds).toEqual(resolution.starIds);
   });
 
-  it("applies points as one undoable v4 edit without adding stars", () => {
+  it("brightens dark neutral and chromatic colors before creating stars", () => {
+    const definitions = snapshotStarLibrary();
+    const resolution = resolveImageStars([0x202124, 0x152d58], definitions, {
+      preserveColorAssignments: true,
+    });
+
+    expect(resolution.starIds[0]).toBe("star-image-solid-d8e8f2");
+    expect(resolution.starIds[1]).not.toBe("star-image-solid-152d58");
+    expect(
+      resolution.starDefinitions[resolution.starIds[1]].colorStages[0].color,
+    ).not.toBe(0x152d58);
+  });
+
+  it("allows dark-color enhancement to be disabled", () => {
+    const definitions = snapshotStarLibrary();
+
+    expect(
+      resolveImageStars([0x202124], definitions, {
+        enhanceDarkColors: false,
+        preserveColorAssignments: true,
+      }).starIds,
+    ).toEqual(["star-image-solid-202124"]);
+    expect(
+      resolveImageStars([0x202124], definitions, {
+        enhanceDarkColors: true,
+        preserveColorAssignments: true,
+      }).starIds,
+    ).toEqual(["star-image-solid-d8e8f2"]);
+  });
+
+  it("creates selectable solid, changing, and trail star behaviors", () => {
+    const definitions = snapshotStarLibrary();
+    const solid = resolveImageStars([0x44aacc], definitions, {
+      enhanceDarkColors: false,
+      imageStarKind: "solid",
+      preserveColorAssignments: true,
+    });
+    const changing = resolveImageStars([0x44aacc], definitions, {
+      enhanceDarkColors: false,
+      imageStarKind: "changing",
+      preserveColorAssignments: true,
+    });
+    const trail = resolveImageStars([0x44aacc], definitions, {
+      enhanceDarkColors: false,
+      imageStarKind: "trail",
+      preserveColorAssignments: true,
+    });
+
+    expect(solid.starDefinitions[solid.starIds[0]].emissionKind).toBe("point");
+    expect(
+      new Set(
+        solid.starDefinitions[solid.starIds[0]].colorStages.map(
+          (stage) => stage.color,
+        ),
+      ),
+    ).toEqual(new Set([0x44aacc]));
+    expect(
+      new Set(
+        changing.starDefinitions[changing.starIds[0]].colorStages.map(
+          (stage) => stage.color,
+        ),
+      ).size,
+    ).toBeGreaterThan(1);
+    expect(trail.starDefinitions[trail.starIds[0]].emissionKind).toBe(
+      "charcoalTail",
+    );
+    expect(
+      trail.starDefinitions[trail.starIds[0]].trailLifetime,
+    ).toBeGreaterThan(0.5);
+  });
+
+  it("applies exact outline IDs and generated image stars in one undoable edit", () => {
     const store = new CraftDocumentStore(CHRYSANTHEMUM_PRESET);
     store.updateIntent("手動レイヤーを追加", (draft) => {
       draft.layers.push({
@@ -238,10 +288,13 @@ describe("ImagePlacementRecipe", () => {
         draft,
         {
           colors: [0x010203, 0x123456],
+          enhanceDarkColors: false,
+          imageStarKind: "solid",
           points: [
             { x: -0.3, y: 0.2 },
             { x: 0.3, y: -0.2 },
           ],
+          starIds: ["star-gold", undefined],
         },
         {
           applyMode: "replace",
@@ -259,8 +312,15 @@ describe("ImagePlacementRecipe", () => {
     expect(layer?.authoringMode === "manual" ? layer.points : []).toHaveLength(
       2,
     );
-    expect(Object.keys(applied.starDefinitions).sort()).toEqual(
-      Object.keys(before.starDefinitions).sort(),
+    expect(
+      layer?.authoringMode === "manual" ? layer.points[0]?.starId : undefined,
+    ).toBe("star-gold");
+    expect(
+      layer?.authoringMode === "manual" ? layer.points[1]?.starId : undefined,
+    ).toBe("star-image-solid-123456");
+    expect(applied.starDefinitions["star-image-solid-123456"]).toBeDefined();
+    expect(Object.keys(applied.starDefinitions)).toHaveLength(
+      Object.keys(before.starDefinitions).length + 1,
     );
     store.undo();
     expect(store.intentDraft).toEqual(before);
@@ -314,7 +374,8 @@ describe("ImagePlacementRecipe", () => {
       Object.keys(draft.starDefinitions).filter((id) =>
         id.startsWith("star-image-"),
       ),
-    ).toEqual([]);
+    ).toEqual(["star-image-solid-ff3b42"]);
+    expect(replaced.createdStarIds).toEqual(["star-image-solid-ff3b42"]);
 
     if (manual) manual.locked = true;
     const beforeLockedAttempt = structuredClone(draft);

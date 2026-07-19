@@ -1,4 +1,8 @@
-import type { ImagePlacementResult } from "./ImagePlacementRecipe";
+import type {
+  ImageDerivedStarKind,
+  ImageDataLike,
+  ImagePlacementResult,
+} from "./ImagePlacementRecipe";
 
 export type ImagePromptKind = "subject" | "background" | "feature";
 export type ImageInputMode = "box" | ImagePromptKind;
@@ -21,9 +25,37 @@ export interface ImagePrompt {
   point: NormalizedImagePoint;
 }
 
+export interface GuidedOutlineStar {
+  color: number;
+  starId: string;
+}
+
+export type GuidedPlacementPointKind =
+  "outline" | "internal-boundary" | "interior" | "feature";
+
+export type GuidedPlacementMode =
+  "outline" | "outline-internal-boundary" | "outline-internal-boundary-filled";
+
 export interface GuidedImagePlacementSettings {
-  fillInterior: boolean;
+  enhanceDarkColors: boolean;
+  imageStarKind: ImageDerivedStarKind;
+  outlineStar?: GuidedOutlineStar;
+  placementMode: GuidedPlacementMode;
   targetCount: number;
+}
+
+export interface QuantizedSubjectMap {
+  height: number;
+  labels: Uint8Array;
+  palette: number[];
+  width: number;
+}
+
+export interface InternalColorBoundary {
+  colorA: number;
+  colorB: number;
+  length: number;
+  points: Array<{ x: number; y: number }>;
 }
 
 export interface SubjectMask {
@@ -77,9 +109,12 @@ export interface SegmentationDiagnostics {
 export interface GuidedPlacementDiagnostics {
   featurePointCounts: Record<string, number>;
   interiorPointCount: number;
+  internalBoundaryCount: number;
+  internalBoundaryPointCount: number;
   maskProvider: SegmentationProvider;
   maskRevision: number;
   outlinePointCount: number;
+  paletteColorCount: number;
   segmentation?: SegmentationDiagnostics;
   totalPointCount: number;
 }
@@ -87,8 +122,11 @@ export interface GuidedPlacementDiagnostics {
 export interface GuidedImagePlacementResult extends ImagePlacementResult {
   diagnostics: GuidedPlacementDiagnostics;
   mask: SubjectMask;
+  pointKinds: GuidedPlacementPointKind[];
   warnings: string[];
 }
+
+export type SegmentationInteractionProfile = "model" | "classic";
 
 export type SegmentationMode = "auto" | "fast";
 
@@ -191,3 +229,30 @@ export type ImageWorkerResponse =
       code: string;
       recoverable: boolean;
     };
+
+export interface PlacementWorkerRequest {
+  image: ImageDataLike;
+  mask: SubjectMask;
+  maskProvider: SegmentationProvider;
+  prompts: ImagePrompt[];
+  requestId: number;
+  revision: number;
+  segmentation?: SegmentationDiagnostics;
+  settings: GuidedImagePlacementSettings;
+  type: "build-placement";
+}
+
+export type PlacementWorkerResponse =
+  | {
+      progress?: number;
+      requestId: number;
+      stage: "quantizing-colors" | "tracing-boundaries" | "placing-stars";
+      type: "progress";
+    }
+  | {
+      placement: GuidedImagePlacementResult;
+      requestId: number;
+      revision: number;
+      type: "placement";
+    }
+  | { error: string; requestId: number; type: "error" };

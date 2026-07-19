@@ -12,11 +12,17 @@ export interface ImagePlacementSettings {
   targetCount: number;
 }
 
+export type ImageDerivedStarKind = "changing" | "solid" | "trail";
+
 export interface ImagePlacementResult {
   colors: number[];
+  enhanceDarkColors?: boolean;
+  imageStarKind?: ImageDerivedStarKind;
   points: SectionPoint2D[];
   /** The recipe already assigned a bounded palette and its point membership. */
   preserveColorAssignments?: boolean;
+  /** Exact existing-star overrides, aligned with `points` when present. */
+  starIds?: Array<string | undefined>;
 }
 
 export interface ImageStarResolution {
@@ -26,16 +32,20 @@ export interface ImageStarResolution {
 }
 
 export interface ResolveImageStarsOptions {
+  enhanceDarkColors?: boolean;
+  imageStarKind?: ImageDerivedStarKind;
   maximumColors?: number;
   preserveColorAssignments?: boolean;
 }
+
+export const DEFAULT_IMAGE_DERIVED_STAR_KIND: ImageDerivedStarKind = "solid";
 
 export const DEFAULT_IMAGE_PLACEMENT_SETTINGS: ImagePlacementSettings = {
   maximumColors: 4,
   targetCount: 240,
 };
 
-export const IMAGE_PLACEMENT_MAXIMUM_POINTS = 1024;
+export const IMAGE_PLACEMENT_MAXIMUM_POINTS = 2048;
 export const IMAGE_PLACEMENT_MINIMUM_POINTS = 8;
 export const IMAGE_PLACEMENT_SAFETY_RADIUS = 0.94;
 
@@ -98,12 +108,6 @@ function rgb(color: number): RGB {
 
 function packColor({ blue, green, red }: RGB): number {
   return (red << 16) | (green << 8) | blue;
-}
-
-function colorDistance(left: number, right: number): number {
-  const a = rgb(left);
-  const b = rgb(right);
-  return Math.hypot(a.red - b.red, a.green - b.green, a.blue - b.blue);
 }
 
 function borderPixelIndices(width: number, height: number): number[] {
@@ -639,7 +643,9 @@ function visibleFireworkColor(color: number): number {
   });
 }
 
-function definitionRepresentative(star: VirtualStarPreset): number {
+export function virtualStarRepresentativeColor(
+  star: VirtualStarPreset,
+): number {
   return (
     star.colorStages[Math.floor(star.colorStages.length / 2)]?.color ??
     star.colorStages[0]?.color ??
@@ -647,10 +653,103 @@ function definitionRepresentative(star: VirtualStarPreset): number {
   );
 }
 
+function mixImageColor(color: number, target: number, ratio: number): number {
+  const source = rgb(color);
+  const destination = rgb(target);
+  return packColor({
+    blue: Math.round(source.blue + (destination.blue - source.blue) * ratio),
+    green: Math.round(
+      source.green + (destination.green - source.green) * ratio,
+    ),
+    red: Math.round(source.red + (destination.red - source.red) * ratio),
+  });
+}
+
+function imageStarId(kind: ImageDerivedStarKind, color: number): string {
+  return `star-image-${kind}-${color.toString(16).padStart(6, "0")}`;
+}
+
+function createImageDerivedStar(
+  id: string,
+  color: number,
+  kind: ImageDerivedStarKind,
+): VirtualStarPreset {
+  const label = {
+    changing: "変化星",
+    solid: "単色星",
+    trail: "引星",
+  }[kind];
+  const colorLabel = `#${color.toString(16).padStart(6, "0").toUpperCase()}`;
+  const pale = mixImageColor(color, 0xf4fbff, 0.64);
+  const colorStages =
+    kind === "changing"
+      ? [
+          {
+            color,
+            intensity: 1.28,
+            normalizedTime: 0,
+            trailColor: color,
+          },
+          {
+            color,
+            intensity: 1.08,
+            normalizedTime: 0.18,
+            trailColor: color,
+          },
+          {
+            color: pale,
+            intensity: 0.72,
+            normalizedTime: 0.72,
+            trailColor: pale,
+          },
+          {
+            color: pale,
+            intensity: 0,
+            normalizedTime: 1,
+            trailColor: pale,
+          },
+        ]
+      : [
+          {
+            color,
+            intensity: 1.25,
+            normalizedTime: 0,
+            trailColor: color,
+          },
+          {
+            color,
+            intensity: 1.04,
+            normalizedTime: 0.18,
+            trailColor: color,
+          },
+          {
+            color,
+            intensity: 0,
+            normalizedTime: 1,
+            trailColor: color,
+          },
+        ];
+  return {
+    brightness: kind === "trail" ? 1.12 : 1,
+    burnDuration: kind === "changing" ? 3.1 : kind === "trail" ? 3.7 : 2.5,
+    colorStages,
+    displayName: `画像色 ${colorLabel}・${label}`,
+    drag: kind === "trail" ? 0.5 : 0.55,
+    emissionKind: kind === "trail" ? "charcoalTail" : "point",
+    flicker: 0.08,
+    gravityScale: kind === "trail" ? 1.05 : 0.8,
+    id,
+    smokeAmount: kind === "trail" ? 0.58 : 0.35,
+    soundTag: "soft",
+    trailLifetime: kind === "trail" ? 0.9 : 0.08,
+    trailWidth: kind === "trail" ? 1.08 : 0.9,
+  };
+}
+
 /**
- * Maps each quantized image color to the closest star already in the library.
- * No star definitions are created; legacy `star-image-*` entries are ignored
- * as mapping targets so older works converge back to library stars.
+ * Creates an image-derived virtual star for every quantized palette color.
+ * IDs are stable by kind and corrected RGB value, so repeated imports reuse an
+ * identical image star without constraining colors to the existing library.
  */
 export function resolveImageStars(
   colors: number[],
@@ -670,27 +769,22 @@ export function resolveImageStars(
           ),
         ),
       );
-  const libraryStars = Object.values(starDefinitions).filter(
-    (star) => !/^star-image-\d+$/.test(star.id),
-  );
-  const mappingTargets =
-    libraryStars.length > 0 ? libraryStars : Object.values(starDefinitions);
+  const definitions = structuredClone(starDefinitions);
+  const createdStarIds: string[] = [];
+  const kind = options.imageStarKind ?? DEFAULT_IMAGE_DERIVED_STAR_KIND;
   const clusterStarIds = new Map<ColorCluster, string>();
 
   clusters.forEach((cluster) => {
-    const nearest = mappingTargets
-      .map((star) => ({
-        distance: colorDistance(
-          visibleFireworkColor(cluster.representative),
-          definitionRepresentative(star),
-        ),
-        id: star.id,
-      }))
-      .sort(
-        (left, right) =>
-          left.distance - right.distance || left.id.localeCompare(right.id),
-      )[0];
-    if (nearest) clusterStarIds.set(cluster, nearest.id);
+    const targetColor =
+      options.enhanceDarkColors === false
+        ? cluster.representative
+        : visibleFireworkColor(cluster.representative);
+    const id = imageStarId(kind, targetColor);
+    if (!definitions[id]) {
+      definitions[id] = createImageDerivedStar(id, targetColor, kind);
+      createdStarIds.push(id);
+    }
+    clusterStarIds.set(cluster, id);
   });
 
   const starIds = Array.from({ length: colors.length }, () => "");
@@ -702,8 +796,8 @@ export function resolveImageStars(
     });
   });
   return {
-    createdStarIds: [],
-    starDefinitions: structuredClone(starDefinitions),
+    createdStarIds,
+    starDefinitions: definitions,
     starIds,
   };
 }

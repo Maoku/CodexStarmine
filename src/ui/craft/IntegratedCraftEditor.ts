@@ -30,7 +30,6 @@ import {
 } from "./GuidedImagePlacementDialog";
 import { DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS } from "./GuidedImagePlacementRecipe";
 import {
-  DEFAULT_IMAGE_PLACEMENT_SETTINGS,
   IMAGE_PLACEMENT_MAXIMUM_POINTS,
   IMAGE_PLACEMENT_MINIMUM_POINTS,
 } from "./ImagePlacementRecipe";
@@ -98,9 +97,13 @@ export class IntegratedCraftEditor {
   readonly #mobileQuery: MediaQueryList;
   readonly #starLongPress = new StarLongPressGesture();
   #drawer?: MobileDrawer;
-  #imageFillInterior = DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.fillInterior;
+  #imageEnhanceDarkColors =
+    DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.enhanceDarkColors;
+  #imagePlacementMode = DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.placementMode;
   #imageImporting = false;
-  #imageTargetCount = DEFAULT_IMAGE_PLACEMENT_SETTINGS.targetCount;
+  #imageOutlineStarId?: string;
+  #imageStarKind = DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.imageStarKind;
+  #imageTargetCount = DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.targetCount;
   #section: SectionRef = { plane: "xy", ratio: 0.5 };
   #placementTemplate: PlacementTemplate = "manual";
   #manualPlacementSettings: ManualPlacementSettings = {
@@ -1113,12 +1116,19 @@ export class IntegratedCraftEditor {
       const dialogResult: GuidedImagePlacementDialogResult | undefined =
         await this.#openGuidedImagePlacementDialog(file, {
           applyMode: this.#templateApplyMode,
-          fillInterior: this.#imageFillInterior,
+          enhanceDarkColors: this.#imageEnhanceDarkColors,
+          imageStarKind: this.#imageStarKind,
+          outlineStarId: this.#imageOutlineStarId ?? layer.defaultStarId,
+          placementMode: this.#imagePlacementMode,
           restoreFocus: restoreFocus ?? undefined,
+          starDefinitions: this.#snapshot?.intentDraft.starDefinitions,
           targetCount: this.#imageTargetCount,
         });
       if (!dialogResult) return;
-      this.#imageFillInterior = dialogResult.settings.fillInterior;
+      this.#imageEnhanceDarkColors = dialogResult.settings.enhanceDarkColors;
+      this.#imageStarKind = dialogResult.settings.imageStarKind;
+      this.#imageOutlineStarId = dialogResult.settings.outlineStarId;
+      this.#imagePlacementMode = dialogResult.settings.placementMode;
       this.#imageTargetCount = dialogResult.settings.targetCount;
       this.#templateApplyMode = dialogResult.settings.applyMode;
       if (
