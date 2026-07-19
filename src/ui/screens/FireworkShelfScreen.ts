@@ -1,4 +1,8 @@
-import type { FireworkDesign, FireworkLibraryImportPreview } from "../../data";
+import {
+  FIREWORK_PATTERN_LABELS,
+  type FireworkDesign,
+  type FireworkLibraryImportPreview,
+} from "../../data";
 import { escapeHTML } from "../craft/viewUtils";
 
 export type ShelfSortOrder = "updated" | "name";
@@ -123,16 +127,7 @@ function renderThumbnail(design: FireworkDesign): string {
 }
 
 function patternLabel(design: FireworkDesign): string {
-  return (
-    {
-      chrysanthemum: "菊",
-      crown: "冠",
-      heart: "ハート",
-      palm: "椰子",
-      peony: "牡丹",
-      senrin: "千輪",
-    } as const
-  )[design.pattern];
+  return FIREWORK_PATTERN_LABELS[design.pattern];
 }
 
 export class FireworkShelfScreen {

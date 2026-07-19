@@ -1,4 +1,5 @@
 import {
+  FIREWORK_PATTERN_LABELS,
   createHeartPoints,
   type ChildBurstLayer,
   type FireworkDesign,
@@ -30,14 +31,7 @@ export interface CraftWorkspaceCallbacks {
 
 type CraftView = "assembly" | "section" | "pattern" | "diagnostic";
 
-const PATTERN_LABELS = {
-  chrysanthemum: "菊",
-  peony: "牡丹",
-  crown: "冠",
-  palm: "椰子",
-  senrin: "千輪",
-  heart: "型物・ハート",
-} as const;
+const PATTERN_LABELS = FIREWORK_PATTERN_LABELS;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);

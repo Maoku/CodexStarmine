@@ -1,6 +1,35 @@
 export type FireworkFamily = "warimono" | "pokamono" | "hanwarimono";
 export type FireworkPattern =
-  "chrysanthemum" | "peony" | "crown" | "palm" | "senrin" | "heart";
+  | "chrysanthemum"
+  | "peony"
+  | "crown"
+  | "palm"
+  | "senrin"
+  | "heart"
+  | "willow"
+  | "bee"
+  | "hiyusei"
+  | "hanarai"
+  | "kaleidoscope"
+  | "saturn"
+  | "butterfly"
+  | "kowari";
+export const FIREWORK_PATTERN_LABELS = {
+  chrysanthemum: "菊",
+  peony: "牡丹",
+  crown: "冠",
+  palm: "椰子",
+  senrin: "千輪",
+  heart: "型物・ハート",
+  willow: "柳",
+  bee: "蜂",
+  hiyusei: "飛遊星",
+  hanarai: "花雷",
+  kaleidoscope: "万華鏡",
+  saturn: "型物・土星",
+  butterfly: "型物・蝶々",
+  kowari: "小割",
+} as const satisfies Record<FireworkPattern, string>;
 export type SizeClass = "small" | "medium" | "large";
 export type BurstShape = "sphere" | "palm" | "heart" | "children";
 export type AscentEffect = "gold" | "silver" | "none";

@@ -78,11 +78,11 @@ function rotatePatternPoint(
   degrees: number,
 ): Vector3Value {
   const angle = (degrees / 180) * Math.PI;
-  return normalize({
+  return {
     x: x * Math.cos(angle) + depth * Math.sin(angle),
     y,
     z: -x * Math.sin(angle) + depth * Math.cos(angle),
-  });
+  };
 }
 
 function resolveDefinition(
@@ -150,9 +150,13 @@ function compileLayerStar(
     behavior?.velocityJitter ?? design.launchVariation.velocity;
   const placementJitter =
     behavior?.placementJitter ?? design.launchVariation.placement;
+  const preservedSpeedScale =
+    layer.kind === "pattern"
+      ? (behavior?.radialSpeedScale ?? layer.radialSpeedScale)
+      : layer.radialSpeedScale;
   const speed = preserveMagnitude
     ? (behavior?.baseVelocity ?? design.burstField.baseVelocity) *
-      layer.radialSpeedScale *
+      preservedSpeedScale *
       (1 + random.signed() * Math.min(velocityJitter, 0.015))
     : (behavior?.baseVelocity ?? design.burstField.baseVelocity) *
       (behavior?.radialSpeedScale ?? layer.radialSpeedScale) *
@@ -338,6 +342,7 @@ function compilePattern(
       definitionId,
       index,
       launchRandom,
+      true,
     );
   });
 }

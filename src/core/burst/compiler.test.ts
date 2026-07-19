@@ -65,7 +65,7 @@ describe("Phase 6.5 burst compiler", () => {
     expect(Math.max(...bands) - Math.min(...bands)).toBeLessThanOrEqual(1);
   });
 
-  it("compiles all six migrated presets deterministically", () => {
+  it("compiles every built-in preset deterministically", () => {
     FIREWORK_PRESETS.forEach((preset) => {
       const first = compileFireworkDesign(preset, 42_4242);
       const second = compileFireworkDesign(preset, 42_4242);

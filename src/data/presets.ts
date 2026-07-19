@@ -1,5 +1,26 @@
 import type { FireworkDesignV1, FireworkDesignV2 } from "./firework";
 import { migrateV1ToV2 } from "./migrations/v1ToV2";
+import {
+  BEE_PRESET,
+  BUTTERFLY_PRESET,
+  HANARAI_PRESET,
+  HIYUSEI_PRESET,
+  KALEIDOSCOPE_PRESET,
+  KOWARI_PRESET,
+  SATURN_PRESET,
+  WILLOW_PRESET,
+} from "./realFireworkPresets";
+
+export {
+  BEE_PRESET,
+  BUTTERFLY_PRESET,
+  HANARAI_PRESET,
+  HIYUSEI_PRESET,
+  KALEIDOSCOPE_PRESET,
+  KOWARI_PRESET,
+  SATURN_PRESET,
+  WILLOW_PRESET,
+} from "./realFireworkPresets";
 
 export const CHRYSANTHEMUM_PRESET: FireworkDesignV2 = migrateV1ToV2({
   ascentEffect: "gold",
@@ -287,4 +308,12 @@ export const FIREWORK_PRESETS: FireworkDesignV2[] = [
   PALM_PRESET,
   SENRIN_PRESET,
   HEART_PRESET,
+  WILLOW_PRESET,
+  BEE_PRESET,
+  HIYUSEI_PRESET,
+  HANARAI_PRESET,
+  KALEIDOSCOPE_PRESET,
+  SATURN_PRESET,
+  BUTTERFLY_PRESET,
+  KOWARI_PRESET,
 ];
