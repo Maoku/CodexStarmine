@@ -159,6 +159,12 @@ export class ViewingStage {
       "[data-show-progress]",
     );
     if (detail) detail.textContent = state.detail;
+    const fireworkName = this.element.querySelector<HTMLElement>(
+      "[data-show-firework-name]",
+    );
+    if (fireworkName) {
+      fireworkName.textContent = state.currentFireworkName ?? "打上準備中";
+    }
     const liveLabel =
       this.element.querySelector<HTMLElement>("[data-live-label]");
     if (liveLabel) liveLabel.textContent = state.running ? "LIVE" : "PAUSED";
@@ -217,7 +223,7 @@ export class ViewingStage {
         <input name="free-density" type="range" min="0" max="2" step="1" value="${freeDensity}" aria-label="演出密度" />
       </label>
       ${renderViewerCameraControl(this.#freeViewPresetId)}
-      <div class="show-now"><p>NOW PLAYING</p><strong data-show-title>${escapeHTML(this.#freeState.title)}</strong><span data-show-progress>${escapeHTML(this.#freeState.detail)}</span></div>
+      <div class="show-now"><p>NOW PLAYING</p><strong data-show-title>${escapeHTML(this.#freeState.title)}</strong><span data-show-progress>${escapeHTML(this.#freeState.detail)}</span><span class="show-now__firework"><small>打上中の玉</small><b data-show-firework-name>${escapeHTML(this.#freeState.currentFireworkName ?? "打上準備中")}</b></span></div>
       <button class="primary-action viewer-primary-toggle" type="button" data-viewer-action="free-toggle">${this.#freeState.running ? "一時停止" : "演目を再開"}</button>
     </aside>`;
   }

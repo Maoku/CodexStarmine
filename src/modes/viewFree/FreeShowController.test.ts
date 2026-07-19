@@ -34,4 +34,24 @@ describe("FreeShowController renewal regression", () => {
     expect(controller.isRunning).toBe(false);
     expect(states.at(-1)?.detail).toBe("演目を終了しました");
   });
+
+  it("reports the shelf work name when its cue launches", () => {
+    const custom = {
+      ...FIREWORK_PRESETS[0],
+      id: "custom-shelf-name",
+      name: "棚の星明かり",
+    };
+    const states: FreeShowState[] = [];
+    const controller = new FreeShowController({
+      getDesigns: () => [custom],
+      onCue: () => undefined,
+      onState: (state) => states.push(state),
+    });
+
+    controller.start();
+    expect(states.at(-1)?.currentFireworkName).toBeUndefined();
+
+    controller.update(0.1);
+    expect(states.at(-1)?.currentFireworkName).toBe("棚の星明かり");
+  });
 });

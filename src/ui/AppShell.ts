@@ -63,6 +63,7 @@ export class AppShell {
   };
   #freeDensity = 1;
   #freeState: FreeShowState = {
+    currentFireworkName: undefined,
     detail: "演目を準備しています",
     running: true,
     title: "湖畔の序章",

@@ -20,12 +20,35 @@ describe("generateFreeShow", () => {
     ).toBe(true);
   });
 
-  it("guarantees a saved custom design appears in the show", () => {
-    const custom = { ...PEONY_PRESET, id: "custom-lakeside", name: "湖の牡丹" };
-    const plan = generateFreeShow([CHRYSANTHEMUM_PRESET, custom], 1, 7);
-    expect(plan.cues.some((cue) => cue.fireworkDesignID === custom.id)).toBe(
-      true,
+  it("guarantees every saved custom design appears in the show", () => {
+    const customs = [
+      { ...PEONY_PRESET, id: "custom-lakeside", name: "湖の牡丹" },
+      { ...PEONY_PRESET, id: "custom-starlight", name: "星明かり" },
+      { ...PEONY_PRESET, id: "custom-breeze", name: "夜風" },
+    ];
+    const plan = generateFreeShow([CHRYSANTHEMUM_PRESET, ...customs], 1, 7);
+    const launchedIds = new Set(plan.cues.map((cue) => cue.fireworkDesignID));
+
+    expect(customs.every((custom) => launchedIds.has(custom.id))).toBe(true);
+  });
+
+  it("extends the show when the shelf has more works than composition slots", () => {
+    const customs = Array.from({ length: 16 }, (_, index) => ({
+      ...PEONY_PRESET,
+      id: `custom-many-${index}`,
+      name: `棚の花火 ${index}`,
+    }));
+    const plan = generateFreeShow(
+      [CHRYSANTHEMUM_PRESET, ...customs],
+      0,
+      17,
     );
+    const launchedIds = new Set(
+      plan.cues.map((cue) => cue.fireworkDesignID),
+    );
+
+    expect(customs.every((custom) => launchedIds.has(custom.id))).toBe(true);
+    expect(plan.duration).toBeGreaterThan(29);
   });
 
   it("keeps an explicit quiet interval for smoke and afterglow", () => {

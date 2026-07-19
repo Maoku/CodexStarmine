@@ -3,6 +3,7 @@ import type { FireworkDesign, ShowCue, ShowPlan } from "../../data";
 import { describeShowPhase, generateFreeShow } from "./generateFreeShow";
 
 export interface FreeShowState {
+  currentFireworkName?: string;
   detail: string;
   running: boolean;
   title: string;
@@ -18,7 +19,9 @@ export class FreeShowController {
   readonly #options: FreeShowControllerOptions;
   readonly #timeline = new ShowTimelinePlayer();
   #cycle = 0;
+  #currentFireworkName?: string;
   #density = 1;
+  #designNames = new Map<string, string>();
   #plan?: ShowPlan;
 
   constructor(options: FreeShowControllerOptions) {
@@ -35,8 +38,10 @@ export class FreeShowController {
 
   stop(): void {
     this.#timeline.stop();
+    this.#currentFireworkName = undefined;
     this.#plan = undefined;
     this.#options.onState({
+      currentFireworkName: undefined,
       detail: "演目を終了しました",
       running: false,
       title: "湖畔の演目",
@@ -69,7 +74,12 @@ export class FreeShowController {
   update(deltaSeconds: number): void {
     if (!this.#plan) return;
     const due = this.#timeline.update(deltaSeconds);
-    for (const cue of due) this.#options.onCue(cue);
+    for (const cue of due) {
+      this.#currentFireworkName = this.#designNames.get(
+        cue.fireworkDesignID,
+      );
+      this.#options.onCue(cue);
+    }
     if (this.#timeline.isComplete) {
       this.#startNextPlan();
     } else if (this.#timeline.isRunning) {
@@ -79,8 +89,13 @@ export class FreeShowController {
 
   #startNextPlan(): void {
     this.#cycle += 1;
+    const designs = this.#options.getDesigns();
+    this.#designNames = new Map(
+      designs.map((design) => [design.id, design.name]),
+    );
+    this.#currentFireworkName = undefined;
     this.#plan = generateFreeShow(
-      this.#options.getDesigns(),
+      designs,
       this.#density,
       20_260 + this.#cycle * 977,
     );
@@ -90,6 +105,7 @@ export class FreeShowController {
 
   #emitState(): void {
     this.#options.onState({
+      currentFireworkName: this.#currentFireworkName,
       detail: this.#timeline.isRunning
         ? describeShowPhase(this.#timeline.time)
         : "余韻を残して一時停止中",

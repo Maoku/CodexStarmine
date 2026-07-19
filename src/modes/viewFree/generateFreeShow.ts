@@ -93,11 +93,52 @@ export function generateFreeShow(
   add(22.4, 0.72, "medium");
   add(24.1, 0, "large", custom);
 
+  // 棚の作品が複数ある場合も、各作品を少なくとも一度は演目へ入れる。
+  // 既存の構成枠を後ろから差し替え、作品数が枠数を超えたときだけ
+  // アンコールの打上を追加する。
+  const customIds = new Set(customDesigns.map((design) => design.id));
+  const includedCustomIds = new Set<string>();
+  const replaceableCues: ShowCue[] = [];
+  for (const cue of cues) {
+    if (
+      customIds.has(cue.fireworkDesignID) &&
+      !includedCustomIds.has(cue.fireworkDesignID)
+    ) {
+      includedCustomIds.add(cue.fireworkDesignID);
+    } else {
+      replaceableCues.push(cue);
+    }
+  }
+
+  const missingCustomDesigns = customDesigns.filter(
+    (design) => !includedCustomIds.has(design.id),
+  );
+  let encoreIndex = 0;
+  for (const design of missingCustomDesigns) {
+    const cue = replaceableCues.pop();
+    if (cue) {
+      cue.fireworkDesignID = design.id;
+      continue;
+    }
+
+    const lane = ((encoreIndex % 3) - 1) * 0.66;
+    add(
+      25.2 + Math.floor(encoreIndex / 3) * 0.72,
+      lane,
+      design.sizeClass,
+      design,
+    );
+    encoreIndex += 1;
+  }
+
   const titleOptions = ["湖畔の序章", "風渡る彩霞", "星屑の水鏡", "錦秋の余韻"];
   return {
     id: `free-${seed}`,
     title: titleOptions[Math.floor(random() * titleOptions.length)],
-    duration: 29,
+    duration:
+      encoreIndex > 0
+        ? Math.max(29, 30 + Math.floor((encoreIndex - 1) / 3) * 0.72)
+        : 29,
     cues: cues.sort((left, right) => left.time - right.time),
   };
 }

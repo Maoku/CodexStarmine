@@ -2422,6 +2422,34 @@ input[type="range"] {
   font-size: 0.62rem;
 }
 
+.show-now__firework {
+  display: flex !important;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-top: 0.7rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.show-now__firework small {
+  flex: none;
+  color: #747d89;
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+}
+
+.show-now__firework b {
+  overflow: hidden;
+  color: #d8c39d;
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .free-toggle {
   align-self: stretch;
   margin: auto 1.15rem 1.15rem;

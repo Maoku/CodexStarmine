@@ -23,6 +23,7 @@ import {
   resolveCurrentIntent,
   resolveSizePreset,
   type AnyFireworkDesign,
+  type ShowCue,
 } from "../data";
 import { SingleLoopCheckController } from "../modes/check";
 import { CraftController } from "../modes/craft";
@@ -34,6 +35,7 @@ import {
 import { AppShell } from "../ui/AppShell";
 import { AdvertiseCameraController, FreeViewCameraController } from "./camera";
 import { FireworkSystem } from "./fx";
+import { prepareShowLaunch } from "./prepareShowLaunch";
 import {
   createNightSkyScene,
   NIGHT_SCENE_ACCESSIBLE_LABEL,
@@ -145,6 +147,22 @@ export class NightSkyApp {
     const repository = new DesignRepository(storage);
     const craft = new CraftController(repository);
     const getDesigns = () => [...FIREWORK_PRESETS, ...repository.list()];
+    const launchShowCue = (cue: ShowCue, seed: number): void => {
+      const source =
+        repository.findIntent(cue.fireworkDesignID) ??
+        FIREWORK_PRESETS.find(
+          (candidate) => candidate.id === cue.fireworkDesignID,
+        );
+      if (!source) return;
+      const launch = prepareShowLaunch(source, cue.sizePreset, seed);
+      this.#fireworks.launch(launch.design, {
+        compiledPlan: launch.compiledPlan,
+        lane: cue.launcherLane,
+        launchAngle: cue.launchAngle,
+        seed,
+        targetHeight: cue.targetHeight,
+      });
+    };
     this.#check = new SingleLoopCheckController({
       onLaunch: (intentDesign, seed, plan) => {
         const design =
@@ -164,18 +182,9 @@ export class NightSkyApp {
     this.#freeShow = new FreeShowController({
       getDesigns,
       onCue: (cue) => {
-        const design = getDesigns().find(
-          (candidate) => candidate.id === cue.fireworkDesignID,
-        );
-        if (!design) return;
-        this.#fireworks.launch(
-          { ...design, sizeClass: cue.sizePreset },
-          {
-            lane: cue.launcherLane,
-            launchAngle: cue.launchAngle,
-            seed: Math.floor(cue.time * 10_000) + cue.id.length * 97,
-            targetHeight: cue.targetHeight,
-          },
+        launchShowCue(
+          cue,
+          Math.floor(cue.time * 10_000) + cue.id.length * 97,
         );
       },
       onState: (state) => {
@@ -185,18 +194,9 @@ export class NightSkyApp {
     this.#advertiseDemo = new AdvertiseDemoController({
       getDesigns,
       onCue: (cue) => {
-        const design = getDesigns().find(
-          (candidate) => candidate.id === cue.fireworkDesignID,
-        );
-        if (!design) return;
-        this.#fireworks.launch(
-          { ...design, sizeClass: cue.sizePreset },
-          {
-            lane: cue.launcherLane,
-            launchAngle: cue.launchAngle,
-            seed: Math.floor(cue.time * 8_000) + cue.id.length * 131,
-            targetHeight: cue.targetHeight,
-          },
+        launchShowCue(
+          cue,
+          Math.floor(cue.time * 8_000) + cue.id.length * 131,
         );
       },
     });
