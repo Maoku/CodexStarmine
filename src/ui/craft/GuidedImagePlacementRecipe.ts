@@ -40,6 +40,19 @@ export const GUIDED_QUANTIZATION_MAXIMUM_SAMPLES = 65_536;
 const INTERNAL_BOUNDARY_STRENGTH_FLOOR = 0.35;
 const INTERNAL_BOUNDARY_STRENGTH_GAMMA = 1.5;
 const INTERNAL_BOUNDARY_STRENGTH_MAXIMUM_SAMPLES = 256;
+/*
+ * Quantized label boundaries can sit a pixel or two off the real image edge.
+ * Sampled points may move along the boundary normal onto the gradient peak,
+ * but only for a clear improvement so exact boundaries stay put.
+ */
+const INTERNAL_BOUNDARY_SNAP_RADIUS_PX = 2;
+const INTERNAL_BOUNDARY_SNAP_IMPROVEMENT = 1.15;
+const INTERNAL_BOUNDARY_SUBEDGE_LENGTH_PX = 2;
+/*
+ * Within one boundary, sample density follows the local edge contrast; the
+ * floor keeps soft sections sparsely covered instead of empty.
+ */
+const INTERNAL_BOUNDARY_LOCAL_DENSITY_FLOOR = 0.3;
 
 interface GridPoint {
   x: number;
@@ -790,6 +803,180 @@ function boundaryStrength(
   return total / samples.length;
 }
 
+/*
+ * Closed label boundaries keep their raw pixel-corner staircase; a small
+ * circular moving average removes that jitter so tangents and sampled
+ * positions follow the actual shape. Open paths are already simplified.
+ */
+function smoothClosedBoundary(points: GridPoint[]): GridPoint[] {
+  if (points.length < 2 || key(points[0]) !== key(points[points.length - 1])) {
+    return points;
+  }
+  const ring = points.slice(0, -1);
+  if (ring.length < 8) return points;
+  const smoothed = ring.map((current, index) => {
+    const previous = ring[(index - 1 + ring.length) % ring.length];
+    const next = ring[(index + 1) % ring.length];
+    return {
+      x: (previous.x + current.x + next.x) / 3,
+      y: (previous.y + current.y + next.y) / 3,
+    };
+  });
+  return [...smoothed, { ...smoothed[0] }];
+}
+
+function snapBoundarySample(
+  image: ImageDataLike,
+  mask: SubjectMask,
+  point: GridPoint,
+  tangent: GridPoint,
+): GridPoint {
+  const tangentLength = Math.hypot(tangent.x, tangent.y);
+  if (tangentLength === 0) return point;
+  const normalX = -tangent.y / tangentLength;
+  const normalY = tangent.x / tangentLength;
+  const center = INTERNAL_BOUNDARY_SNAP_RADIUS_PX;
+  const magnitudes: number[] = [];
+  for (let step = -center; step <= center; step += 1) {
+    magnitudes.push(
+      sobelContrastAt(
+        image,
+        Math.floor(point.x + normalX * step),
+        Math.floor(point.y + normalY * step),
+      ),
+    );
+  }
+  let best = center;
+  magnitudes.forEach((magnitude, index) => {
+    if (magnitude > magnitudes[best]) best = index;
+  });
+  if (
+    best === center ||
+    magnitudes[best] <=
+      Math.max(1 / 255, magnitudes[center] * INTERNAL_BOUNDARY_SNAP_IMPROVEMENT)
+  ) {
+    return point;
+  }
+  const shift = best - center;
+  const snappedX = point.x + normalX * shift;
+  const snappedY = point.y + normalY * shift;
+  const maskX = clamp(Math.floor(snappedX), 0, mask.width - 1);
+  const maskY = clamp(Math.floor(snappedY), 0, mask.height - 1);
+  if (!mask.data[maskY * mask.width + maskX]) return point;
+  return { x: snappedX, y: snappedY };
+}
+
+interface BoundarySubEdge {
+  directionX: number;
+  directionY: number;
+  length: number;
+  startX: number;
+  startY: number;
+  weight: number;
+}
+
+function internalBoundarySubEdges(
+  points: GridPoint[],
+  image?: ImageDataLike,
+): BoundarySubEdge[] {
+  const subEdges: BoundarySubEdge[] = [];
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const edgeLength = Math.hypot(end.x - start.x, end.y - start.y);
+    if (edgeLength <= 0) continue;
+    const directionX = (end.x - start.x) / edgeLength;
+    const directionY = (end.y - start.y) / edgeLength;
+    const pieces = Math.max(
+      1,
+      Math.ceil(edgeLength / INTERNAL_BOUNDARY_SUBEDGE_LENGTH_PX),
+    );
+    const pieceLength = edgeLength / pieces;
+    for (let piece = 0; piece < pieces; piece += 1) {
+      subEdges.push({
+        directionX,
+        directionY,
+        length: pieceLength,
+        startX: start.x + directionX * pieceLength * piece,
+        startY: start.y + directionY * pieceLength * piece,
+        weight: pieceLength,
+      });
+    }
+  }
+  if (!image) return subEdges;
+  const strengths = subEdges.map((subEdge) =>
+    sobelContrastAt(
+      image,
+      Math.floor(subEdge.startX + subEdge.directionX * subEdge.length * 0.5),
+      Math.floor(subEdge.startY + subEdge.directionY * subEdge.length * 0.5),
+    ),
+  );
+  const maximumStrength = strengths.reduce(
+    (maximum, strength) => Math.max(maximum, strength),
+    0,
+  );
+  if (maximumStrength <= 0) return subEdges;
+  return subEdges.map((subEdge, index) => ({
+    ...subEdge,
+    weight:
+      subEdge.length *
+      (INTERNAL_BOUNDARY_LOCAL_DENSITY_FLOOR +
+        (1 - INTERNAL_BOUNDARY_LOCAL_DENSITY_FLOOR) *
+          (strengths[index] / maximumStrength) **
+            INTERNAL_BOUNDARY_STRENGTH_GAMMA),
+  }));
+}
+
+/**
+ * Places `count` points along one internal boundary. With the source image
+ * available, point density follows the local edge contrast and each point is
+ * snapped onto the gradient peak, so the placed line concentrates on and
+ * follows the real edge instead of the quantized labels.
+ */
+export function sampleInternalBoundary(
+  boundary: InternalColorBoundary,
+  count: number,
+  image?: ImageDataLike,
+  mask?: SubjectMask,
+): GridPoint[] {
+  if (count <= 0 || boundary.points.length < 2) return [];
+  const subEdges = internalBoundarySubEdges(boundary.points, image);
+  const totalWeight = subEdges.reduce((sum, subEdge) => sum + subEdge.weight, 0);
+  if (subEdges.length === 0 || totalWeight <= 0) return [];
+  const result: GridPoint[] = [];
+  let cursor = 0;
+  let accumulated = 0;
+  for (let sample = 0; sample < count; sample += 1) {
+    const target = ((sample + 0.5) / count) * totalWeight;
+    while (
+      cursor < subEdges.length - 1 &&
+      accumulated + subEdges[cursor].weight < target
+    ) {
+      accumulated += subEdges[cursor].weight;
+      cursor += 1;
+    }
+    const subEdge = subEdges[cursor];
+    const ratio = clamp(
+      subEdge.weight > 0 ? (target - accumulated) / subEdge.weight : 0,
+      0,
+      1,
+    );
+    const point = {
+      x: subEdge.startX + subEdge.directionX * subEdge.length * ratio,
+      y: subEdge.startY + subEdge.directionY * subEdge.length * ratio,
+    };
+    result.push(
+      image && mask
+        ? snapBoundarySample(image, mask, point, {
+            x: subEdge.directionX,
+            y: subEdge.directionY,
+          })
+        : point,
+    );
+  }
+  return result;
+}
+
 export function traceInternalColorBoundaries(
   map: QuantizedSubjectMap,
   mask: SubjectMask,
@@ -859,7 +1046,9 @@ export function traceInternalColorBoundaries(
       traceBoundarySegments(group.segments).forEach((rawPoints) => {
         const closed =
           key(rawPoints[0]) === key(rawPoints[rawPoints.length - 1]);
-        const points = closed ? rawPoints : simplifyOpenPolyline(rawPoints, 1);
+        const points = closed
+          ? smoothClosedBoundary(rawPoints)
+          : simplifyOpenPolyline(rawPoints, 1);
         const length = openPolylineLength(points);
         const protectedByFeature = featurePoints.some((feature) =>
           points.some(
@@ -1390,10 +1579,11 @@ export function createGuidedImagePlacementFromAnalysis(
   );
   let boundarySamples = analysis.internalBoundaries.flatMap(
     (boundary, boundaryIndex) =>
-      samplePolyline(
-        boundary.points,
-        boundary.length,
+      sampleInternalBoundary(
+        boundary,
         boundaryCounts[boundaryIndex],
+        image,
+        analysis.mask,
       ).map((point, pointIndex) => ({
         boundary,
         boundaryIndex,
@@ -1420,10 +1610,11 @@ export function createGuidedImagePlacementFromAnalysis(
       );
       boundarySamples = analysis.internalBoundaries.flatMap(
         (boundary, boundaryIndex) =>
-          samplePolyline(
-            boundary.points,
-            boundary.length,
+          sampleInternalBoundary(
+            boundary,
             boundaryCounts[boundaryIndex],
+            image,
+            analysis.mask,
           ).map((point, pointIndex) => ({
             boundary,
             boundaryIndex,

@@ -7,10 +7,15 @@ import {
   internalBoundaryWeights,
   quantizeSubjectMap,
   refineQuantizedSubjectMap,
+  sampleInternalBoundary,
   traceInternalColorBoundaries,
   traceMaskContours,
 } from "./GuidedImagePlacementRecipe";
-import type { ImagePrompt, SubjectMask } from "./GuidedImagePlacementTypes";
+import type {
+  ImagePrompt,
+  InternalColorBoundary,
+  SubjectMask,
+} from "./GuidedImagePlacementTypes";
 import {
   IMAGE_PLACEMENT_MAXIMUM_POINTS,
   IMAGE_PLACEMENT_SAFETY_RADIUS,
@@ -426,6 +431,113 @@ describe("GuidedImagePlacementRecipe", () => {
 
     expect(weakOnly).toBeGreaterThan(0);
     expect(strongOnly).toBeGreaterThan(weakOnly * 1.5);
+  });
+
+  it("snaps sampled internal-boundary points onto the image gradient peak", () => {
+    // The real color step sits at x = 40; the boundary polyline is 2px off.
+    const width = 64;
+    const height = 48;
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        data.set(
+          x < 40 ? [30, 30, 30, 255] : [230, 230, 230, 255],
+          (y * width + x) * 4,
+        );
+      }
+    }
+    const image: ImageDataLike = { data, height, width };
+    const mask = rectangleMask(width, height, 2, 2, 61, 45);
+    const boundary: InternalColorBoundary = {
+      colorA: 0x1e1e1e,
+      colorB: 0xe6e6e6,
+      length: 36,
+      points: [
+        { x: 38, y: 6 },
+        { x: 38, y: 42 },
+      ],
+      strength: 1,
+    };
+
+    const samples = sampleInternalBoundary(boundary, 12, image, mask);
+    const unsnapped = sampleInternalBoundary(boundary, 12);
+
+    expect(samples).toHaveLength(12);
+    samples.forEach((point) => expect(point.x).toBeGreaterThan(38.5));
+    unsnapped.forEach((point) => expect(point.x).toBe(38));
+  });
+
+  it("concentrates samples on the high-contrast section of one boundary", () => {
+    // One vertical boundary at x = 32: crisp against the top-right region,
+    // faint against the bottom-right one.
+    const width = 64;
+    const height = 48;
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const color =
+          x < 32 ? [20, 20, 20] : y < 24 ? [240, 240, 240] : [45, 45, 45];
+        data.set([...color, 255], (y * width + x) * 4);
+      }
+    }
+    const image: ImageDataLike = { data, height, width };
+    const mask = rectangleMask(width, height, 2, 2, 61, 45);
+    const boundary: InternalColorBoundary = {
+      colorA: 0x141414,
+      colorB: 0xf0f0f0,
+      length: 36,
+      points: [
+        { x: 32, y: 6 },
+        { x: 32, y: 42 },
+      ],
+      strength: 1,
+    };
+
+    const samples = sampleInternalBoundary(boundary, 24, image, mask);
+    const topCount = samples.filter((point) => point.y < 24).length;
+    const bottomCount = samples.length - topCount;
+
+    expect(samples).toHaveLength(24);
+    expect(bottomCount).toBeGreaterThan(0);
+    expect(topCount).toBeGreaterThan(bottomCount * 1.5);
+  });
+
+  it("smooths closed internal boundaries while keeping the loop closed", () => {
+    const width = 48;
+    const height = 48;
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const island = x >= 18 && x <= 29 && y >= 18 && y <= 29;
+        data.set(
+          island ? [40, 80, 200, 255] : [200, 60, 60, 255],
+          (y * width + x) * 4,
+        );
+      }
+    }
+    const image: ImageDataLike = { data, height, width };
+    const mask = rectangleMask(width, height, 4, 4, 43, 43);
+    const map = refineQuantizedSubjectMap(
+      quantizeSubjectMap(image, mask),
+      mask,
+    );
+    const boundaries = traceInternalColorBoundaries(map, mask, [], image);
+    const closed = boundaries.find(
+      (candidate) =>
+        candidate.points[0].x === candidate.points.at(-1)?.x &&
+        candidate.points[0].y === candidate.points.at(-1)?.y,
+    );
+
+    expect(closed).toBeDefined();
+    /* The moving average turns the pixel staircase into fractional corners. */
+    expect(
+      closed!.points.some(
+        (point) => !Number.isInteger(point.x) || !Number.isInteger(point.y),
+      ),
+    ).toBe(true);
+    expect(traceInternalColorBoundaries(map, mask, [], image)).toEqual(
+      boundaries,
+    );
   });
 
   it("allocates category budgets according to all three placement modes", () => {
