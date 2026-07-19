@@ -4,6 +4,7 @@ import {
   allocateGuidedPlacementBudgets,
   cleanSubjectMask,
   createGuidedImagePlacement,
+  internalBoundaryWeights,
   quantizeSubjectMap,
   refineQuantizedSubjectMap,
   traceInternalColorBoundaries,
@@ -338,6 +339,93 @@ describe("GuidedImagePlacementRecipe", () => {
 
     expect(map.palette.length).toBeLessThanOrEqual(3);
     expect(boundaries).toHaveLength(1);
+  });
+
+  /*
+   * Three vertical stripes: the left pair differs faintly, the right pair
+   * strongly, and both internal boundaries have identical length.
+   */
+  function stripedImage(width: number, height: number): ImageDataLike {
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const stripe =
+          x < width / 3 ? [200, 60, 60] : x < (2 * width) / 3
+            ? [232, 92, 92]
+            : [40, 80, 200];
+        data.set([...stripe, 255], (y * width + x) * 4);
+      }
+    }
+    return { data, height, width };
+  }
+
+  it("measures higher strength on the higher-contrast internal boundary", () => {
+    const image = stripedImage(96, 48);
+    const mask = rectangleMask(96, 48, 4, 4, 91, 43);
+    const map = refineQuantizedSubjectMap(
+      quantizeSubjectMap(image, mask),
+      mask,
+    );
+    const boundaries = traceInternalColorBoundaries(map, mask, [], image);
+
+    /* Median cut may keep an unused mixed box, so 3 is a lower bound. */
+    expect(map.palette.length).toBeGreaterThanOrEqual(3);
+    expect(boundaries).toHaveLength(2);
+    const weak = boundaries.find((boundary) =>
+      boundary.points.every((point) => point.x === 32),
+    );
+    const strong = boundaries.find((boundary) =>
+      boundary.points.every((point) => point.x === 64),
+    );
+    expect(weak).toBeDefined();
+    expect(strong).toBeDefined();
+    expect(strong!.strength).toBeGreaterThan(weak!.strength * 2);
+    expect(Math.abs(strong!.length - weak!.length)).toBeLessThanOrEqual(1);
+  });
+
+  it("weights equal-length boundaries by strength with a floor for weak ones", () => {
+    const image = stripedImage(96, 48);
+    const mask = rectangleMask(96, 48, 4, 4, 91, 43);
+    const map = refineQuantizedSubjectMap(
+      quantizeSubjectMap(image, mask),
+      mask,
+    );
+    const boundaries = traceInternalColorBoundaries(map, mask, [], image);
+    const weights = internalBoundaryWeights(boundaries);
+    const strongIndex = boundaries.findIndex((boundary) =>
+      boundary.points.every((point) => point.x === 64),
+    );
+    const weakIndex = 1 - strongIndex;
+
+    expect(weights[strongIndex]).toBeGreaterThan(weights[weakIndex] * 1.5);
+    /* The floor keeps the weak boundary from disappearing entirely. */
+    expect(weights[weakIndex]).toBeGreaterThan(
+      boundaries[weakIndex].length * 0.3,
+    );
+  });
+
+  it("spends more boundary points on the stronger of two equal-length boundaries", () => {
+    const image = stripedImage(96, 48);
+    const mask = rectangleMask(96, 48, 4, 4, 91, 43);
+    const result = createGuidedImagePlacement(
+      image,
+      mask,
+      [{ id: "subject", kind: "subject", point: { x: 0.5, y: 0.5 } }],
+      { targetCount: 256 },
+    );
+    const boundaryColors = result.colors.filter(
+      (_, index) => result.pointKinds[index] === "internal-boundary",
+    );
+    /* Colors unique to one boundary count roughly half its points. */
+    const weakOnly = boundaryColors.filter(
+      (color) => color === 0xc83c3c,
+    ).length;
+    const strongOnly = boundaryColors.filter(
+      (color) => color === 0x2850c8,
+    ).length;
+
+    expect(weakOnly).toBeGreaterThan(0);
+    expect(strongOnly).toBeGreaterThan(weakOnly * 1.5);
   });
 
   it("allocates category budgets according to all three placement modes", () => {

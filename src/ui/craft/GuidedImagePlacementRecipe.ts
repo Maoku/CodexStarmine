@@ -33,6 +33,14 @@ export const DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS: GuidedImagePlacementSettin
 export const GUIDED_IMAGE_MAXIMUM_COLORS = 8;
 export const GUIDED_QUANTIZATION_MAXIMUM_SAMPLES = 65_536;
 
+/*
+ * Point budgets favour high-contrast internal boundaries. The floor keeps
+ * faint boundaries visible while gamma widens the strong/weak gap.
+ */
+const INTERNAL_BOUNDARY_STRENGTH_FLOOR = 0.35;
+const INTERNAL_BOUNDARY_STRENGTH_GAMMA = 1.5;
+const INTERNAL_BOUNDARY_STRENGTH_MAXIMUM_SAMPLES = 256;
+
 interface GridPoint {
   x: number;
   y: number;
@@ -717,10 +725,76 @@ function openPolylineLength(points: GridPoint[]): number {
   return length;
 }
 
+function sobelContrastAt(image: ImageDataLike, x: number, y: number): number {
+  const channelAt = (
+    sampleX: number,
+    sampleY: number,
+    channel: number,
+  ): number => {
+    const offset =
+      (clamp(sampleY, 0, image.height - 1) * image.width +
+        clamp(sampleX, 0, image.width - 1)) *
+      4;
+    const alpha = (image.data[offset + 3] ?? 255) / 255;
+    return ((image.data[offset + channel] ?? 0) / 255) * alpha;
+  };
+  let magnitudeSquared = 0;
+  for (let channel = 0; channel < 3; channel += 1) {
+    const gradientX =
+      channelAt(x + 1, y - 1, channel) +
+      2 * channelAt(x + 1, y, channel) +
+      channelAt(x + 1, y + 1, channel) -
+      channelAt(x - 1, y - 1, channel) -
+      2 * channelAt(x - 1, y, channel) -
+      channelAt(x - 1, y + 1, channel);
+    const gradientY =
+      channelAt(x - 1, y + 1, channel) +
+      2 * channelAt(x, y + 1, channel) +
+      channelAt(x + 1, y + 1, channel) -
+      channelAt(x - 1, y - 1, channel) -
+      2 * channelAt(x, y - 1, channel) -
+      channelAt(x + 1, y - 1, channel);
+    magnitudeSquared += gradientX ** 2 + gradientY ** 2;
+  }
+  return Math.sqrt(magnitudeSquared);
+}
+
+/*
+ * Without the source image (unit tests, callers holding only the quantized
+ * map) the palette contrast stands in for the measured gradient; both are
+ * used relatively within one analysis, never mixed inside one.
+ */
+function boundaryStrength(
+  points: GridPoint[],
+  length: number,
+  colorA: number,
+  colorB: number,
+  image?: ImageDataLike,
+): number {
+  if (!image) {
+    return Math.sqrt(
+      oklabDistanceSquared(colorToOKLab(colorA), colorToOKLab(colorB)),
+    );
+  }
+  const samples = samplePolyline(
+    points,
+    length,
+    clamp(Math.round(length), 1, INTERNAL_BOUNDARY_STRENGTH_MAXIMUM_SAMPLES),
+  );
+  if (samples.length === 0) return 0;
+  const total = samples.reduce(
+    (sum, point) =>
+      sum + sobelContrastAt(image, Math.floor(point.x), Math.floor(point.y)),
+    0,
+  );
+  return total / samples.length;
+}
+
 export function traceInternalColorBoundaries(
   map: QuantizedSubjectMap,
   mask: SubjectMask,
   prompts: ImagePrompt[] = [],
+  image?: ImageDataLike,
 ): InternalColorBoundary[] {
   if (map.palette.length <= 1) return [];
   const depth = outlineDepth(mask);
@@ -800,6 +874,13 @@ export function traceInternalColorBoundaries(
           colorB: map.palette[group.labelB],
           length,
           points,
+          strength: boundaryStrength(
+            points,
+            length,
+            map.palette[group.labelA],
+            map.palette[group.labelB],
+            image,
+          ),
         });
       });
     });
@@ -831,6 +912,7 @@ export function analyzeGuidedSubject(
     quantizedMap,
     cleaned,
     prompts,
+    image,
   );
   return { contours, internalBoundaries, mask: cleaned, quantizedMap };
 }
@@ -1021,6 +1103,32 @@ function allocateByWeight(weights: number[], total: number): number[] {
       remaining -= 1;
     });
   return counts;
+}
+
+/*
+ * Length-proportional budgets give every boundary the same point density,
+ * flattening strong and weak edges alike. Scaling length by relative
+ * strength concentrates points on crisp boundaries while the floor keeps
+ * faint ones present.
+ */
+export function internalBoundaryWeights(
+  boundaries: InternalColorBoundary[],
+): number[] {
+  const maximumStrength = boundaries.reduce(
+    (maximum, boundary) => Math.max(maximum, boundary.strength),
+    0,
+  );
+  if (maximumStrength <= 0) {
+    return boundaries.map((boundary) => boundary.length);
+  }
+  return boundaries.map(
+    (boundary) =>
+      boundary.length *
+      (INTERNAL_BOUNDARY_STRENGTH_FLOOR +
+        (1 - INTERNAL_BOUNDARY_STRENGTH_FLOOR) *
+          (boundary.strength / maximumStrength) **
+            INTERNAL_BOUNDARY_STRENGTH_GAMMA),
+  );
 }
 
 export function allocateGuidedPlacementBudgets(
@@ -1272,8 +1380,9 @@ export function createGuidedImagePlacementFromAnalysis(
     analysis.contours.map((contour) => contour.length),
     budgets.outline,
   );
+  const boundaryWeights = internalBoundaryWeights(analysis.internalBoundaries);
   let boundaryCounts = allocateByWeight(
-    analysis.internalBoundaries.map((boundary) => boundary.length),
+    boundaryWeights,
     budgets.internalBoundary,
   );
   let outlineGridPoints = analysis.contours.flatMap((contour, index) =>
@@ -1306,7 +1415,7 @@ export function createGuidedImagePlacementFromAnalysis(
         internalBoundary: budgets.internalBoundary + interiorDeficit,
       };
       boundaryCounts = allocateByWeight(
-        analysis.internalBoundaries.map((boundary) => boundary.length),
+        boundaryWeights,
         budgets.internalBoundary,
       );
       boundarySamples = analysis.internalBoundaries.flatMap(

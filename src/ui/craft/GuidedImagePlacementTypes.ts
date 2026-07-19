@@ -56,6 +56,11 @@ export interface InternalColorBoundary {
   colorB: number;
   length: number;
   points: Array<{ x: number; y: number }>;
+  /**
+   * Mean edge contrast along the boundary. Comparable only between
+   * boundaries of the same analysis, not across images.
+   */
+  strength: number;
 }
 
 export interface SubjectMask {
