@@ -6,8 +6,9 @@ import {
   FIREWORK_PRESETS,
   type StorageLike,
 } from "../../data";
-import { RENEWAL_BASELINE_SEED } from "../../test/fixtures/renewalBaseline";
 import { CraftController } from "./CraftController";
+
+const CRAFT_REGRESSION_SEED = 424_242;
 
 function memoryStorage(): StorageLike {
   const values = new Map<string, string>();
@@ -67,7 +68,7 @@ describe("CraftController renewal regression", () => {
     unsubscribe();
   });
 
-  it("starts a blank setup draft with only the minimum outer layer", () => {
+  it("starts a blank setup draft without any layers", () => {
     const controller = new CraftController(
       new DesignRepository(memoryStorage()),
     );
@@ -79,7 +80,9 @@ describe("CraftController renewal regression", () => {
       name: "無題の花火",
       sizeClass: "small",
     });
-    expect(controller.draft.layers).toHaveLength(1);
+    expect(controller.draft.layers).toEqual([]);
+    expect(controller.document.selectedLayer).toBeUndefined();
+    expect(compileFireworkDesign(controller.intentDraft, 7).stars).toEqual([]);
     expect(controller.draft.childBursts).toEqual([]);
     expect(controller.draft.coreLayers).toEqual([]);
   });
@@ -99,7 +102,7 @@ describe("CraftController renewal regression", () => {
     expect(saved.id).toBe("custom-renewal-flow");
     expect(controller.savedDesigns).toEqual([saved]);
 
-    const launchPlan = compileFireworkDesign(saved, RENEWAL_BASELINE_SEED);
+    const launchPlan = compileFireworkDesign(saved, CRAFT_REGRESSION_SEED);
     expect(launchPlan.stars.length).toBeGreaterThan(0);
     expect(launchPlan.bounds.radius).toBeGreaterThan(0);
 

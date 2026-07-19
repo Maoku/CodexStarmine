@@ -133,7 +133,7 @@ export class CraftController {
     blank.coreLayers = [];
     blank.id = "draft-new";
     blank.name = "無題の花火";
-    blank.layers = blank.layers.filter((_, index) => index === 0);
+    blank.layers = [];
     return blank;
   }
 
