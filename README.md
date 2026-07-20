@@ -19,6 +19,32 @@ GPT-5.6 Sol / Codex （実装計画書サポートと画像から花火を作る
 
 保存作品はユニークIDと更新日時を持ち、ブラウザの `localStorage` にv4編集意図として保持されます。同じIDのJSONをインポートした場合は重複件数を確認し、ユーザーが「重複をスキップ」または「置き換える」を選びます。置換時はJSON側の内容と更新日時を採用し、同じIDを重複登録しません。v1／v2／v3作品は検証成功時だけv4へ非破壊移行し、旧キーを削除しません。花火棚の「ローカル作品を全消去」は確認後に全世代の保存キーを消去します。音は最初のクリックまたはキー入力後に有効になり、鑑賞画面の「音の距離感」で物理遅延と即時寄りの演出を調整できます。
 
+## 利用技術
+
+| 分類           | 技術                                 | 用途                                                                       |
+| -------------- | ------------------------------------ | -------------------------------------------------------------------------- |
+| 言語・ビルド   | TypeScript 5.9、Vite 6.4             | 型安全な実装、開発サーバー、production bundle                              |
+| 3D描画         | three.js 0.185、WebGL 2              | 花火、湖面、煙、夜空、自由カメラのリアルタイム描画                         |
+| ポストプロセス | `EffectComposer`、`UnrealBloomPass`  | 発光、残光、ブルーム表現                                                   |
+| UI             | HTML、CSS、SVG、TypeScript DOM API   | モード選択、花火棚、配置エディター、鑑賞操作。UIフレームワークは使用しない |
+| 音響           | Web Audio API                        | 打上音・開花音の合成と距離遅延                                             |
+| 並列処理       | Web Workers、OffscreenCanvas         | 画像セグメンテーション、減色、境界追跡、配置点生成                         |
+| 保存           | `localStorage`、JSON                 | schema v4作品のブラウザ内保存とバックアップ／復元                          |
+| 品質管理       | Vitest、ESLint、Prettier、TypeScript | 単体・統合テスト、静的解析、フォーマット、型検査                           |
+
+### SlimSAMによる被写体抽出
+
+手動レイヤーの「画像から生成」では、画像から被写体の輪郭を抽出する高精度プロバイダとして [Xenova/slimsam-77-uniform](https://huggingface.co/Xenova/slimsam-77-uniform) を使用しています。
+
+- **実行環境**: `@huggingface/transformers` 3.8.1とONNX Runtime Webを専用Worker内で遅延ロードし、推論をブラウザ内で完結させます。
+- **バックエンド**: `WebGPU + fp16` を優先し、利用できない場合や処理に失敗した場合は `WASM + q8`、最後に軽量な古典画像処理へフォールバックします。透過画像はalphaを優先し、SlimSAMをロードしません。
+- **プライバシー**: 選択した画像は外部へ送信せず、画像本体やファイル名も保存作品へ埋め込みません。
+- **自己ホスト**: モデル、設定、ライセンス、ONNX Runtime WASMを `public/models` と `public/wasm` から同一オリジン配信し、Transformers.jsのリモートモデル取得を無効にしています。
+- **再現性と供給網対策**: モデルrevisionを `5850ab45f587c112167512ffef949107115e26a0` に固定し、production build前にファイル容量とSHA-256を検証します。モデルのライセンスはApache-2.0です。
+- **処理の分離**: 画像埋め込みを再利用し、点・矩形の変更時はマスクデコーダーだけを再実行します。減色、内部境界追跡、最大2048点の配置生成も別Workerへ分離しています。
+
+回帰比較ではURLへ `?segmentation=fast` を付けると、SlimSAMを使わない軽量方式を強制できます。確定仕様、制限、モデル資産の詳細は [`Docs/IMAGE_TO_STARMINE.md`](Docs/IMAGE_TO_STARMINE.md)、固定ファイル一覧は [`manifest.json`](public/models/slimsam-77-uniform/5850ab45f587c112167512ffef949107115e26a0/manifest.json) を参照してください。
+
 ## 開発
 
 ```bash
