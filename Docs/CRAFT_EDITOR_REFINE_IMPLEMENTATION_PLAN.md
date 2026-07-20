@@ -1,7 +1,7 @@
 # 花火エディタ改良 実装計画書
 
 - 作成日: 2026-07-20
-- ステータス: 計画策定済み・未着手
+- ステータス: 実装中（Refine Phase 0 完了）
 - 基準資料: [CRAFT_EDITOR_REFINE_PLAN.md](CRAFT_EDITOR_REFINE_PLAN.md)
 - 関連計画: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RENEWAL_IMPLEMENTATION_PLAN3.md](RENEWAL_IMPLEMENTATION_PLAN3.md)
 - 対象: アプリ全体の文字可読性、製作エディタのヘッダー／フッター、玉内配置ワークベンチ、選択レイヤー、打上結果プレビュー
@@ -592,3 +592,26 @@ viewport:
 7. 最終スクリーンショットと実装記録を本書へ追記する。
 
 この順序により、画面骨格と純粋幾何を先に固定し、入力処理、見た目、responsiveを同時に変更して原因追跡が難しくなることを避ける。
+
+## 15. 実装記録
+
+### Refine Phase 0: 契約固定と基準画像
+
+- 実施日: 2026-07-20
+- 品質基準: `lint`、53ファイル／226テスト、`build`がすべて成功。
+- Renewal3更新契約: `R3-02`はX/Y/Z実ボタン、`R3-03`は5段階の操作面位置スライダーで上書きする。
+- 安定した検証属性: `data-editor-header`、`data-editor-transport`、`data-editor-message`、`data-editor-load`、`data-save-state`、`data-selected-layer-inspector`、`data-preview-dock`、`data-workbench-zoom`、`data-workbench-pitch`、`data-workbench-yaw`、`data-section-plane`、`data-section-step`。
+
+変更前の実測値:
+
+| viewport | header | workspace | 右ペイン | preview | footer | 横overflow |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 1440 × 900 | 92px | 790px | 709px | 297px | 72px | なし |
+| 1280 × 720 | 92px | 610px | 529px | 283px | 72px | なし |
+| 390 × 844 | 78px | 745px | 745px | 297px | 67px | なし |
+
+変更前画像:
+
+- `Docs/images/craft-editor-refine/baseline-editor-1440x900.png`
+- `Docs/images/craft-editor-refine/baseline-editor-1280x720.png`
+- `Docs/images/craft-editor-refine/baseline-editor-390x844.png`
