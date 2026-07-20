@@ -29,12 +29,13 @@ export function renderLayerPanel(
     <header><span>レイヤー</span><strong>${design.layers.length} 層</strong></header>
     <div class="layer-list">${design.layers.map((layer, index) => renderLayerRow(design, layer, index, selectedLayerId)).join("")}</div>
     <div class="layer-adders">
-      <details class="preset-layer-menu"><summary>＋ 既定</summary><div>
+      <button class="preset-layer-menu-trigger" type="button" popovertarget="preset-layer-menu">＋ 既定</button>
+      <div class="preset-layer-menu" id="preset-layer-menu" popover="auto" aria-label="既定レイヤーの種類">
         <button type="button" data-action="add-preset" data-preset-kind="outer">外周</button>
         <button type="button" data-action="add-preset" data-preset-kind="core">芯</button>
         <button type="button" data-action="add-preset" data-preset-kind="child">子花</button>
         <button type="button" data-action="add-preset" data-preset-kind="branch">枝</button>
-      </div></details>
+      </div>
       <button type="button" data-action="add-pattern">＋ 型物</button>
       <button type="button" data-action="add-manual">＋ 手動</button>
     </div>

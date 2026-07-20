@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { FREE_VIEW_PRESET_IDS } from "../../modes/viewFree";
-import { renderViewerCameraControl } from "./ViewingStage";
+import {
+  getViewerPanelTogglePresentation,
+  renderViewerCameraControl,
+} from "./ViewingStage";
 
 describe("viewer camera controls", () => {
   it("renders the shared presets, reset action, and interaction guidance", () => {
@@ -16,4 +19,23 @@ describe("viewer camera controls", () => {
     expect(markup).toContain("WASD / 矢印");
     expect(markup).toContain('value="wide" selected');
   });
+});
+
+describe("viewer panel toggle", () => {
+  it.each([
+    ["free", "フリー鑑賞"],
+    ["check", "確認"],
+  ] as const)(
+    "keeps the %s panel reopenable after it is collapsed",
+    (context, panelName) => {
+      expect(getViewerPanelTogglePresentation(context, true)).toEqual({
+        ariaLabel: `${panelName}パネルを折りたたむ`,
+        text: "折りたたむ",
+      });
+      expect(getViewerPanelTogglePresentation(context, false)).toEqual({
+        ariaLabel: `${panelName}パネルを開く`,
+        text: "パネルを開く",
+      });
+    },
+  );
 });

@@ -30,6 +30,22 @@ export interface ViewingStageOptions {
   freeViewPresetId: FreeViewPresetId;
 }
 
+interface ViewerPanelTogglePresentation {
+  ariaLabel: string;
+  text: string;
+}
+
+export function getViewerPanelTogglePresentation(
+  context: ViewerContext,
+  expanded: boolean,
+): ViewerPanelTogglePresentation {
+  const panelName = context === "check" ? "確認" : "フリー鑑賞";
+  return {
+    ariaLabel: `${panelName}パネルを${expanded ? "折りたたむ" : "開く"}`,
+    text: expanded ? "折りたたむ" : "パネルを開く",
+  };
+}
+
 function escapeHTML(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -61,6 +77,7 @@ export class ViewingStage {
   #checkState: SingleLoopCheckState;
   #freeState: FreeShowState;
   #freeViewPresetId: FreeViewPresetId;
+  #panelExpanded = true;
 
   constructor(options: ViewingStageOptions) {
     this.#callbacks = options.callbacks;
@@ -185,26 +202,31 @@ export class ViewingStage {
     return `<aside class="control-panel viewing-panel viewing-panel--check" aria-label="湖面で確認パネル">
       <div class="panel-heading">
         <div><p class="panel-heading__step">VIEW / CHECK</p><h2 id="check-view-heading-title">一発を確かめる</h2></div>
-        <span class="live-indicator"><i></i> <span data-live-label>CHECKING</span></span>
+        <div class="viewing-panel__heading-actions">
+          <span class="live-indicator"><i></i> <span data-live-label>CHECKING</span></span>
+          ${this.#renderPanelToggle()}
+        </div>
       </div>
-      <div class="viewer-context-copy">
-        <p>編集中の作品だけを、同じ条件で一発ずつ打ち上げます。湖面反射、煙、音まで含む完成表示です。</p>
+      <div class="viewing-panel__content" id="check-view-panel-content">
+        <div class="viewer-context-copy">
+          <p>編集中の作品だけを、同じ条件で一発ずつ打ち上げます。湖面反射、煙、音まで含む完成表示です。</p>
+        </div>
+        <section class="check-design-card" aria-label="確認中の作品">
+          <span>確認中の作品</span>
+          <strong data-check-design>${escapeHTML(this.#checkState.designName)}</strong>
+          <p>固定seedで毎回同じ開花を比較できます</p>
+        </section>
+        <section class="check-timing" aria-live="polite">
+          <div><span>NEXT LAUNCH</span><strong data-check-countdown>打上準備</strong></div>
+          <div><span>THIS SESSION</span><strong data-check-shot-count>0発</strong></div>
+        </section>
+        ${renderViewerCameraControl(this.#freeViewPresetId)}
+        <label class="check-loop-control">
+          <input name="check-loop" type="checkbox" ${this.#checkState.loopEnabled ? "checked" : ""} />
+          <span><strong>単発ループ</strong><small>1周期につきこの作品を1発だけ打ち上げます</small></span>
+        </label>
+        <button class="primary-action viewer-primary-toggle" type="button" data-viewer-action="check-toggle">一時停止</button>
       </div>
-      <section class="check-design-card" aria-label="確認中の作品">
-        <span>確認中の作品</span>
-        <strong data-check-design>${escapeHTML(this.#checkState.designName)}</strong>
-        <p>固定seedで毎回同じ開花を比較できます</p>
-      </section>
-      <section class="check-timing" aria-live="polite">
-        <div><span>NEXT LAUNCH</span><strong data-check-countdown>打上準備</strong></div>
-        <div><span>THIS SESSION</span><strong data-check-shot-count>0発</strong></div>
-      </section>
-      ${renderViewerCameraControl(this.#freeViewPresetId)}
-      <label class="check-loop-control">
-        <input name="check-loop" type="checkbox" ${this.#checkState.loopEnabled ? "checked" : ""} />
-        <span><strong>単発ループ</strong><small>1周期につきこの作品を1発だけ打ち上げます</small></span>
-      </label>
-      <button class="primary-action viewer-primary-toggle" type="button" data-viewer-action="check-toggle">一時停止</button>
     </aside>`;
   }
 
@@ -212,20 +234,56 @@ export class ViewingStage {
     return `<aside class="control-panel viewing-panel viewing-panel--free" aria-label="フリー鑑賞パネル">
       <div class="panel-heading">
         <div><p class="panel-heading__step">VIEW / FREE</p><h2 id="free-view-heading-title">湖畔に委ねる</h2></div>
-        <span class="live-indicator"><i></i> <span data-live-label>LIVE</span></span>
+        <div class="viewing-panel__heading-actions">
+          <span class="live-indicator"><i></i> <span data-live-label>LIVE</span></span>
+          ${this.#renderPanelToggle()}
+        </div>
       </div>
-      <div class="viewer-context-copy">
-        <p>小さな一発から始まり、左右へ広がり、間を置いて大玉で締める。煙と余韻を読みながら、自動で演目を紡ぎます。</p>
-        <div class="show-template"><span>導入</span><i></i><span>展開</span><i></i><span>静寂</span><i></i><span>終幕</span></div>
+      <div class="viewing-panel__content" id="free-view-panel-content">
+        <div class="viewer-context-copy">
+          <p>小さな一発から始まり、左右へ広がり、間を置いて大玉で締める。煙と余韻を読みながら、自動で演目を紡ぎます。</p>
+          <div class="show-template"><span>導入</span><i></i><span>展開</span><i></i><span>静寂</span><i></i><span>終幕</span></div>
+        </div>
+        <label class="field range-field density-control">
+          <span>演出密度 <output data-output="free-density">${["静か", "標準", "華やか"][freeDensity] ?? "標準"}</output></span>
+          <input name="free-density" type="range" min="0" max="2" step="1" value="${freeDensity}" aria-label="演出密度" />
+        </label>
+        ${renderViewerCameraControl(this.#freeViewPresetId)}
+        <div class="show-now"><p>NOW PLAYING</p><strong data-show-title>${escapeHTML(this.#freeState.title)}</strong><span data-show-progress>${escapeHTML(this.#freeState.detail)}</span><span class="show-now__firework"><small>打上中の玉</small><b data-show-firework-name>${escapeHTML(this.#freeState.currentFireworkName ?? "打上準備中")}</b></span></div>
+        <button class="primary-action viewer-primary-toggle" type="button" data-viewer-action="free-toggle">${this.#freeState.running ? "一時停止" : "演目を再開"}</button>
       </div>
-      <label class="field range-field density-control">
-        <span>演出密度 <output data-output="free-density">${["静か", "標準", "華やか"][freeDensity] ?? "標準"}</output></span>
-        <input name="free-density" type="range" min="0" max="2" step="1" value="${freeDensity}" aria-label="演出密度" />
-      </label>
-      ${renderViewerCameraControl(this.#freeViewPresetId)}
-      <div class="show-now"><p>NOW PLAYING</p><strong data-show-title>${escapeHTML(this.#freeState.title)}</strong><span data-show-progress>${escapeHTML(this.#freeState.detail)}</span><span class="show-now__firework"><small>打上中の玉</small><b data-show-firework-name>${escapeHTML(this.#freeState.currentFireworkName ?? "打上準備中")}</b></span></div>
-      <button class="primary-action viewer-primary-toggle" type="button" data-viewer-action="free-toggle">${this.#freeState.running ? "一時停止" : "演目を再開"}</button>
     </aside>`;
+  }
+
+  #renderPanelToggle(): string {
+    const presentation = getViewerPanelTogglePresentation(
+      this.#context,
+      this.#panelExpanded,
+    );
+    return `<button class="viewing-panel-toggle" type="button" data-viewer-action="toggle-panel" aria-controls="${this.#context}-view-panel-content" aria-expanded="${this.#panelExpanded}" aria-label="${presentation.ariaLabel}">${presentation.text}</button>`;
+  }
+
+  #setPanelExpanded(expanded: boolean): void {
+    this.#panelExpanded = expanded;
+    const panel = this.element.querySelector<HTMLElement>(".viewing-panel");
+    panel?.classList.toggle("is-collapsed", !expanded);
+
+    const content = this.element.querySelector<HTMLElement>(
+      ".viewing-panel__content",
+    );
+    if (content) content.hidden = !expanded;
+
+    const button = this.element.querySelector<HTMLButtonElement>(
+      "[data-viewer-action='toggle-panel']",
+    );
+    if (!button) return;
+    const presentation = getViewerPanelTogglePresentation(
+      this.#context,
+      expanded,
+    );
+    button.ariaExpanded = String(expanded);
+    button.ariaLabel = presentation.ariaLabel;
+    button.textContent = presentation.text;
   }
 
   #renderSceneCaption(): string {
@@ -244,7 +302,9 @@ export class ViewingStage {
     if (action === "back") this.#callbacks.onBack();
     else if (action === "check-toggle") this.#callbacks.onCheckToggle();
     else if (action === "free-toggle") this.#callbacks.onFreeToggle();
-    else if (action === "view-reset") {
+    else if (action === "toggle-panel") {
+      this.#setPanelExpanded(!this.#panelExpanded);
+    } else if (action === "view-reset") {
       this.#callbacks.onFreeViewReset();
       this.#callbacks.onToast("視点を湖畔固定席へ戻しました");
     }
