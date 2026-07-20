@@ -70,6 +70,7 @@ import {
   renderEditorTransport,
   type EditorMessageKind,
 } from "./EditorTransport";
+import { synchronizeEditorSection } from "./EditorSectionState";
 import { renderSelectedLayerInspector } from "./SelectedLayerInspector";
 import {
   DEFAULT_WORKBENCH_VIEW_STATE,
@@ -177,6 +178,10 @@ export class IntegratedCraftEditor {
     this.#mobileQuery.addEventListener("change", this.#handleMobileQueryChange);
     this.#unsubscribe = this.#controller.document.subscribe((snapshot) => {
       this.#snapshot = snapshot;
+      const selectedIntent = snapshot.intentDraft.layers.find(
+        (layer) => layer.id === snapshot.selection.layerId,
+      );
+      this.#section = synchronizeEditorSection(this.#section, selectedIntent);
       this.#schedulePreview(snapshot.intentDraft);
       this.#render();
     });

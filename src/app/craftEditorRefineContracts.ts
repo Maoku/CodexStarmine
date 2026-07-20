@@ -32,6 +32,7 @@ export const CRAFT_EDITOR_REFINE_TEST_HOOKS = [
   "data-save-state",
   "data-selected-layer-inspector",
   "data-preview-dock",
+  "data-mobile-drawer",
   "data-workbench-zoom",
   "data-workbench-pitch",
   "data-workbench-yaw",
@@ -87,5 +88,12 @@ export const CRAFT_EDITOR_REFINE_ACCEPTANCE_CONTRACTS = [
     requirement: "Primary actions remain usable at all three target viewports",
     phase: 5,
     evidence: ["browser", "screenshot", "quality-gate"],
+  },
+  {
+    id: "CER-ACCESSIBILITY",
+    requirement:
+      "Mobile drawers restore focus, conceal inactive rails, and respect reduced motion",
+    phase: 5,
+    evidence: ["dom", "browser", "quality-gate"],
   },
 ] as const satisfies readonly CraftEditorRefineAcceptanceContract[];

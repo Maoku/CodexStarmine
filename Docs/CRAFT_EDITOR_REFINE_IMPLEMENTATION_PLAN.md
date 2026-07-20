@@ -1,7 +1,7 @@
 # 花火エディタ改良 実装計画書
 
 - 作成日: 2026-07-20
-- ステータス: 実装中（Refine Phase 4 完了）
+- ステータス: 実装完了（Refine Phase 5 完了）
 - 基準資料: [CRAFT_EDITOR_REFINE_PLAN.md](CRAFT_EDITOR_REFINE_PLAN.md)
 - 関連計画: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RENEWAL_IMPLEMENTATION_PLAN3.md](RENEWAL_IMPLEMENTATION_PLAN3.md)
 - 対象: アプリ全体の文字可読性、製作エディタのヘッダー／フッター、玉内配置ワークベンチ、選択レイヤー、打上結果プレビュー
@@ -542,29 +542,29 @@ viewport:
 
 ## 12. 受け入れ条件
 
-- [ ] アプリ全体の通常文字が細すぎず、エディタの主要本文／操作文字はweight 500以上である。
-- [ ] エディタheaderが現在より低く、作品名、大きさ、戻る操作だけを表示する。
-- [ ] 仮想花火の注意文はタイトルにあり、エディタにない。
-- [ ] footerのRedoと保存の間にstatus／TIPS領域がある。
-- [ ] status／TIPSは`aria-live`で通知され、warningは自動で消えない。
-- [ ] 湖面確認がfooter右端、画面右下にある。
-- [ ] 保存して棚へが湖面確認と同じ主要操作グループにある。
-- [ ] 保存ボタンはclean時に抑制色、dirty時に青色となり、文字でも状態が分かる。
-- [ ] footerに仮想星ベースの負荷予測値、状態、上限が表示される。
-- [ ] 右ペインの負荷カードは重複表示されない。
-- [ ] workbenchに50〜200%のzoom sliderがある。
-- [ ] XボタンでYZ、YボタンでXZ、ZボタンでXYが映る。
-- [ ] 玉の左に上下回転、下に左右回転のsliderがある。
-- [ ] 回転により玉皮、操作面、星の前後表現が変わる。
-- [ ] 操作面を5段階sliderで選べる。
-- [ ] 回転とzoomはdirty、Undo/Redo、保存内容へ影響しない。
-- [ ] 回転・zoom後も点の追加／移動位置がポインターと一致する。
-- [ ] 選択レイヤー名inputがペインtitle位置にある。
-- [ ] 選択レイヤーの設定表示域が現行より広い。
-- [ ] 打上結果previewが小型化され、workbench右下にある。
-- [ ] previewのfixed seedと再生操作が維持される。
-- [ ] 1440 × 900、1280 × 720、390 × 844で主要UIが重ならない。
-- [ ] lint、test、buildがすべて成功する。
+- [x] アプリ全体の通常文字が細すぎず、エディタの主要本文／操作文字はweight 500以上である。
+- [x] エディタheaderが現在より低く、作品名、大きさ、戻る操作だけを表示する。
+- [x] 仮想花火の注意文はタイトルにあり、エディタにない。
+- [x] footerのRedoと保存の間にstatus／TIPS領域がある。
+- [x] status／TIPSは`aria-live`で通知され、warningは自動で消えない。
+- [x] 湖面確認がfooter右端、画面右下にある。
+- [x] 保存して棚へが湖面確認と同じ主要操作グループにある。
+- [x] 保存ボタンはclean時に抑制色、dirty時に青色となり、文字でも状態が分かる。
+- [x] footerに仮想星ベースの負荷予測値、状態、上限が表示される。
+- [x] 右ペインの負荷カードは重複表示されない。
+- [x] workbenchに50〜200%のzoom sliderがある。
+- [x] XボタンでYZ、YボタンでXZ、ZボタンでXYが映る。
+- [x] 玉の左に上下回転、下に左右回転のsliderがある。
+- [x] 回転により玉皮、操作面、星の前後表現が変わる。
+- [x] 操作面を5段階sliderで選べる。
+- [x] 回転とzoomはdirty、Undo/Redo、保存内容へ影響しない。
+- [x] 回転・zoom後も点の追加／移動位置がポインターと一致する。
+- [x] 選択レイヤー名inputがペインtitle位置にある。
+- [x] 選択レイヤーの設定表示域が現行より広い。
+- [x] 打上結果previewが小型化され、workbench右下にある。
+- [x] previewのfixed seedと再生操作が維持される。
+- [x] 1440 × 900、1280 × 720、390 × 844で主要UIが重ならない。
+- [x] lint、test、buildがすべて成功する。
 
 ## 13. リスクと対策
 
@@ -651,3 +651,27 @@ viewport:
 - 点の追加／ドラッグは同じview geometryのray-plane逆投影を通し、回転・zoom後も画面座標と保存座標が往復する単体テストを追加した。
 - view-only更新は対象SVGだけをanimation frame単位で差し替え、保存状態、Undo履歴、fixed seed previewを変更しない経路へ分離した。
 - 実ブラウザでX→YZ、Y→XZ、Z→XY、44px以上の全操作領域、desktop／mobileの横overflowなしを確認した。390 × 844ではworkbench下端632px、footer上端722pxで重なりはなかった。
+
+### Refine Phase 5: responsive、アクセシビリティ、統合検証
+
+- mobile drawerは開いた側の`aria-hidden`／`inert`を解除して閉じるbuttonへfocusし、閉じた後は起点buttonへfocusを戻すことを実ブラウザで確認した。非表示の左右railは`inert`かつ`aria-hidden`となる。
+- mobile previewを80pxから160pxへ展開しても下端713px、footer上端722pxで重ならず、縮小後も固定seedと318星を維持した。
+- 新規作品、保存作品、preset、pattern、manual、画像配置導線、回転／zoom後の手動点追加、Undo／Redo、湖面確認を通しで操作した。一時編集はすべてUndoし、保存作品はclean状態へ戻した。
+- 型物の操作面を変更後にUndoしたとき、documentは戻るが5段階slider表示が残る不整合を検出し、選択型物の`pattern.section`をsnapshotから同期する回帰テストと修正を追加した。
+- `prefers-reduced-motion`時は全体のtransition durationを実質無効化し、mobile railのtransitionも明示的に解除する既存規則を確認した。XYZはbutton、各表示操作はlabel付きrangeで、44px以上の操作領域を持つ。
+
+最終実測値:
+
+| viewport | header | workspace | workbench | preview | footer | 保存／確認 | 横overflow |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1440 × 900 | 68px | 814px | 582px | 224 × 144px | 76px | 44px／54px | なし |
+| 1280 × 720 | 68px | 634px | 402px | 218 × 144px | 76px | 44px／54px | なし |
+| 390 × 844 | 76px | 757px | 492px | 168 × 80px | 116px | 44px／44px | なし |
+
+最終画像:
+
+- `Docs/images/craft-editor-refine/final-editor-1440x900.png`
+- `Docs/images/craft-editor-refine/final-editor-1280x720.png`
+- `Docs/images/craft-editor-refine/final-editor-390x844.png`
+
+最終品質ゲート: `lint`、61ファイル／251テスト、`build`がすべて成功。
