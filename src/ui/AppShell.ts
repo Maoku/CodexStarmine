@@ -45,6 +45,19 @@ interface MountedScreen {
   element: HTMLElement;
 }
 
+export function renderEditorHeader(
+  name: string,
+  sizeClass: FireworkDesign["sizeClass"],
+): string {
+  return `<header class="app-header renewal-editor-header" data-editor-header>
+    <button class="renewal-back" type="button" data-shell-action="back">← 花火棚へ戻る</button>
+    <div class="editor-work-header" aria-label="編集中の作品">
+      <label><span>作品名</span><input name="editor-design-name" type="text" maxlength="32" value="${escapeHTML(name)}" /></label>
+      <label><span>玉の大きさ</span><select name="editor-size"><option value="small" ${sizeClass === "small" ? "selected" : ""}>小玉</option><option value="medium" ${sizeClass === "medium" ? "selected" : ""}>中玉</option><option value="large" ${sizeClass === "large" ? "selected" : ""}>大玉</option></select></label>
+    </div>
+  </header>`;
+}
+
 export class AppShell {
   readonly element = document.createElement("div");
   readonly #callbacks: AppShellCallbacks;
@@ -89,11 +102,7 @@ export class AppShell {
     window.addEventListener("beforeunload", this.#handleBeforeUnload);
     this.#unsubscribeDocument = controller.document.subscribe((snapshot) => {
       this.#flow.setEditorDirty(snapshot.dirty);
-      this.#syncEditorHeader(
-        snapshot.draft.name,
-        snapshot.draft.sizeClass,
-        snapshot.dirty,
-      );
+      this.#syncEditorHeader(snapshot.draft.name, snapshot.draft.sizeClass);
     });
     this.#unsubscribeFlow = this.#flow.subscribe(this.#renderScreen);
 
@@ -259,17 +268,10 @@ export class AppShell {
     const element = document.createElement("section");
     element.className = "renewal-editor-screen";
     element.innerHTML = `
-      <header class="app-header renewal-editor-header">
-        <button class="renewal-back" type="button" data-shell-action="back">← 花火棚へ戻る</button>
-        <div class="editor-work-header" aria-label="編集中の作品">
-          <label><span>作品名</span><input name="editor-design-name" type="text" maxlength="32" value="${escapeHTML(this.#controller.draft.name)}" /></label>
-          <label><span>玉の大きさ</span><select name="editor-size"><option value="small" ${this.#controller.draft.sizeClass === "small" ? "selected" : ""}>小玉</option><option value="medium" ${this.#controller.draft.sizeClass === "medium" ? "selected" : ""}>中玉</option><option value="large" ${this.#controller.draft.sizeClass === "large" ? "selected" : ""}>大玉</option></select></label>
-        </div>
-        <div class="header-status">
-          <strong data-editor-header-save-state>保存済み</strong>
-          <p><span>仮想花火</span> 実物の材料・配合・製造条件は扱いません</p>
-        </div>
-      </header>
+      ${renderEditorHeader(
+        this.#controller.draft.name,
+        this.#controller.draft.sizeClass,
+      )}
       <div class="craft-host" data-editor-host></div>`;
     const workspace = new IntegratedCraftEditor(this.#controller, {
       onCheck: () => this.#flow.navigate("check-on-lake"),
@@ -374,7 +376,6 @@ export class AppShell {
   #syncEditorHeader(
     name: string,
     sizeClass: FireworkDesign["sizeClass"],
-    dirty: boolean,
   ): void {
     const nameInput = this.element.querySelector<HTMLInputElement>(
       "[name='editor-design-name']",
@@ -385,9 +386,5 @@ export class AppShell {
       "[name='editor-size']",
     );
     if (sizeSelect) sizeSelect.value = sizeClass;
-    const saveState = this.element.querySelector<HTMLElement>(
-      "[data-editor-header-save-state]",
-    );
-    if (saveState) saveState.textContent = dirty ? "未保存" : "保存済み";
   }
 }

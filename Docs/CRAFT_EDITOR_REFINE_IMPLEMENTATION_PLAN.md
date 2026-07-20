@@ -615,3 +615,11 @@ viewport:
 - `Docs/images/craft-editor-refine/baseline-editor-1440x900.png`
 - `Docs/images/craft-editor-refine/baseline-editor-1280x720.png`
 - `Docs/images/craft-editor-refine/baseline-editor-390x844.png`
+
+### Refine Phase 1: 文字とcompact header
+
+- 用途別文字トークンを追加し、本文500、操作／見出し600を基準化した。
+- エディタheaderから保存状態と仮想花火注意文を削除し、タイトル画面の注意文を純粋markupテストで固定した。
+- headerとworkspaceの位置を`--editor-header-height`と`--editor-workspace-gap`へ集約した。
+- 実測header高は1440 × 900で92pxから68px、390 × 844で78pxから76pxになった。
+- desktopのworkbench表示高は790pxから814pxへ増加し、主要header文字のcomputed weightは600、横overflowは発生しなかった。
