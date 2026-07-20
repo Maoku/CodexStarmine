@@ -1,7 +1,7 @@
 # 打ち上げ花火製作シミュレーション 実装計画書
 
 - 作成日: 2026-07-14
-- 根拠資料: [Docs/PLAN.md](PLAN.md)、[Docs/RESEARCH.md](RESEARCH.md)
+- 根拠資料: [Docs/plans/PLAN.md](PLAN.md)、[Docs/RESEARCH.md](../RESEARCH.md)
 - 製作モード強化: [花火内部配置エディター強化 実装計画書](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)
 - 画面遷移リニューアル: [画面遷移・編集体験リニューアル 改修計画書](RENEWAL_IMPLEMENTATION_PLAN.md)
 - 編集体験Renewal2: [編集体験Renewal2 改修実装計画書](RENEWAL_IMPLEMENTATION_PLAN2.md)
@@ -135,7 +135,7 @@ src/
 
 ### Phase 6.5: 製作モード強化・内部配置エディター（完了: 2026-07-15）
 
-![Phase 6.5 玉皮へ仮想星を仕込む内部配置エディターの画面イメージ](images/phase-6-5-internal-layout-editor-v2.png)
+![Phase 6.5 玉皮へ仮想星を仕込む内部配置エディターの画面イメージ](../images/phase-6-5-internal-layout-editor-v2.png)
 
 > 制作中は玉皮内の配置と、色・方向・タイミングの簡易検査だけを表示する。実際の開花形状は、制作確定後に湖畔で打ち上げるまで表示しない。
 

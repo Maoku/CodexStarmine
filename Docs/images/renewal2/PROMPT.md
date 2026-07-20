@@ -12,7 +12,7 @@
 ```text
 Use case: ui-mockup
 Asset type: high-fidelity desktop web app editing screen mockup for a virtual Japanese fireworks design application
-Primary request: create the renewed editing screen described in Docs/RENEWAL_IMPLEMENTATION_PLAN2.md, focused on precise two-dimensional cross-section editing of virtual firework stars
+Primary request: create the renewed editing screen described in Docs/plans/RENEWAL_IMPLEMENTATION_PLAN2.md, focused on precise two-dimensional cross-section editing of virtual firework stars
 Input images: Image 1 is a style and product-quality reference only, not an edit target; preserve its practical dark-wood workshop mood and restrained utility-panel finish, but replace its 3D globe editor and information architecture with the new 2D cross-section interface specified below
 Scene/backdrop: a practical dark wood fireworks craft workshop, viewed straight-on as a polished 16:9 desktop product screenshot; the interface fills the frame
 Style/medium: realistic shippable product UI mockup, not concept art; restrained Japanese craft atmosphere; crisp dark navy utility panels over a warm wooden workbench; subtle brass-gold only for selection and primary actions

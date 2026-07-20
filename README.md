@@ -32,7 +32,7 @@ npm run format:check
 npm run build
 ```
 
-設計とフェーズごとの実装範囲は [`Docs/IMPLEMENTATION_PLAN.md`](Docs/IMPLEMENTATION_PLAN.md)、最新の編集体験リニューアルは [`Docs/RENEWAL_IMPLEMENTATION_PLAN3.md`](Docs/RENEWAL_IMPLEMENTATION_PLAN3.md) を参照してください。
+現行仕様と関連資料は [`Docs/README.md`](Docs/README.md)、設計とフェーズごとの実装範囲は [`Docs/plans/IMPLEMENTATION_PLAN.md`](Docs/plans/IMPLEMENTATION_PLAN.md)、最新の編集体験リニューアル計画は [`Docs/plans/RENEWAL_IMPLEMENTATION_PLAN3.md`](Docs/plans/RENEWAL_IMPLEMENTATION_PLAN3.md) を参照してください。
 
 ## 構成
 

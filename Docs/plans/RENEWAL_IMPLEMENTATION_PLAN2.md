@@ -4,10 +4,10 @@
 - ステータス: Renewal2 Phase 2 完了・Phase 3 着手前
 - 基準資料: [RENEWAL_PLAN2.md](RENEWAL_PLAN2.md)
 - 先行計画: [RENEWAL_IMPLEMENTATION_PLAN.md](RENEWAL_IMPLEMENTATION_PLAN.md)
-- 関連資料: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RESEARCH.md](RESEARCH.md)
+- 関連資料: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RESEARCH.md](../RESEARCH.md)
 - 対象: タイトル画面、共通ヘッダー、レイヤー、仮想星の部品皿、玉内配置ワークベンチ、配置全体の簡易確認、保存データ
 
-![改修後の編集画面イメージ](images/renewal2/editor-cross-section-workbench.png)
+![改修後の編集画面イメージ](../images/renewal2/editor-cross-section-workbench.png)
 
 ## 1. 目的
 
@@ -592,7 +592,7 @@ rtk npm run test:e2e
 
 ## 12. 画面イメージ生成仕様
 
-編集画面イメージは組込みの `imagegen` を使用し、1672 × 941のPNGとして [editor-cross-section-workbench.png](images/renewal2/editor-cross-section-workbench.png) へ保存した。これは完成UIの方向性と情報階層を共有するためのデザイン資料であり、ピクセル単位の実装仕様ではない。
+編集画面イメージは組込みの `imagegen` を使用し、1672 × 941のPNGとして [editor-cross-section-workbench.png](../images/renewal2/editor-cross-section-workbench.png) へ保存した。これは完成UIの方向性と情報階層を共有するためのデザイン資料であり、ピクセル単位の実装仕様ではない。
 
 画面イメージでは次を必須とする。
 
@@ -607,7 +607,7 @@ rtk npm run test:e2e
 - 下部にUndo/Redo、保存、湖面で確認を表示する。
 - 先行リニューアルの木製工房、暗い実用パネル、控えめな金色の方向性を継承する。
 
-再生成用プロンプトは [PROMPT.md](images/renewal2/PROMPT.md) に保存する。
+再生成用プロンプトは [PROMPT.md](../images/renewal2/PROMPT.md) に保存する。
 
 ## 13. 実装記録
 
@@ -681,6 +681,6 @@ rtk npm run test:e2e
 - 新規の `Renewal2 統合検証` を既定1層、XZ 50%のハート型物72点、XZ 30%の手動円36点で作成し、v4保存、棚からの再読込、断面と座標の復元、固定seedの湖面確認、編集復帰を通しで確認した。
 - タイトルでは非インタラクティブな無音デモ、フリー鑑賞ではインタラクティブな通常runtimeだけが有効になることを再確認した。
 - 型物の形状選択を中央ワークベンチへ集約し、右ペインは大きさ、密度、回転だけを所有する最終配置へ揃えた。9章のR2-01〜R2-16をすべて自動テストまたはブラウザ証拠へ対応付けた。
-- 最終画面を [editor-final-1440x900.png](images/renewal2/editor-final-1440x900.png)、[editor-final-1280x720.png](images/renewal2/editor-final-1280x720.png)、[editor-final-390x844.png](images/renewal2/editor-final-390x844.png) へ保存した。
+- 最終画面を [editor-final-1440x900.png](../images/renewal2/editor-final-1440x900.png)、[editor-final-1280x720.png](../images/renewal2/editor-final-1280x720.png)、[editor-final-390x844.png](../images/renewal2/editor-final-390x844.png) へ保存した。
 - `README.md` と `IMPLEMENTATION_PLAN.md` をv4、5断面、3編集方式、固定プレビュー、星オーバーレイの完成仕様へ同期した。
 - 最終結果: 34 test files / 121 tests成功、lint成功、format check成功、production build成功、git diff check成功。

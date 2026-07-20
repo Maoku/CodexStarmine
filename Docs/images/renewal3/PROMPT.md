@@ -13,7 +13,7 @@
 ```text
 Use case: ui-mockup
 Asset type: high-fidelity 16:9 desktop web app editing-screen mockup for a virtual Japanese fireworks design application
-Primary request: create the Renewal3 editing screen described in Docs/RENEWAL_IMPLEMENTATION_PLAN3.md, focused on spatial slice awareness, geometric pattern authoring, and a launch-equivalent preview
+Primary request: create the Renewal3 editing screen described in Docs/plans/RENEWAL_IMPLEMENTATION_PLAN3.md, focused on spatial slice awareness, geometric pattern authoring, and a launch-equivalent preview
 Input images: Image 1 is a style and product-quality reference only, not an edit target. Preserve its practical dark wood workshop, crisp charcoal-navy utility panels, restrained warm-gold selection states, and dense but readable desktop product layout. Replace its cross-section controls and information architecture with the Renewal3 interface below.
 Scene/backdrop: straight-on polished desktop product screenshot; the application fills the frame; practical Japanese craft workshop mood with dark wood and subtle paper texture
 Style/medium: realistic shippable product UI mockup, not concept art; crisp typography; implementable panel proportions; restrained visual effects

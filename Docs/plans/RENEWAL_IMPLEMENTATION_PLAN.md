@@ -130,7 +130,7 @@ type AppScreen =
 
 ### 5.1 モード選択
 
-![モード選択画面](images/renewal/01-mode-selection.png)
+![モード選択画面](../images/renewal/01-mode-selection.png)
 
 目的は、起動直後の選択肢を2つに絞ることである。
 
@@ -146,7 +146,7 @@ type AppScreen =
 
 ### 5.2 花火棚
 
-![花火棚画面](images/renewal/02-firework-shelf.png)
+![花火棚画面](../images/renewal/02-firework-shelf.png)
 
 保存作品を「玉」として一覧化する。カードの主操作は編集であり、削除は常に副操作とする。
 
@@ -164,7 +164,7 @@ type AppScreen =
 
 ### 5.3 新規作成の初期設定
 
-![初期設定画面](images/renewal/03-initial-setup.png)
+![初期設定画面](../images/renewal/03-initial-setup.png)
 
 新規作品の開始条件だけを決める。入力項目を増やさない。
 
@@ -179,7 +179,7 @@ type AppScreen =
 
 ### 5.4 統合編集
 
-![統合編集画面](images/renewal/04-integrated-editor.png)
+![統合編集画面](../images/renewal/04-integrated-editor.png)
 
 半球・断面図・型物の表示タブは設けない。玉内配置、粗い区画ガイド、円形・ハート配置を1つの常設ワークベンチ上へ重ね、表示を切り替えなくても同じ座標を直接編集できるようにする。
 
@@ -231,7 +231,7 @@ type AppScreen =
 
 ### 5.5 確認／フリー鑑賞の共通湖面画面
 
-![確認とフリー鑑賞の共通湖面画面](images/renewal/05-shared-viewer.png)
+![確認とフリー鑑賞の共通湖面画面](../images/renewal/05-shared-viewer.png)
 
 湖面、夜景、戻る操作、音、再生コントロールは共通化する。単発ループによる再生チェックと自動演目をコンテキスト別のコントローラーで切り替える。
 
@@ -590,7 +590,7 @@ NightSkyApp
 
 ## 13. 画像生成仕様
 
-画面イメージは組込みの `imagegen` を使用して生成・修正した。既存の [Phase 6.5画面イメージ](images/phase-6-5-internal-layout-editor-v2.png) を出発点にしつつ、花火棚と編集画面は工房として再編集し、金色と装飾を大幅に抑えた。全画像は1672 × 941のPNGである。再生成用の完全なプロンプトは [Renewal UI mockup prompt set](images/renewal/PROMPTS.md) に保存した。
+画面イメージは組込みの `imagegen` を使用して生成・修正した。既存の [Phase 6.5画面イメージ](../images/phase-6-5-internal-layout-editor-v2.png) を出発点にしつつ、花火棚と編集画面は工房として再編集し、金色と装飾を大幅に抑えた。全画像は1672 × 941のPNGである。再生成用の完全なプロンプトは [Renewal UI mockup prompt set](../images/renewal/PROMPTS.md) に保存した。
 
 共通プロンプト要件:
 

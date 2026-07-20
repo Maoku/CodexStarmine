@@ -3,7 +3,7 @@
 - 作成日: 2026-07-18
 - 対象: CodexStarmine「画像から生成」のブラウザローカル処理
 - 前提: 画像をサーバーへ送らず、ユーザーが被写体点・背景除外点・特徴点を指定する
-- 関連資料: `POINT_GUIDED_IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md`
+- 関連資料: [`POINT_GUIDED_IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md`](plans/POINT_GUIDED_IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md)
 
 ## 1. 結論
 

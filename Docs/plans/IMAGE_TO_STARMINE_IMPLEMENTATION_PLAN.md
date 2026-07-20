@@ -2,7 +2,7 @@
 
 - 作成日: 2026-07-16
 - ステータス: 実装済み（2026-07-16）
-- 基準資料: [IMAGE_TO_STARMINE.md](IMAGE_TO_STARMINE.md)
+- 基準資料: [IMAGE_TO_STARMINE.md](../IMAGE_TO_STARMINE.md)
 - 関連資料: [RENEWAL_IMPLEMENTATION_PLAN3.md](RENEWAL_IMPLEMENTATION_PLAN3.md)、[CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)
 - 対象: 玉内配置ワークベンチ（手動レイヤー編集時のみ）
 
@@ -24,11 +24,11 @@
 
 | 項目 | 現状 | 本計画での利用 |
 | --- | --- | --- |
-| 手動レイヤーのデータ | `ManualLayerIntent.points: ManualLayerPoint[]`（`id` / `position` / `section` / `starId`、[firework.ts:328](../src/data/firework.ts)） | そのまま使用。スキーマ変更なし |
-| 配置支援ツール列 | `renderIntegratedPlacementWorkbench()` が `pointEditingAllowed`（= 手動レイヤー選択時）のときだけツール列を描画（[IntegratedPlacementWorkbench.ts:270](../src/ui/craft/IntegratedPlacementWorkbench.ts)） | ボタンの追加位置 |
-| 配置支援の適用処理 | `#applyManualRecipe()` が純粋関数 `createManualPlacementPoints()` の結果を `updateIntent()` で反映（[IntegratedCraftEditor.ts:987](../src/ui/craft/IntegratedCraftEditor.ts)） | 適用フローの雛形 |
+| 手動レイヤーのデータ | `ManualLayerIntent.points: ManualLayerPoint[]`（`id` / `position` / `section` / `starId`、[firework.ts:328](../../src/data/firework.ts)） | そのまま使用。スキーマ変更なし |
+| 配置支援ツール列 | `renderIntegratedPlacementWorkbench()` が `pointEditingAllowed`（= 手動レイヤー選択時）のときだけツール列を描画（[IntegratedPlacementWorkbench.ts:270](../../src/ui/craft/IntegratedPlacementWorkbench.ts)） | ボタンの追加位置 |
+| 配置支援の適用処理 | `#applyManualRecipe()` が純粋関数 `createManualPlacementPoints()` の結果を `updateIntent()` で反映（[IntegratedCraftEditor.ts:987](../../src/ui/craft/IntegratedCraftEditor.ts)） | 適用フローの雛形 |
 | 生成方法（置換／追加） | `#templateApplyMode`（`replace` / `append`）を配置支援全体で共有 | 画像生成でも同じ選択を尊重 |
-| 断面ローカル座標→3D | `pointFromSection()` / `clampSectionPoint()`（[SliceGeometry.ts](../src/ui/craft/SliceGeometry.ts)）、安全半径 `SAFETY_RADIUS = 0.94`、点数上限240（[ManualPlacementRecipe.ts](../src/ui/craft/ManualPlacementRecipe.ts)） | 同じ制約に従う |
+| 断面ローカル座標→3D | `pointFromSection()` / `clampSectionPoint()`（[SliceGeometry.ts](../../src/ui/craft/SliceGeometry.ts)）、安全半径 `SAFETY_RADIUS = 0.94`、点数上限240（[ManualPlacementRecipe.ts](../../src/ui/craft/ManualPlacementRecipe.ts)） | 同じ制約に従う |
 | 仮想星の定義 | `design.starDefinitions: Record<string, VirtualStarPreset>`。バリデーターは各レイヤーの `defaultStarId` が存在することだけを要求 | 画像色に対応する星の割当先 |
 | 履歴 | `CraftDocumentStore.updateIntent()` が1回の呼び出しを1つのUndo単位として記録 | 点群生成＋星定義追加を単一Undoにする |
 | テスト | vitest（jsdom）。`ManualPlacementRecipe.test.ts` など純粋関数の単体テストと、エディター統合テストが併存 | 同じ構成を踏襲 |

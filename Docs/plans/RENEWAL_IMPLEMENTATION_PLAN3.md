@@ -4,10 +4,10 @@
 - ステータス: 実装中（Renewal3 Phase 0 完了）
 - 基準資料: [RENEWAL_PLAN3.md](RENEWAL_PLAN3.md)
 - 先行計画: [RENEWAL_IMPLEMENTATION_PLAN2.md](RENEWAL_IMPLEMENTATION_PLAN2.md)
-- 関連資料: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RESEARCH.md](RESEARCH.md)
+- 関連資料: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RESEARCH.md](../RESEARCH.md)
 - 対象: タイトル、玉内配置ワークベンチ、型物、手動配置、簡易確認、湖面確認、フリー鑑賞、夜景
 
-![Renewal3 編集画面イメージ](images/renewal3/editor-spatial-slice-workbench.png)
+![Renewal3 編集画面イメージ](../images/renewal3/editor-spatial-slice-workbench.png)
 
 ## 1. 目的
 
@@ -610,7 +610,7 @@ rtk npm run build
 
 ## 12. 画面イメージ生成仕様
 
-編集画面イメージは組込みの `imagegen` を使い、[editor-spatial-slice-workbench.png](images/renewal3/editor-spatial-slice-workbench.png) として保存する。これは情報設計と画面密度を共有するデザイン資料であり、ピクセル単位の実装仕様ではない。
+編集画面イメージは組込みの `imagegen` を使い、[editor-spatial-slice-workbench.png](../images/renewal3/editor-spatial-slice-workbench.png) として保存する。これは情報設計と画面密度を共有するデザイン資料であり、ピクセル単位の実装仕様ではない。
 
 画面イメージでは次を必須とする。
 
@@ -625,7 +625,7 @@ rtk npm run build
 - 下部へUndo、Redo、保存、湖面で確認を表示する。
 - 月、製造情報、過度な装飾を表示しない。
 
-再生成用の最終プロンプトは [PROMPT.md](images/renewal3/PROMPT.md) に保存する。
+再生成用の最終プロンプトは [PROMPT.md](../images/renewal3/PROMPT.md) に保存する。
 
 ## 13. 実装記録
 
@@ -686,11 +686,11 @@ rtk npm run build
 - 固定視点で湖面を30秒観察し、旧来の平行な正弦波縞や月光筋が現れないことを確認した。check/freeともコンソールエラーは0件だった。
 - Viteでthree coreとaddonsを分割し、最大chunkを543.56kBへ抑えた。従来の550kB警告は解消した。
 - 最終画像を次へ保存した。
-  - [タイトル 1280×720](images/renewal3/final-title-1280x720.png)
-  - [編集 1440×900](images/renewal3/final-editor-1440x900.png)
-  - [編集 1280×720](images/renewal3/final-editor-1280x720.png)
-  - [編集 390×844](images/renewal3/final-editor-390x844.png)
-  - [湖面確認 1280×720](images/renewal3/final-check-1280x720.png)
-  - [フリー鑑賞 1280×720](images/renewal3/final-free-1280x720.png)
+  - [タイトル 1280×720](../images/renewal3/final-title-1280x720.png)
+  - [編集 1440×900](../images/renewal3/final-editor-1440x900.png)
+  - [編集 1280×720](../images/renewal3/final-editor-1280x720.png)
+  - [編集 390×844](../images/renewal3/final-editor-390x844.png)
+  - [湖面確認 1280×720](../images/renewal3/final-check-1280x720.png)
+  - [フリー鑑賞 1280×720](../images/renewal3/final-free-1280x720.png)
 - R3-01〜R3-17をunit、trajectory、DOM、実ブラウザ、スクリーンショット、quality gateの組合せで確認した。
 - 最終品質ゲート: lint、全149テスト、format check、警告なしのproduction build。

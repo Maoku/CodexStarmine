@@ -3,7 +3,7 @@
 - 作成日: 2026-07-19
 - ステータス: 主要機能実装済み・追加性能計測を継続
 - 対象: 玉内配置ワークベンチの手動レイヤー
-- 現行仕様: [IMAGE_TO_STARMINE.md](IMAGE_TO_STARMINE.md)
+- 現行仕様: [IMAGE_TO_STARMINE.md](../IMAGE_TO_STARMINE.md)
 - 既存計画: [POINT_GUIDED_IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md](POINT_GUIDED_IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md)
 
 ## 1. 目的

@@ -72,6 +72,6 @@
 - 2026-07-19改良: マスク全体の8色ラベル化と内部色境界追跡、3配置モード、既定1024・最大2048点、役割別プレビュー、モデル2操作／古典4操作、下部処理状態、専用配置Workerと最新要求破棄を実装した。`mao.png` で外形461点・内部境界563点（既定1024）、2048点生成、1280×800と390×844での収まり、console warning/error 0件を確認した。
 - 未実施の品質ゲート: 難易度別50枚のMask IoU／Boundary F1／操作数、iOS Safari・Android Chrome実機の性能とメモリ、オフライン再訪、GPU device lost、連続10画像後のメモリを計測する。GrabCut境界補正と局所再推論もPhase 4として残る。
 
-詳細設計と検証条件は [IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md](IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md) を参照。
+詳細設計と検証条件は [IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md](plans/IMAGE_TO_STARMINE_IMPLEMENTATION_PLAN.md) を参照。
 
-内部境界、3つの配置モード、既定1024・最大2048点、領域選択UI、処理中表示の設計と継続品質ゲートは [IMAGE_TO_STARMINE_REFINEMENT_PLAN.md](IMAGE_TO_STARMINE_REFINEMENT_PLAN.md) を参照。
+内部境界、3つの配置モード、既定1024・最大2048点、領域選択UI、処理中表示の設計と継続品質ゲートは [IMAGE_TO_STARMINE_REFINEMENT_PLAN.md](plans/IMAGE_TO_STARMINE_REFINEMENT_PLAN.md) を参照。
