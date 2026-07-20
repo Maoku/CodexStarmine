@@ -54,12 +54,10 @@ import {
   STAR_LONG_PRESS_DELAY_MS,
   StarLongPressGesture,
 } from "./StarLongPressGesture";
-import { sectionAfterNavigatorDrag } from "./ShellSliceNavigator";
 import {
   pointFromSection,
   sectionPlaneForAxis,
   sectionRatioAt,
-  stepSection,
   type Point3D,
   type SectionAxis,
 } from "./SliceGeometry";
@@ -99,12 +97,6 @@ interface PointDrag {
   target: SVGCircleElement;
 }
 
-interface NavigatorDrag {
-  pointerId: number;
-  startX: number;
-  startY: number;
-}
-
 type MobileDrawer = "layers" | "inspector";
 
 export class IntegratedCraftEditor {
@@ -130,10 +122,9 @@ export class IntegratedCraftEditor {
   };
   #messageTimer = 0;
   #templateApplyMode: TemplateApplyMode = "replace";
-  #navigatorDrag?: NavigatorDrag;
   #pointDrag?: PointDrag;
   #previewModel?: CompiledBurstPreviewModel;
-  #previewDockExpanded = false;
+  #previewDockExpanded = true;
   #previewRevision = 0;
   #previewRunning = true;
   #previewSignature = "";
@@ -168,9 +159,6 @@ export class IntegratedCraftEditor {
     this.element.addEventListener("dragover", this.#handleDragOver);
     this.element.addEventListener("drop", this.#handleDrop);
     this.element.addEventListener("pointerdown", this.#handlePointerDown);
-    this.element.addEventListener("wheel", this.#handleWheel, {
-      passive: false,
-    });
     window.addEventListener("pointermove", this.#handlePointerMove);
     window.addEventListener("pointerup", this.#handlePointerEnd);
     window.addEventListener("pointercancel", this.#handlePointerEnd);
@@ -200,7 +188,6 @@ export class IntegratedCraftEditor {
     this.element.removeEventListener("dragover", this.#handleDragOver);
     this.element.removeEventListener("drop", this.#handleDrop);
     this.element.removeEventListener("pointerdown", this.#handlePointerDown);
-    this.element.removeEventListener("wheel", this.#handleWheel);
     window.removeEventListener("pointermove", this.#handlePointerMove);
     window.removeEventListener("pointerup", this.#handlePointerEnd);
     window.removeEventListener("pointercancel", this.#handlePointerEnd);
@@ -261,19 +248,17 @@ export class IntegratedCraftEditor {
           this.#imageImporting,
           this.#viewState,
         )}
-        <div class="workbench-bottom-dock">
-          ${renderInlineDiagnosticPreview(
-            preview,
-            this.#previewRunning,
-            this.#previewRevision,
-            this.#previewDockExpanded,
-          )}
-        </div>
       </main>
 
       <aside class="craft-rail craft-rail--right" aria-label="作品と配置の設定">
         <button class="drawer-close" type="button" data-action="close-drawer">閉じる</button>
         ${renderSelectedLayerInspector(intentDesign, selectedIntent)}
+        ${renderInlineDiagnosticPreview(
+          preview,
+          this.#previewRunning,
+          this.#previewRevision,
+          this.#previewDockExpanded,
+        )}
       </aside>
 
       ${renderEditorTransport({
@@ -552,26 +537,6 @@ export class IntegratedCraftEditor {
         .closest("label")
         ?.querySelector<HTMLOutputElement>("output");
       if (output) output.value = `${Math.round(this.#viewState.zoom * 100)}%`;
-    } else if (input.name === "workbench-pitch") {
-      this.#viewState = normalizeWorkbenchViewState({
-        ...this.#viewState,
-        pitchDegrees: numericValue,
-      });
-      input.setAttribute("aria-valuetext", `${this.#viewState.pitchDegrees}度`);
-      const output = input
-        .closest("label")
-        ?.querySelector<HTMLOutputElement>("output");
-      if (output) output.value = `${this.#viewState.pitchDegrees}°`;
-    } else if (input.name === "workbench-yaw") {
-      this.#viewState = normalizeWorkbenchViewState({
-        ...this.#viewState,
-        yawDegrees: numericValue,
-      });
-      input.setAttribute("aria-valuetext", `${this.#viewState.yawDegrees}度`);
-      const output = input
-        .closest("label")
-        ?.querySelector<HTMLOutputElement>("output");
-      if (output) output.value = `${this.#viewState.yawDegrees}°`;
     } else if (input.name === "section-step") {
       this.#section = {
         plane: this.#section.plane,
@@ -584,7 +549,9 @@ export class IntegratedCraftEditor {
       const output = input
         .closest("label")
         ?.querySelector<HTMLOutputElement>("output");
-      if (output) output.value = `${position} ${index + 1} / 5`;
+      if (output) {
+        output.value = `${this.#section.plane.toUpperCase()} · ${position} ${index + 1} / 5`;
+      }
     } else {
       return;
     }
@@ -595,11 +562,7 @@ export class IntegratedCraftEditor {
     const input = event.target as HTMLInputElement | HTMLSelectElement;
     if (!this.#snapshot) return;
     this.#dismissEditorWarning();
-    if (
-      input.name === "workbench-zoom" ||
-      input.name === "workbench-pitch" ||
-      input.name === "workbench-yaw"
-    ) {
+    if (input.name === "workbench-zoom") {
       return;
     }
     if (input.name === "section-step") {
@@ -665,19 +628,6 @@ export class IntegratedCraftEditor {
   readonly #handlePointerDown = (event: PointerEvent): void => {
     const target = event.target as HTMLElement;
     if (target.closest("button[data-action='select-section-axis']")) return;
-    const navigator = target.closest<HTMLElement>(
-      "[data-shell-slice-navigator]",
-    );
-    if (navigator) {
-      this.#navigatorDrag = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-      };
-      navigator.focus();
-      event.preventDefault();
-      return;
-    }
     const starButton = target.closest<HTMLButtonElement>(
       "button[data-action='assign-star']",
     );
@@ -737,13 +687,6 @@ export class IntegratedCraftEditor {
       window.clearTimeout(this.#starPressTimer);
       this.#starPressTimer = 0;
     }
-    if (
-      this.#navigatorDrag &&
-      this.#navigatorDrag.pointerId === event.pointerId
-    ) {
-      event.preventDefault();
-      return;
-    }
     const drag = this.#pointDrag;
     if (!drag || drag.pointerId !== event.pointerId) return;
     const canvas = drag.target.closest<SVGSVGElement>(
@@ -768,17 +711,6 @@ export class IntegratedCraftEditor {
     this.#starLongPress.end(event.pointerId);
     window.clearTimeout(this.#starPressTimer);
     this.#starPressTimer = 0;
-    const navigatorDrag = this.#navigatorDrag;
-    if (navigatorDrag?.pointerId === event.pointerId) {
-      this.#navigatorDrag = undefined;
-      const next = sectionAfterNavigatorDrag(
-        this.#section,
-        event.clientX - navigatorDrag.startX,
-        event.clientY - navigatorDrag.startY,
-      );
-      this.#setSection(next, true);
-      return;
-    }
     const drag = this.#pointDrag;
     if (!drag || drag.pointerId !== event.pointerId) return;
     this.#pointDrag = undefined;
@@ -802,19 +734,6 @@ export class IntegratedCraftEditor {
   readonly #handleKeyDown = (event: KeyboardEvent): void => {
     const target = event.target as HTMLElement;
     if (target.closest("button[data-action='select-section-axis']")) return;
-    if (target.closest("[data-shell-slice-navigator]")) {
-      const planeStep = ["ArrowLeft", "ArrowRight"].includes(event.key) ? 1 : 0;
-      const ratioStep =
-        event.key === "ArrowUp" ? 1 : event.key === "ArrowDown" ? -1 : 0;
-      if (planeStep || ratioStep) {
-        event.preventDefault();
-        this.#setSection(
-          stepSection(this.#section, planeStep, ratioStep),
-          true,
-        );
-      }
-      return;
-    }
     const starButton = target.closest<HTMLButtonElement>(
       "button[data-action='assign-star']",
     );
@@ -857,19 +776,6 @@ export class IntegratedCraftEditor {
       event.preventDefault();
       this.#deleteSelectedPoint();
     }
-  };
-
-  readonly #handleWheel = (event: WheelEvent): void => {
-    if (
-      !(event.target as HTMLElement).closest("[data-shell-slice-navigator]")
-    ) {
-      return;
-    }
-    event.preventDefault();
-    this.#setSection(
-      stepSection(this.#section, 0, event.deltaY > 0 ? -1 : 1),
-      true,
-    );
   };
 
   #scheduleWorkbenchViewRender(): void {
@@ -1043,7 +949,7 @@ export class IntegratedCraftEditor {
     });
   }
 
-  #setSection(section: SectionRef, restoreNavigatorFocus = false): void {
+  #setSection(section: SectionRef): void {
     this.#section = section;
     this.#sliceAnnouncement = "選択中の切断面を更新しました";
     const selected = this.#selectedIntentLayer();
@@ -1056,9 +962,6 @@ export class IntegratedCraftEditor {
     } else {
       this.#selectedPointIndex = undefined;
       this.#render();
-    }
-    if (restoreNavigatorFocus) {
-      this.#focusAfterRender("[data-shell-slice-navigator]");
     }
   }
 

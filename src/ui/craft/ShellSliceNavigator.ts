@@ -3,7 +3,6 @@ import {
   pointFromSection,
   sectionPlaneForAxis,
   sliceFrame,
-  stepSection,
   type SectionAxis,
 } from "./SliceGeometry";
 
@@ -39,19 +38,6 @@ function discPath(section: SectionRef): string {
     .concat(" Z");
 }
 
-export function sectionAfterNavigatorDrag(
-  section: SectionRef,
-  deltaX: number,
-  deltaY: number,
-): SectionRef {
-  const planeSteps =
-    Math.abs(deltaX) >= 24 && Math.abs(deltaX) > Math.abs(deltaY) * 0.72
-      ? 1
-      : 0;
-  const ratioSteps = Math.abs(deltaY) >= 20 ? (deltaY < 0 ? 1 : -1) : 0;
-  return stepSection(section, planeSteps, ratioSteps);
-}
-
 export function renderShellSliceNavigator(section: SectionRef): string {
   const frame = sliceFrame(section);
   const center = project(frame.center);
@@ -80,7 +66,7 @@ export function renderShellSliceNavigator(section: SectionRef): string {
       point: project({ x: 0, y: 0, z: 1.25 }),
     },
   ];
-  return `<div class="shell-slice-navigator" data-shell-slice-navigator role="application" tabindex="0" aria-label="玉内の切断面を操作">
+  return `<div class="shell-slice-navigator" data-shell-slice-navigator role="group" aria-label="操作面を選択">
     <svg viewBox="0 0 184 184" aria-hidden="true">
       <defs>
         <radialGradient id="slice-shell-glow" cx="34%" cy="28%"><stop offset="0" stop-color="#8095a1" stop-opacity=".26"/><stop offset=".72" stop-color="#263740" stop-opacity=".12"/><stop offset="1" stop-color="#090f14" stop-opacity=".48"/></radialGradient>
@@ -99,7 +85,7 @@ export function renderShellSliceNavigator(section: SectionRef): string {
       </g>
       <circle cx="92" cy="92" r="58" class="slice-shell-edge" />
     </svg>
-    <div class="slice-axis-buttons" aria-label="操作面を選択">
+    <div class="slice-axis-buttons">
       ${axes
         .map((axis) => {
           const plane = sectionPlaneForAxis(axis.axis);
@@ -107,6 +93,5 @@ export function renderShellSliceNavigator(section: SectionRef): string {
         })
         .join("")}
     </div>
-    <span>ドラッグで回転 · 上下操作で面を送る</span>
   </div>`;
 }

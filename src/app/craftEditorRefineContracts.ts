@@ -34,8 +34,6 @@ export const CRAFT_EDITOR_REFINE_TEST_HOOKS = [
   "data-preview-dock",
   "data-mobile-drawer",
   "data-workbench-zoom",
-  "data-workbench-pitch",
-  "data-workbench-yaw",
   "data-section-plane",
   "data-section-step",
 ] as const;
@@ -61,7 +59,8 @@ export const CRAFT_EDITOR_REFINE_ACCEPTANCE_CONTRACTS = [
   },
   {
     id: "CER-PREVIEW",
-    requirement: "Compact fixed-seed preview docked in the workbench",
+    requirement:
+      "Collapsible fixed-seed preview below the selected-layer inspector",
     phase: 2,
     evidence: ["unit", "dom", "screenshot"],
   },
@@ -73,7 +72,7 @@ export const CRAFT_EDITOR_REFINE_ACCEPTANCE_CONTRACTS = [
   },
   {
     id: "CER-CONTROLS",
-    requirement: "XYZ, five-step section, zoom, pitch, and yaw controls",
+    requirement: "Compact XYZ, five-step section, and zoom controls",
     phase: 4,
     evidence: ["unit", "dom", "browser"],
   },

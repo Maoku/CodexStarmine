@@ -47,7 +47,7 @@ describe("IntegratedPlacementWorkbench", () => {
     expect(restored.y).toBeCloseTo(0, 8);
   });
 
-  it("renders explicit XYZ, five-step section, zoom, pitch, and yaw controls", () => {
+  it("renders a compact XYZ gizmo with section and zoom controls", () => {
     const runtime = ensureFireworkDesignV3(CHRYSANTHEMUM_PRESET);
     const intent = migrateV3ToV4(runtime);
     const markup = renderIntegratedPlacementWorkbench(
@@ -69,8 +69,13 @@ describe("IntegratedPlacementWorkbench", () => {
     expect(markup).toContain('min="0" max="4" step="1" value="2"');
     expect(markup).toContain("data-workbench-zoom");
     expect(markup).toContain('min="50" max="200" step="10"');
-    expect(markup).toContain("data-workbench-pitch");
-    expect(markup).toContain("data-workbench-yaw");
+    expect(markup.indexOf("data-section-step")).toBeLessThan(
+      markup.indexOf("data-workbench-zoom"),
+    );
+    expect(markup).not.toContain("data-workbench-pitch");
+    expect(markup).not.toContain("data-workbench-yaw");
+    expect(markup).not.toContain("上下回転");
+    expect(markup).not.toContain("左右回転");
     expect(markup).not.toContain("緯度区画");
     expect(markup).not.toContain("経度区画");
     expect(markup).not.toContain("配置面の回転");

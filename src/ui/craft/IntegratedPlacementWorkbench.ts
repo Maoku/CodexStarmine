@@ -287,11 +287,9 @@ function renderWorkbenchViewControls(
   const stepIndex = sectionRatioIndex(section.ratio);
   const stepLabel = sectionStepLabel(section);
   return `<div class="workbench-view-toolbar">
-    <label class="workbench-zoom-control"><span>縮小</span><input name="workbench-zoom" data-workbench-zoom type="range" min="50" max="200" step="10" value="${zoomPercent}" aria-label="玉の表示倍率" aria-valuetext="${zoomPercent}パーセント" /><span>拡大</span><output>${zoomPercent}%</output></label>
-    <label class="workbench-section-control"><span>${section.plane.toUpperCase()}面</span><input name="section-step" data-section-step type="range" min="0" max="4" step="1" value="${stepIndex}" aria-label="操作面の位置" aria-valuetext="${section.plane.toUpperCase()}面 ${stepLabel}" /><output>${stepLabel}</output></label>
-  </div>
-  <label class="workbench-pitch-control"><span>上下回転</span><input name="workbench-pitch" data-workbench-pitch type="range" min="-60" max="60" step="5" value="${state.pitchDegrees}" aria-label="玉を上下に回転" aria-valuetext="${state.pitchDegrees}度" /><output>${state.pitchDegrees}°</output></label>
-  <label class="workbench-yaw-control"><span>左右回転</span><input name="workbench-yaw" data-workbench-yaw type="range" min="-180" max="180" step="5" value="${state.yawDegrees}" aria-label="玉を左右に回転" aria-valuetext="${state.yawDegrees}度" /><output>${state.yawDegrees}°</output></label>`;
+    <label class="workbench-section-control"><span>面位置</span><input name="section-step" data-section-step type="range" min="0" max="4" step="1" value="${stepIndex}" aria-label="操作面の位置" aria-valuetext="${section.plane.toUpperCase()}面 ${stepLabel}" /><output>${section.plane.toUpperCase()} · ${stepLabel}</output></label>
+    <label class="workbench-zoom-control"><span>表示</span><input name="workbench-zoom" data-workbench-zoom type="range" min="50" max="200" step="10" value="${zoomPercent}" aria-label="玉の表示倍率" aria-valuetext="${zoomPercent}パーセント" /><output>${zoomPercent}%</output></label>
+  </div>`;
 }
 
 export function renderIntegratedPlacementWorkbench(
@@ -411,7 +409,10 @@ export function renderIntegratedPlacementWorkbench(
       ${pointEditingAllowed ? `<button type="button" data-action="delete-point" ${selectedPointIndex === undefined ? "disabled" : ""}>選択点を削除</button>` : ""}
     </div>
     <div class="workbench-canvas-wrap">
-      ${renderWorkbenchViewControls(section, normalizedView)}
+      <div class="workbench-view-cluster" aria-label="操作面と表示倍率">
+        ${renderShellSliceNavigator(section)}
+        ${renderWorkbenchViewControls(section, normalizedView)}
+      </div>
       <svg viewBox="0 0 600 544" data-workbench-canvas role="img" aria-label="選択中の切断面と全レイヤーの参照点">
         <defs>
           <radialGradient id="workbench-shell-fill" cx="35%" cy="28%"><stop offset="0" stop-color="#33444d"/><stop offset=".46" stop-color="#151d24"/><stop offset=".82" stop-color="#0a1117"/><stop offset="1" stop-color="#302416"/></radialGradient>
@@ -429,7 +430,6 @@ export function renderIntegratedPlacementWorkbench(
         <path d="${sectionPath}" class="workbench-section-edge" />
         <circle cx="300" cy="272" r="${shellRadius.toFixed(1)}" class="workbench-sphere-front" />
       </svg>
-      ${renderShellSliceNavigator(section)}
       <p class="slice-announcement" aria-live="polite">${escapeHTML(sliceAnnouncement)}</p>
       <p>${pointEditingAllowed ? (placementTemplate === "manual" ? "断面円を押して1点追加。現在断面の点だけ移動できます。" : placementTemplate === "image" ? "画像上で被写体・特徴・除外背景を指定し、確認後に現在断面へ配置します。" : "現在断面へ等間隔配置し、その後は各点を編集できます。") : patternEditing ? "形状は上のボタン、サイズ・密度・回転は右のパラメーターで調整します。" : "生成点は参照表示です。右のパラメーターで調整してください。"}</p>
     </div>

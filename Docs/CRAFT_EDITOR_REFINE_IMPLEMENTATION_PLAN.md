@@ -1,7 +1,7 @@
 # 花火エディタ改良 実装計画書
 
 - 作成日: 2026-07-20
-- ステータス: 実装完了（Refine Phase 5 完了）
+- ステータス: 実装完了（Refine Phase 5＋UI追補 完了）
 - 基準資料: [CRAFT_EDITOR_REFINE_PLAN.md](CRAFT_EDITOR_REFINE_PLAN.md)
 - 関連計画: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RENEWAL_IMPLEMENTATION_PLAN3.md](RENEWAL_IMPLEMENTATION_PLAN3.md)
 - 対象: アプリ全体の文字可読性、製作エディタのヘッダー／フッター、玉内配置ワークベンチ、選択レイヤー、打上結果プレビュー
@@ -18,10 +18,10 @@
 4. フッターに一時ステータス／TIPS、負荷予測、保存、湖面確認が常時見える。
 5. `保存して棚へ` は `湖面で確認` と同じ主要操作グループに置かれ、未保存時は青色で状態が分かる。
 6. `湖面で確認` はフッター右端、すなわち画面右下にある。
-7. 玉内配置ワークベンチはズーム、X/Y/Z面選択、左右／上下回転、5段階の操作面位置を扱える。
-8. 回転中は仮想星の前後関係と操作面の傾きが変わり、玉が3次元的に見える。
+7. 玉内配置ワークベンチは小型XYZギズモ、軸ボタン、ズーム、5段階の操作面位置を扱える。
+8. 軸ボタンで表示姿勢が選択面へスナップし、仮想星の前後関係と操作面の傾きが変わる。
 9. 選択レイヤーの名前をペイン見出しで直接編集でき、設定表示域が現在より広い。
-10. 打上結果プレビューは小型化され、中央ワークベンチ領域の右下へ移る。
+10. 打上結果プレビューは小型化され、選択レイヤーの下で折り畳める。
 11. 1440 × 900、1280 × 720、390 × 844で主要操作が重ならず、保存と湖面確認まで横スクロールなしで完了できる。
 
 花火のコンパイル、固定seedプレビュー、保存済み作品、Undo/Redoの意味は変更しない。
@@ -69,7 +69,7 @@
 | 保存 | `secondary-save` の見た目はdirty状態と無関係 | clean時は抑制色、dirty時は青色の主要ボタンにする |
 | 湖面確認 | 右端にあるが、広い1fr領域の影響で保存との階層差が大きい | 右端を維持し、保存と同じ操作グループに整理する |
 | 負荷予測 | 右ペイン上部にカード表示。1280 × 720では表示域から押し出されやすい | フッターへ常時表示し、警告時だけ簡略化導線を出す |
-| ワークベンチ | 2D正面断面、XY/XZの2面、5断面。ズームと独立した回転状態はない | ズーム、XYZ面、左右／上下回転、段階スライダーを追加する |
+| ワークベンチ | 2D正面断面、XY/XZの2面、5断面。ズームがない | 小型XYZギズモ、軸ボタン、ズーム、段階スライダーを追加する |
 | XYZギズモ | X/Y/ZはSVGの装飾テキスト | キーボード操作可能な面選択ボタンにする |
 | 選択レイヤー | レイヤー名入力はペイン本体の先頭。負荷カードとプレビューが右ペインを占有 | 名前入力を見出しへ移し、右ペインを設定中心に広げる |
 | 打上結果プレビュー | 右ペイン下部で高さ9.5〜13.5rem | 中央ペイン右下へ移し、高さ8〜10rem程度へ縮める |
@@ -277,19 +277,18 @@ interface WorkbenchViewState {
 ### 7.4 ズーム
 
 - 範囲50〜200%、10%刻み、既定100%。
-- ワークベンチ見出し付近に `縮小 / 拡大` のラベル付きスライダーを置く。
+- 小型XYZギズモの下に、面位置sliderと並ぶコンパクトな表示倍率sliderを置く。
 - ズーム後も点追加、点選択、ドラッグ位置が表示点と一致する。
 - 拡大時に玉の外へはみ出した領域はワークベンチ内でclipし、ページ全体をスクロールさせない。
 - ズーム変更はプレビュー再計算やdocument historyを発生させない。
 
-### 7.5 左右／上下回転
+### 7.5 表示姿勢
 
-- 玉の左側に縦rangeを置き、pitchを操作する。
-- 玉の下側に横rangeを置き、yawを操作する。
-- 既定範囲はpitch -60〜60°、yaw -180〜180°、5°刻みとする。
-- キーボードの矢印キーでも操作でき、現在角度を `aria-valuetext` で読める。
-- 軸ボタンによる面スナップ後も、スライダーで自由に見回せる。
-- スライダー操作は `requestAnimationFrame` 単位で表示だけを更新し、固定seedプレビューを再コンパイルしない。
+- pitch／yawの独立sliderはUIを重ねるため表示しない。
+- ギズモ自体のdrag、wheel、矢印キー操作は持たせない。
+- X／Y／ZのbuttonでYZ／XZ／XY面を選び、その面が見やすい姿勢へスナップする。
+- 操作面の前後位置はギズモ下の5段階sliderだけで変更する。
+- 表示姿勢の変更は固定seed previewを再コンパイルせず、document historyも発生させない。
 
 ### 7.6 3Dらしい投影
 
@@ -326,8 +325,8 @@ WebGLを追加せず、既存SVGの編集性とテスト容易性を維持する
 - inputには現在と同じmaxlength 24と更新処理を使う。
 - レイヤー未選択時は入力をdisabledにし、`レイヤーを選択` と表示する。
 - 名前編集中のdocument更新で全DOMを置換してフォーカスやカーソル位置を失わないよう、既存の値同期方式を使うか、change時だけcommitする。
-- 右ペインからperformance cardとpreviewを除く。
-- inspector cardを残り高さいっぱいに広げ、内部フィールドだけをスクロールさせる。
+- 右ペインからperformance cardを除き、previewはinspector cardの下へ置く。
+- inspector cardをpreview以外の残り高さいっぱいに広げ、内部フィールドだけをスクロールさせる。
 - preset、pattern、manualの既存設定とロック時の制限は維持する。
 
 見出しの責務が増えるため、選択レイヤー表示を `SelectedLayerInspector.ts` の純粋レンダー関数へ分離する。
@@ -336,13 +335,13 @@ WebGLを追加せず、既存SVGの編集性とテスト容易性を維持する
 
 `InlineDiagnosticPreview` のモデルとfixed seedは変更せず、配置と大きさだけを変更する。
 
-- DOMを右ペインから`integrated-craft-bench`内のpreview dockへ移す。
-- desktopでは中央ペインの下段右端に置く。
-- 高さを8〜10rem、幅を11〜15rem程度に抑える。
-- 左側の下段を横回転スライダーへ使い、previewと重ねない。
+- DOMを選択レイヤーinspectorの直後へ置く。
+- desktopでは右ペイン下端、mobileでは設定drawer内のinspector下に置く。
+- 展開時の高さは9rem、折り畳み時は見出しだけの2.75remとする。
+- 幅は右ペインに合わせ、中央workbenchの高さを奪わない。
 - 再生／一時停止、先頭へ、星数表示は残す。
 - 1280 × 720でもプレビューfooterが切れない。
-- 390 × 844ではサムネイル表示を既定とし、必要時に展開できる。展開時もフッター主要操作を覆わない。
+- 390 × 844では設定drawer内で展開／折り畳みでき、footer主要操作を覆わない。
 - `buildCompiledBurstPreviewModel()` の150ms更新抑制と決定的間引きは維持する。
 
 ## 9. 主なファイル変更
@@ -355,7 +354,7 @@ WebGLを追加せず、既存SVGの編集性とテスト容易性を維持する
 | `src/ui/AppShell.ts` | エディタ注意文とheader保存状態の削除、footer通知との責務整理 |
 | `src/ui/screens/ModeSelectionScreen.ts` | 注意文をタイトル正本として維持。必要なら文言／テスト属性だけ調整 |
 | `src/ui/craft/IntegratedCraftEditor.ts` | view state、メッセージ状態、controls event、footer／preview／inspector組立変更 |
-| `src/ui/craft/IntegratedPlacementWorkbench.ts` | zoom・回転・面controlsを受け取り、回転投影で描画 |
+| `src/ui/craft/IntegratedPlacementWorkbench.ts` | 小型XYZギズモ、zoom・面controlsを受け取り、面スナップ姿勢で描画 |
 | `src/ui/craft/ShellSliceNavigator.ts` | XYZ面ボタンと選択面表示 |
 | `src/ui/craft/SliceGeometry.ts` | YZ面とview transform連携 |
 | `src/ui/craft/InlineDiagnosticPreview.ts` | 小型dock／mobile展開用markup |
@@ -554,14 +553,14 @@ viewport:
 - [x] 右ペインの負荷カードは重複表示されない。
 - [x] workbenchに50〜200%のzoom sliderがある。
 - [x] XボタンでYZ、YボタンでXZ、ZボタンでXYが映る。
-- [x] 玉の左に上下回転、下に左右回転のsliderがある。
-- [x] 回転により玉皮、操作面、星の前後表現が変わる。
+- [x] 小型XYZギズモの下に面位置と表示倍率のsliderがある。
+- [x] 軸ボタンによる面スナップで玉皮、操作面、星の前後表現が変わる。
 - [x] 操作面を5段階sliderで選べる。
 - [x] 回転とzoomはdirty、Undo/Redo、保存内容へ影響しない。
 - [x] 回転・zoom後も点の追加／移動位置がポインターと一致する。
 - [x] 選択レイヤー名inputがペインtitle位置にある。
 - [x] 選択レイヤーの設定表示域が現行より広い。
-- [x] 打上結果previewが小型化され、workbench右下にある。
+- [x] 打上結果previewが選択レイヤーの下にあり、展開／折り畳みできる。
 - [x] previewのfixed seedと再生操作が維持される。
 - [x] 1440 × 900、1280 × 720、390 × 844で主要UIが重ならない。
 - [x] lint、test、buildがすべて成功する。
@@ -576,7 +575,7 @@ viewport:
 | range入力ごとにUndo履歴が増える | inputは一時表示、change／pointer endで1回だけcommitする |
 | 全DOM再描画でrangeや名前入力のfocusが飛ぶ | view-only更新は対象SVG属性だけ更新し、document更新時もfocus復元をテストする |
 | footerがmobileで過密になる | 2段layout、短縮ラベル、TIPS省略を使い、主要2ボタンの幅を優先する |
-| previewが編集点や回転sliderを覆う | overlayにせず中央ペインの専用bottom dockへ置く |
+| previewが編集点を覆う | 選択レイヤーinspector下へ置き、中央workbenchから分離する |
 | 文字を太く／大きくして既存ペインがあふれる | fontを戻さず、wrap、gap、minmax、scroll領域を調整する |
 | トーストとfooterへ同じ通知が二重表示される | editor内通知とscreen共通通知の所有範囲を分ける |
 | `style.css`の重複規則で変更が無効になる | 最終authoritative blockへ集約し、computed styleを3viewportで確認する |
@@ -675,3 +674,14 @@ viewport:
 - `Docs/images/craft-editor-refine/final-editor-390x844.png`
 
 最終品質ゲート: `lint`、61ファイル／251テスト、`build`がすべて成功。
+
+### UI追補: workbench操作群とpreviewの再整理
+
+- 実施日: 2026-07-20
+- pitch／yaw sliderとギズモのdrag、wheel、矢印キー操作を削除し、操作をX／Y／Z buttonと5段階の面位置sliderへ限定した。
+- ギズモをdesktop 108px、390px幅で90pxへ縮小し、その下へ面位置と表示倍率のcompact sliderを縦に配置した。
+- fixed seed previewを中央workbenchから選択レイヤーinspector下へ移し、展開時144px、折り畳み時44pxとした。
+- 1440 × 900ではworkbench高727px、右ペインのinspector高575px、preview 302 × 144pxを確保した。
+- 1280 × 720ではcontrol cluster 168 × 188px、390 × 844では140 × 168pxとなり、いずれも横overflowはなかった。
+- 390 × 844の設定drawerではpreview 336 × 144px、折り畳み時336 × 44pxとなり、drawer内に収まった。
+- UI追補後の品質ゲートは`lint`、61ファイル／250テスト、`build`がすべて成功した。
