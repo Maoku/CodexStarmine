@@ -57,13 +57,18 @@ import {
 import { sectionAfterNavigatorDrag } from "./ShellSliceNavigator";
 import { pointFromSection, stepSection, type Point3D } from "./SliceGeometry";
 import { clientPointToSvg } from "./SvgCoordinateTransform";
-import { escapeHTML, layerAuthoringLabel } from "./viewUtils";
+import { escapeHTML } from "./viewUtils";
+import {
+  editorLoadLevel,
+  renderEditorTransport,
+  type EditorMessageKind,
+} from "./EditorTransport";
+import { renderSelectedLayerInspector } from "./SelectedLayerInspector";
 
 export interface IntegratedCraftEditorCallbacks {
   onCheck: (design: FireworkDesign) => void;
   onDesignLibraryChange: (designs: FireworkDesign[]) => void;
   onSaveToLibrary: (design: FireworkDesign) => void;
-  onToast: (message: string) => void;
 }
 
 export interface IntegratedCraftEditorDependencies {
@@ -97,6 +102,7 @@ export class IntegratedCraftEditor {
   readonly #mobileQuery: MediaQueryList;
   readonly #starLongPress = new StarLongPressGesture();
   #drawer?: MobileDrawer;
+  #editorMessage?: { kind: EditorMessageKind; text: string };
   #imageEnhanceDarkColors =
     DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.enhanceDarkColors;
   #imagePlacementMode = DEFAULT_GUIDED_IMAGE_PLACEMENT_SETTINGS.placementMode;
@@ -109,10 +115,12 @@ export class IntegratedCraftEditor {
   #manualPlacementSettings: ManualPlacementSettings = {
     ...DEFAULT_MANUAL_PLACEMENT_SETTINGS,
   };
+  #messageTimer = 0;
   #templateApplyMode: TemplateApplyMode = "replace";
   #navigatorDrag?: NavigatorDrag;
   #pointDrag?: PointDrag;
   #previewModel?: CompiledBurstPreviewModel;
+  #previewDockExpanded = false;
   #previewRevision = 0;
   #previewRunning = true;
   #previewSignature = "";
@@ -160,6 +168,7 @@ export class IntegratedCraftEditor {
   }
 
   destroy(): void {
+    window.clearTimeout(this.#messageTimer);
     window.clearTimeout(this.#previewTimer);
     this.#cancelStarPress();
     this.#unsubscribe();
@@ -196,12 +205,6 @@ export class IntegratedCraftEditor {
     const selectedStarId =
       snapshot.selection.starDefinitionId ?? selectedLayer?.defaultStarId;
     const diagnostic = snapshot.diagnostic;
-    const warningClass =
-      diagnostic.estimatedCost.maximumParticles > 6_000
-        ? "is-overload"
-        : diagnostic.estimatedCost.maximumParticles > 2_000
-          ? "is-warning"
-          : "is-good";
     const preview =
       this.#previewModel ??
       buildCompiledBurstPreviewModel(snapshot.intentDraft);
@@ -235,38 +238,35 @@ export class IntegratedCraftEditor {
           this.#imageTargetCount,
           this.#imageImporting,
         )}
+        <div class="workbench-bottom-dock">
+          ${renderInlineDiagnosticPreview(
+            preview,
+            this.#previewRunning,
+            this.#previewRevision,
+            this.#previewDockExpanded,
+          )}
+        </div>
       </main>
 
       <aside class="craft-rail craft-rail--right" aria-label="作品と配置の設定">
         <button class="drawer-close" type="button" data-action="close-drawer">閉じる</button>
-        <div class="inspector-scroll-region">
-        <section class="craft-card performance-card ${warningClass}">
-          <header><span>描画負荷</span><strong>${warningClass === "is-good" ? "● 良好" : warningClass === "is-warning" ? "▲ 注意" : "× 超過"}</strong></header>
-          <p><span>最大粒子</span><b>${diagnostic.estimatedCost.maximumParticles.toLocaleString()} / 6,000</b></p>
-          <meter min="0" max="6000" low="2000" high="5500" optimum="1200" value="${diagnostic.estimatedCost.maximumParticles}" aria-label="描画負荷: 最大粒子 ${diagnostic.estimatedCost.maximumParticles.toLocaleString()} / 6,000"></meter>
-          ${warningClass === "is-good" ? "" : `<button type="button" data-action="simplify">自動簡略化</button>`}
-        </section>
-        <section class="craft-card inspector-card">
-          <header><span>選択レイヤー</span><strong>${selectedIntent ? layerAuthoringLabel(selectedIntent) : "未選択"}</strong></header>
-          ${this.#renderInspector(intentDesign, selectedIntent)}
-        </section>
-        </div>
-        ${renderInlineDiagnosticPreview(
-          preview,
-          this.#previewRunning,
-          this.#previewRevision,
-        )}
+        ${renderSelectedLayerInspector(intentDesign, selectedIntent)}
       </aside>
 
-      <footer class="craft-transport integrated-transport">
-        <div class="history-actions">
-          <button type="button" data-action="undo" ${snapshot.canUndo ? "" : "disabled"}>Undo</button>
-          <button type="button" data-action="redo" ${snapshot.canRedo ? "" : "disabled"}>Redo</button>
-        </div>
-        <span class="editor-save-state" role="status" aria-live="polite">${snapshot.dirty ? "未保存の変更あり" : "保存済み"}</span>
-        <button type="button" data-action="save" class="secondary-save">保存して棚へ</button>
-        <button type="button" data-action="check" class="confirm-craft">湖面で確認</button>
-      </footer>
+      ${renderEditorTransport({
+        canRedo: snapshot.canRedo,
+        canUndo: snapshot.canUndo,
+        dirty: snapshot.dirty,
+        load: {
+          level: editorLoadLevel(
+            diagnostic.estimatedCost.maximumParticles,
+            6_000,
+          ),
+          limit: 6_000,
+          maximumParticles: diagnostic.estimatedCost.maximumParticles,
+        },
+        message: this.#transportMessage(snapshot, selectedIntent),
+      })}
       ${renderStarPreviewOverlay(
         design,
         this.#starPreviewId,
@@ -276,51 +276,58 @@ export class IntegratedCraftEditor {
     this.#syncMobileDrawerAccessibility();
   }
 
-  #renderInspector(
-    design: FireworkDesignV4,
+  #transportMessage(
+    snapshot: CraftDocumentSnapshot,
     selectedLayer: LayerIntentV4 | undefined,
-  ): string {
-    const optionsFor = (selectedId: string) =>
-      Object.values(design.starDefinitions)
-        .map(
-          (star) =>
-            `<option value="${star.id}" ${star.id === selectedId ? "selected" : ""}>${escapeHTML(star.displayName)}</option>`,
-        )
-        .join("");
-    let layerFields = `<p class="inspector-empty">左の一覧からレイヤーを選んでください。</p>`;
-    if (selectedLayer) {
-      let specific = "";
-      if (selectedLayer.authoringMode === "preset") {
-        const parameters = selectedLayer.parameters;
-        if (selectedLayer.presetKind === "branch") {
-          specific = `<label><span>枝数 <output>${parameters.branchCount}</output></span><input name="branch-count" type="range" min="5" max="20" value="${parameters.branchCount}" aria-label="枝数" aria-valuetext="${parameters.branchCount}本" /></label>`;
-        } else if (selectedLayer.presetKind === "child") {
-          specific = `<label><span>子花数 <output>${parameters.count}</output></span><input name="child-count" type="range" min="4" max="48" value="${parameters.count}" aria-label="子花数" aria-valuetext="${parameters.count}個" /></label>`;
-        } else {
-          specific = `<label><span>既定配置</span><select name="preset-kind"><option value="outer" ${selectedLayer.presetKind === "outer" ? "selected" : ""}>外周</option><option value="core" ${selectedLayer.presetKind === "core" ? "selected" : ""}>芯</option></select></label>
-            <label><span>仮想星数 <output>${parameters.count}</output></span><input name="layer-count" type="range" min="12" max="900" value="${parameters.count}" aria-label="仮想星数" aria-valuetext="${parameters.count}個" /></label>
-            <label><span>玉内の半径 <output>${Math.round(parameters.radius * 100)}%</output></span><input name="layer-radius" type="range" min="20" max="100" value="${Math.round(parameters.radius * 100)}" aria-label="玉内の半径" aria-valuetext="${Math.round(parameters.radius * 100)}パーセント" /></label>`;
-        }
-      } else if (selectedLayer.authoringMode === "pattern") {
-        const effectiveScale = effectivePatternScale(selectedLayer.pattern);
-        const maximumScale = patternScaleLimit(
-          selectedLayer.pattern.section,
-          selectedLayer.pattern.template,
-        );
-        specific = `<label><span>大きさ <output>${Math.round(effectiveScale * 100)}%</output></span><input name="pattern-scale" type="range" min="15" max="${Math.round(maximumScale * 100)}" value="${Math.round(effectiveScale * 100)}" aria-label="型物の大きさ" aria-valuetext="${Math.round(effectiveScale * 100)}パーセント" /></label>
-          <label><span>点の密度 <output>${selectedLayer.pattern.density}</output></span><input name="pattern-density" type="range" min="12" max="240" value="${selectedLayer.pattern.density}" aria-label="型物の点の密度" aria-valuetext="${selectedLayer.pattern.density}個" /></label>
-          <label><span>回転 <output>${selectedLayer.pattern.rotationDegrees}°</output></span><input name="pattern-rotation" type="range" min="0" max="345" step="15" value="${selectedLayer.pattern.rotationDegrees}" aria-label="型物の回転" aria-valuetext="${selectedLayer.pattern.rotationDegrees}度" /></label>
-          <p class="inspector-note">型物の生成点は個別編集できません。断面は中央のワークベンチで選びます。</p>`;
-      } else {
-        specific = `<p class="inspector-note">手動レイヤーでは、表示中の断面上にある仮想星を1点ずつ編集できます。</p>`;
-      }
-      layerFields = `<div class="inspector-fields">
-        <label><span>レイヤー名</span><input name="layer-name" type="text" maxlength="24" value="${escapeHTML(selectedLayer.name)}" /></label>
-        <label><span>既定の仮想星</span><select name="layer-star">${optionsFor(selectedLayer.defaultStarId)}</select></label>
-        ${specific}
-      </div>`;
+  ): { kind: EditorMessageKind; text: string } {
+    if (this.#editorMessage?.kind === "warning") return this.#editorMessage;
+    if (snapshot.diagnostic.estimatedCost.maximumParticles > 6_000) {
+      return {
+        kind: "warning",
+        text: "実行上限を超えています。自動簡略化してください",
+      };
     }
-    return layerFields;
+    if (this.#editorMessage) return this.#editorMessage;
+    if (snapshot.dirty) {
+      return { kind: "status", text: "未保存の変更があります" };
+    }
+    if (!selectedLayer) {
+      return { kind: "tip", text: "レイヤーを選ぶと設定を編集できます" };
+    }
+    if (selectedLayer.authoringMode === "manual") {
+      return {
+        kind: "tip",
+        text: "操作面を押して点を追加し、既存点はドラッグできます",
+      };
+    }
+    if (selectedLayer.authoringMode === "pattern") {
+      return { kind: "tip", text: "形状と操作面を選び、右側で整えます" };
+    }
+    return { kind: "tip", text: "右側の設定で星数と半径を整えます" };
+  }
+
+  #showEditorMessage(
+    kind: EditorMessageKind,
+    text: string,
+    persistent = kind === "warning",
+  ): void {
+    window.clearTimeout(this.#messageTimer);
+    this.#messageTimer = 0;
+    this.#editorMessage = { kind, text };
+    this.#render();
+    if (persistent) return;
+    this.#messageTimer = window.setTimeout(() => {
+      this.#editorMessage = undefined;
+      this.#messageTimer = 0;
+      this.#render();
+    }, 3_600);
+  }
+
+  #dismissEditorWarning(): void {
+    if (this.#editorMessage?.kind !== "warning") return;
+    window.clearTimeout(this.#messageTimer);
+    this.#messageTimer = 0;
+    this.#editorMessage = undefined;
   }
 
   readonly #handleClick = (event: Event): void => {
@@ -350,6 +357,7 @@ export class IntegratedCraftEditor {
   #runAction(action: string, button: HTMLButtonElement): void {
     const snapshot = this.#snapshot;
     if (!snapshot) return;
+    this.#dismissEditorWarning();
     const layerId =
       button.closest<HTMLElement>("[data-layer-id]")?.dataset.layerId ??
       snapshot.selection.layerId;
@@ -447,12 +455,14 @@ export class IntegratedCraftEditor {
       this.#placementTemplate = "image";
       this.#selectedPointIndex = undefined;
       if (layer?.authoringMode !== "manual") {
-        this.#callbacks.onToast("手動レイヤーを選んでください");
+        this.#showEditorMessage("warning", "手動レイヤーを選んでください");
         return;
       }
       if (layer.locked) {
-        this.#callbacks.onToast("レイヤーのロックを解除してください");
-        this.#render();
+        this.#showEditorMessage(
+          "warning",
+          "レイヤーのロックを解除してください",
+        );
         return;
       }
       if (this.#imageImporting) return;
@@ -475,6 +485,9 @@ export class IntegratedCraftEditor {
     } else if (action === "toggle-preview") {
       this.#previewRunning = !this.#previewRunning;
       this.#render();
+    } else if (action === "toggle-preview-dock") {
+      this.#previewDockExpanded = !this.#previewDockExpanded;
+      this.#render();
     } else if (action === "reset-preview") {
       this.#previewRunning = true;
       this.#previewRevision += 1;
@@ -489,6 +502,7 @@ export class IntegratedCraftEditor {
   readonly #handleChange = (event: Event): void => {
     const input = event.target as HTMLInputElement | HTMLSelectElement;
     if (!this.#snapshot) return;
+    this.#dismissEditorWarning();
     if (input.name === "image-placement-file") {
       const file = (input as HTMLInputElement).files?.[0];
       (input as HTMLInputElement).value = "";
@@ -1012,7 +1026,7 @@ export class IntegratedCraftEditor {
     const layer = draft.layers.find((candidate) => candidate.id === layerId);
     if (!layer || layer.locked) return;
     if (draft.layers.length <= 1) {
-      this.#callbacks.onToast("外周レイヤーは残してください");
+      this.#showEditorMessage("warning", "外周レイヤーは残してください");
       return;
     }
     this.#selectedPointIndex = undefined;
@@ -1042,7 +1056,8 @@ export class IntegratedCraftEditor {
       }
       layer.defaultStarId = starId;
     });
-    this.#callbacks.onToast(
+    this.#showEditorMessage(
+      "status",
       replacedPoint
         ? "選択した配置点の仮想星を変更しました"
         : "選択レイヤーの仮想星を変更しました",
@@ -1086,11 +1101,14 @@ export class IntegratedCraftEditor {
     const label = (
       { circle: "円周", line: "直線", arc: "円弧", grid: "格子" } as const
     )[template];
-    this.#callbacks.onToast(
-      applied
-        ? `選択中の切断面へ${label}を${this.#templateApplyMode === "append" ? "追加" : "配置"}しました`
-        : "手動レイヤーを選んでください",
-    );
+    if (applied) {
+      this.#showEditorMessage(
+        "status",
+        `選択中の切断面へ${label}を${this.#templateApplyMode === "append" ? "追加" : "配置"}しました`,
+      );
+    } else {
+      this.#showEditorMessage("warning", "手動レイヤーを選んでください");
+    }
   }
 
   async #applyImagePlacement(file: File): Promise<void> {
@@ -1098,11 +1116,11 @@ export class IntegratedCraftEditor {
     const layerId = this.#snapshot?.selection.layerId;
     const layer = this.#selectedIntentLayer();
     if (!layerId || layer?.authoringMode !== "manual") {
-      this.#callbacks.onToast("手動レイヤーを選んでください");
+      this.#showEditorMessage("warning", "手動レイヤーを選んでください");
       return;
     }
     if (layer.locked) {
-      this.#callbacks.onToast("レイヤーのロックを解除してください");
+      this.#showEditorMessage("warning", "レイヤーのロックを解除してください");
       return;
     }
 
@@ -1134,7 +1152,10 @@ export class IntegratedCraftEditor {
       if (
         dialogResult.placement.points.length < IMAGE_PLACEMENT_MINIMUM_POINTS
       ) {
-        this.#callbacks.onToast("画像から被写体を検出できませんでした");
+        this.#showEditorMessage(
+          "warning",
+          "画像から被写体を検出できませんでした",
+        );
         return;
       }
       let result: ApplyImagePlacementResult | undefined;
@@ -1146,17 +1167,21 @@ export class IntegratedCraftEditor {
         });
       });
       if (result?.status === "locked") {
-        this.#callbacks.onToast("レイヤーのロックを解除してください");
+        this.#showEditorMessage(
+          "warning",
+          "レイヤーのロックを解除してください",
+        );
       } else if (result?.status !== "applied") {
-        this.#callbacks.onToast("手動レイヤーを選んでください");
+        this.#showEditorMessage("warning", "手動レイヤーを選んでください");
       } else {
         this.#selectedPointIndex = undefined;
-        this.#callbacks.onToast(
+        this.#showEditorMessage(
+          "status",
           `画像から${result.appliedPointCount}点を配置しました`,
         );
       }
     } catch {
-      this.#callbacks.onToast("画像の読み込みに失敗しました");
+      this.#showEditorMessage("warning", "画像の読み込みに失敗しました");
     } finally {
       this.#imageImporting = false;
       this.#render();
@@ -1228,7 +1253,7 @@ export class IntegratedCraftEditor {
     });
     if (addedIndex === undefined) {
       if (starId) this.#assignStar(starId);
-      else this.#callbacks.onToast("手動レイヤーを選んでください");
+      else this.#showEditorMessage("warning", "手動レイヤーを選んでください");
       return;
     }
     this.#placementTemplate = "manual";
@@ -1298,21 +1323,22 @@ export class IntegratedCraftEditor {
         }
       });
     });
-    this.#callbacks.onToast("層構成を保ったまま星数を簡略化しました");
+    this.#showEditorMessage("status", "層構成を保ったまま星数を簡略化しました");
   }
 
   #save(toLibrary: boolean): void {
     const snapshot = this.#snapshot;
     if (!snapshot) return;
     if (snapshot.diagnostic.estimatedCost.maximumParticles > 6_000) {
-      this.#callbacks.onToast(
+      this.#showEditorMessage(
+        "warning",
         "実行上限を超えています。先に自動簡略化してください",
       );
       return;
     }
     const saved = this.#controller.save();
     this.#callbacks.onDesignLibraryChange(this.#controller.savedDesigns);
-    this.#callbacks.onToast(`「${saved.name}」を保存しました`);
     if (toLibrary) this.#callbacks.onSaveToLibrary(saved);
+    else this.#showEditorMessage("status", `「${saved.name}」を保存しました`);
   }
 }

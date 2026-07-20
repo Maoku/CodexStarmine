@@ -1,7 +1,7 @@
 # 花火エディタ改良 実装計画書
 
 - 作成日: 2026-07-20
-- ステータス: 実装中（Refine Phase 0 完了）
+- ステータス: 実装中（Refine Phase 2 完了）
 - 基準資料: [CRAFT_EDITOR_REFINE_PLAN.md](CRAFT_EDITOR_REFINE_PLAN.md)
 - 関連計画: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RENEWAL_IMPLEMENTATION_PLAN3.md](RENEWAL_IMPLEMENTATION_PLAN3.md)
 - 対象: アプリ全体の文字可読性、製作エディタのヘッダー／フッター、玉内配置ワークベンチ、選択レイヤー、打上結果プレビュー
@@ -623,3 +623,13 @@ viewport:
 - headerとworkspaceの位置を`--editor-header-height`と`--editor-workspace-gap`へ集約した。
 - 実測header高は1440 × 900で92pxから68px、390 × 844で78pxから76pxになった。
 - desktopのworkbench表示高は790pxから814pxへ増加し、主要header文字のcomputed weightは600、横overflowは発生しなかった。
+
+### Refine Phase 2: footer、選択レイヤー、preview再配置
+
+- `EditorTransport`を追加し、DOM／Tab順をUndo、Redo、message、load、save、checkへ固定した。
+- TIPS／状態／警告を`aria-live`領域へ集約し、editor内通知はfooter、棚へ遷移する保存通知は共通toastへ分離した。
+- 負荷予測をfooterへ移し、good／warning／overloadの状態、数値、meter、必要時の自動簡略化を表示した。
+- 保存ボタンは`data-save-state`と補助文を持ち、dirty時に青色、clean時に抑制色となる。
+- `SelectedLayerInspector`へ見出し内のレイヤー名inputと既存設定を分離し、右ペインの負荷カードとpreviewを削除した。
+- fixed seed previewを中央workbench右下へ移し、desktop 224 × 144px、mobile既定168 × 80pxのdockとした。
+- 390 × 844ではfooterを2段116pxにし、保存／湖面確認を44px高で下段へ配置した。横overflowと主要操作の重なりはなかった。

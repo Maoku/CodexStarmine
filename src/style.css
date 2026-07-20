@@ -6017,3 +6017,366 @@ h3,
       0.35rem 0.35rem;
   }
 }
+
+/* Craft editor refine Phase 2: transport, inspector, and preview dock. */
+
+.craft-workspace.integrated-craft-editor {
+  grid-template-rows: minmax(0, 1fr) 4.75rem;
+}
+
+.craft-bench.integrated-craft-bench {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.integrated-craft-bench .integrated-workbench {
+  height: auto;
+  min-height: 0;
+}
+
+.workbench-bottom-dock {
+  display: grid;
+  min-height: 9rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  border-top: 1px solid rgb(153 117 76 / 22%);
+  background: rgb(3 8 12 / 72%);
+}
+
+.workbench-bottom-dock .inline-diagnostic-preview {
+  display: grid;
+  width: clamp(11rem, 17vw, 14rem);
+  min-height: 0;
+  height: 9rem;
+  grid-column: 2;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+}
+
+.workbench-bottom-dock .inline-diagnostic-preview > header {
+  min-height: 2rem;
+  padding: 0.35rem 0.55rem;
+}
+
+.workbench-bottom-dock .inline-preview-canvas {
+  height: auto;
+  min-height: 0;
+}
+
+.workbench-bottom-dock .inline-diagnostic-preview > footer {
+  padding: 0.25rem 0.35rem;
+}
+
+.workbench-bottom-dock .inline-diagnostic-preview > footer button {
+  min-height: 2rem;
+}
+
+.preview-dock-toggle {
+  display: none;
+}
+
+.integrated-craft-editor .craft-rail.craft-rail--right {
+  gap: 0;
+}
+
+.integrated-craft-editor .inspector-card {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.integrated-craft-editor .inspector-card > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.45rem;
+}
+
+.inspector-title-field {
+  min-width: 0;
+}
+
+.inspector-title-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0.28rem;
+  outline: none;
+  background: rgb(0 2 7 / 42%);
+  color: #ddd8cf;
+  font-size: var(--font-ui-sm);
+}
+
+.inspector-title-field input:focus-visible {
+  border-color: #78aef3;
+  box-shadow: 0 0 0 2px rgb(77 145 229 / 22%);
+}
+
+.inspector-title-field input:disabled {
+  color: #737a82;
+}
+
+.inspector-body {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-color: rgb(205 158 96 / 35%) transparent;
+  scrollbar-width: thin;
+}
+
+.craft-transport.integrated-transport {
+  display: grid;
+  grid-template-columns: auto auto minmax(10rem, 1fr) minmax(
+      12rem,
+      auto
+    ) auto auto;
+  gap: 0.45rem;
+  padding: 0.45rem 0.55rem;
+}
+
+.integrated-transport > button {
+  min-height: 2.75rem;
+}
+
+.integrated-transport .history-action {
+  min-width: 3.35rem;
+  padding: 0 0.55rem;
+}
+
+.editor-transport-message {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.45rem;
+  color: #9aa2aa;
+  font-size: var(--font-ui-xs);
+}
+
+.editor-transport-message b {
+  flex: 0 0 auto;
+  color: #c6a477;
+  font-size: var(--font-ui-xs);
+  letter-spacing: 0.08em;
+}
+
+.editor-transport-message > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-transport-message[data-message-kind="warning"] {
+  color: #f1b6a8;
+}
+
+.editor-transport-message[data-message-kind="warning"] b {
+  color: #ef8d78;
+}
+
+.editor-load {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.2rem 0.4rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0.3rem;
+  background: rgb(255 255 255 / 2%);
+  color: #818991;
+  font-size: var(--font-ui-xs);
+}
+
+.editor-load strong {
+  overflow: hidden;
+  color: #b9c8bd;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-ui-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-load meter {
+  width: 100%;
+  height: 0.35rem;
+  grid-column: 1 / -1;
+  accent-color: #6fb28a;
+}
+
+.editor-load[data-load-level="warning"] strong,
+.editor-load[data-load-level="warning"] meter {
+  color: #d9ac68;
+  accent-color: #d29a54;
+}
+
+.editor-load[data-load-level="overload"] strong,
+.editor-load[data-load-level="overload"] meter {
+  color: #ee8975;
+  accent-color: #df7664;
+}
+
+.editor-load > button {
+  min-height: 1.9rem;
+  padding: 0 0.45rem;
+  font-size: var(--font-ui-xs);
+}
+
+.integrated-transport .secondary-save {
+  display: grid;
+  min-width: 9rem;
+  align-content: center;
+  padding: 0 0.8rem;
+  line-height: 1.15;
+}
+
+.integrated-transport .secondary-save small {
+  margin-top: 0.15rem;
+  color: #77818b;
+  font-family: Inter, "Hiragino Sans", sans-serif;
+  font-size: var(--font-ui-xs);
+}
+
+.integrated-transport .secondary-save.is-dirty {
+  border-color: #69aafa;
+  background: linear-gradient(135deg, #164f91, #2476cf);
+  box-shadow: 0 0 1rem rgb(37 119 214 / 28%);
+  color: #f2f8ff;
+}
+
+.integrated-transport .secondary-save.is-dirty small {
+  color: #cce3ff;
+}
+
+.integrated-transport .confirm-craft {
+  min-width: 10rem;
+}
+
+@media (max-width: 900px) {
+  .craft-workspace.integrated-craft-editor {
+    grid-template-rows: 3rem minmax(0, 1fr) 7.25rem;
+  }
+
+  .craft-transport.integrated-transport {
+    grid-template-areas:
+      "message message load load"
+      "undo redo save check";
+    grid-template-columns: auto auto minmax(6.5rem, 1fr) minmax(7rem, 1fr);
+    grid-template-rows: 2.1rem minmax(0, 1fr);
+    gap: 0.25rem;
+    padding: 0.3rem;
+  }
+
+  .history-action--undo {
+    grid-area: undo;
+  }
+
+  .history-action--redo {
+    grid-area: redo;
+  }
+
+  .editor-transport-message {
+    grid-area: message;
+    padding: 0 0.35rem;
+  }
+
+  .editor-load {
+    display: flex;
+    grid-area: load;
+    justify-content: flex-end;
+    padding: 0 0.35rem;
+  }
+
+  .editor-load meter {
+    display: none;
+  }
+
+  .editor-load > button {
+    min-height: 1.65rem;
+  }
+
+  .integrated-transport .secondary-save {
+    grid-area: save;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .integrated-transport .confirm-craft {
+    grid-area: check;
+    min-width: 0;
+  }
+
+  .preview-dock-toggle {
+    display: inline-grid;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    place-items: center;
+    border: 1px solid rgb(255 255 255 / 11%);
+    border-radius: 0.25rem;
+    background: rgb(255 255 255 / 3%);
+    color: #b9b6ae;
+  }
+
+  .workbench-bottom-dock {
+    min-height: 5rem;
+  }
+
+  .workbench-bottom-dock .inline-diagnostic-preview {
+    width: 10.5rem;
+    height: 5rem;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .workbench-bottom-dock .inline-diagnostic-preview:not(.is-expanded) > footer {
+    display: none;
+  }
+
+  .workbench-bottom-dock .inline-diagnostic-preview.is-expanded {
+    width: min(15rem, calc(100vw - 1rem));
+    height: 10rem;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .integrated-craft-bench .integrated-workbench {
+    min-height: 17rem;
+  }
+}
+
+@media (max-width: 620px) {
+  .craft-transport.integrated-transport {
+    display: grid;
+  }
+
+  .integrated-transport > button,
+  .integrated-transport .confirm-craft {
+    min-height: 2.75rem;
+    padding: 0 0.35rem;
+    font-size: var(--font-ui-xs);
+  }
+
+  .integrated-transport .history-action {
+    min-width: 2.75rem;
+  }
+
+  .integrated-transport .secondary-save small {
+    display: block;
+  }
+
+  .editor-transport-message b {
+    display: none;
+  }
+
+  .editor-load > span,
+  .editor-load strong {
+    font-size: var(--font-ui-xs);
+  }
+
+  .workbench-bottom-dock .inline-diagnostic-preview > header strong {
+    display: none;
+  }
+}

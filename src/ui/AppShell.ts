@@ -276,9 +276,10 @@ export class AppShell {
     const workspace = new IntegratedCraftEditor(this.#controller, {
       onCheck: () => this.#flow.navigate("check-on-lake"),
       onDesignLibraryChange: this.#callbacks.onDesignLibraryChange,
-      onSaveToLibrary: (design) =>
-        this.#flow.navigate("save-to-library", { designId: design.id }),
-      onToast: (message) => this.showToast(message),
+      onSaveToLibrary: (design) => {
+        this.#flow.navigate("save-to-library", { designId: design.id });
+        this.showToast(`「${design.name}」を保存しました`);
+      },
     });
     const host = element.querySelector<HTMLElement>("[data-editor-host]");
     if (!host) throw new Error("Editor host was not found.");
