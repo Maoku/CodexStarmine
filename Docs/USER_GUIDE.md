@@ -6,6 +6,9 @@ Codex Starmine は、花火玉の内部に仮想星を配置し、完成した�
 
 ## 1. 起動する
 
+公開ページからアクセス
+https://maoku.github.io/CodexStarmine/
+
 開発環境では、リポジトリのルートで次を実行します。
 
 ```bash
