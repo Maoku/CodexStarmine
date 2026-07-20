@@ -32,16 +32,22 @@ describe("IntegratedPlacementWorkbench", () => {
 
   it("maps canvas and 3D points through the same section coordinate system", () => {
     const section = { plane: "xz" as const, ratio: 0.7 as const };
-    const center = canvasPointOnSection(300, 272, section);
-    expect(center).toEqual({ x: 0, y: 0 });
+    const view = { pitchDegrees: -60, yawDegrees: 0, zoom: 1 };
     const source = createPlacementTemplatePoints("circle", section)[0];
-    const projected = projectSectionPoint(source, section);
+    const projected = projectSectionPoint(source, section, view);
+    const restored = canvasPointOnSection(
+      projected.x,
+      projected.y,
+      section,
+      view,
+    );
     expect(projected.x).toBeGreaterThan(300);
-    expect(projected.y).toBeCloseTo(272, 8);
     expect(projected.distanceFromPlane).toBeCloseTo(0, 8);
+    expect(restored.x).toBeCloseTo(0.72, 8);
+    expect(restored.y).toBeCloseTo(0, 8);
   });
 
-  it("renders the spatial navigator without numeric section controls", () => {
+  it("renders explicit XYZ, five-step section, zoom, pitch, and yaw controls", () => {
     const runtime = ensureFireworkDesignV3(CHRYSANTHEMUM_PRESET);
     const intent = migrateV3ToV4(runtime);
     const markup = renderIntegratedPlacementWorkbench(
@@ -56,17 +62,54 @@ describe("IntegratedPlacementWorkbench", () => {
 
     expect(markup).toContain("data-shell-slice-navigator");
     expect(markup).toContain("slice-disc");
-    expect(markup).not.toContain("断面の向き");
-    expect(markup).not.toContain("断面位置");
-    expect(markup).not.toContain(">XY<");
-    expect(markup).not.toContain(">XZ<");
-    [10, 30, 50, 70, 90].forEach((ratio) =>
-      expect(markup).not.toContain(`>${ratio}%<`),
-    );
+    expect(markup).toContain('data-axis="x" data-section-plane="yz"');
+    expect(markup).toContain('data-axis="y" data-section-plane="xz"');
+    expect(markup).toContain('data-axis="z" data-section-plane="xy"');
+    expect(markup).toContain("data-section-step");
+    expect(markup).toContain('min="0" max="4" step="1" value="2"');
+    expect(markup).toContain("data-workbench-zoom");
+    expect(markup).toContain('min="50" max="200" step="10"');
+    expect(markup).toContain("data-workbench-pitch");
+    expect(markup).toContain("data-workbench-yaw");
     expect(markup).not.toContain("緯度区画");
     expect(markup).not.toContain("経度区画");
     expect(markup).not.toContain("配置面の回転");
     expect(markup).not.toContain('data-point-editable="true"');
+  });
+
+  it("changes shell, section, and depth markup with view-only state", () => {
+    const runtime = ensureFireworkDesignV3(CHRYSANTHEMUM_PRESET);
+    const intent = migrateV3ToV4(runtime);
+    const front = renderIntegratedPlacementWorkbench(
+      runtime,
+      intent,
+      runtime.layers[0],
+      intent.layers[0],
+      { plane: "xy", ratio: 0.5 },
+      "manual",
+    );
+    const rotated = renderIntegratedPlacementWorkbench(
+      runtime,
+      intent,
+      runtime.layers[0],
+      intent.layers[0],
+      { plane: "xy", ratio: 0.5 },
+      "manual",
+      undefined,
+      "replace",
+      "",
+      undefined,
+      undefined,
+      false,
+      { pitchDegrees: 35, yawDegrees: 55, zoom: 1.4 },
+    );
+
+    expect(front).toContain('value="100" aria-label="玉の表示倍率"');
+    expect(rotated).toContain('value="140" aria-label="玉の表示倍率"');
+    expect(rotated).toContain('data-point-depth="');
+    expect(rotated).toContain("workbench-sphere-highlight");
+    expect(rotated).not.toBe(front);
+    expect(intent).toEqual(migrateV3ToV4(runtime));
   });
 
   it("puts pattern shape controls in the workbench without point operations", () => {

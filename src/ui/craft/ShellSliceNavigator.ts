@@ -1,5 +1,11 @@
 import type { SectionRef } from "../../data";
-import { pointFromSection, sliceFrame, stepSection } from "./SliceGeometry";
+import {
+  pointFromSection,
+  sectionPlaneForAxis,
+  sliceFrame,
+  stepSection,
+  type SectionAxis,
+} from "./SliceGeometry";
 
 const CENTER = { x: 92, y: 92 };
 const PROJECTION_SCALE = 55;
@@ -49,18 +55,26 @@ export function sectionAfterNavigatorDrag(
 export function renderShellSliceNavigator(section: SectionRef): string {
   const frame = sliceFrame(section);
   const center = project(frame.center);
-  const axes = [
+  const axes: Array<{
+    axis: SectionAxis;
+    className: string;
+    label: string;
+    point: { x: number; y: number };
+  }> = [
     {
+      axis: "x",
       className: "axis-x",
       label: "X",
       point: project({ x: 1.25, y: 0, z: 0 }),
     },
     {
+      axis: "y",
       className: "axis-y",
       label: "Y",
       point: project({ x: 0, y: 1.25, z: 0 }),
     },
     {
+      axis: "z",
       className: "axis-z",
       label: "Z",
       point: project({ x: 0, y: 0, z: 1.25 }),
@@ -79,12 +93,20 @@ export function renderShellSliceNavigator(section: SectionRef): string {
         ${axes
           .map(
             (axis) =>
-              `<g class="${axis.className}"><line x1="92" y1="92" x2="${axis.point.x.toFixed(2)}" y2="${axis.point.y.toFixed(2)}"/><text x="${axis.point.x.toFixed(2)}" y="${axis.point.y.toFixed(2)}">${axis.label}</text></g>`,
+              `<g class="${axis.className}"><line x1="92" y1="92" x2="${axis.point.x.toFixed(2)}" y2="${axis.point.y.toFixed(2)}"/></g>`,
           )
           .join("")}
       </g>
       <circle cx="92" cy="92" r="58" class="slice-shell-edge" />
     </svg>
+    <div class="slice-axis-buttons" aria-label="操作面を選択">
+      ${axes
+        .map((axis) => {
+          const plane = sectionPlaneForAxis(axis.axis);
+          return `<button type="button" class="${axis.className}" data-action="select-section-axis" data-axis="${axis.axis}" data-section-plane="${plane}" aria-label="${axis.label}軸に直交する${plane.toUpperCase()}面" aria-pressed="${section.plane === plane}">${axis.label}</button>`;
+        })
+        .join("")}
+    </div>
     <span>ドラッグで回転 · 上下操作で面を送る</span>
   </div>`;
 }

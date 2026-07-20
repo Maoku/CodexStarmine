@@ -39,8 +39,8 @@ describe("WorkbenchViewGeometry", () => {
       ),
     ).toMatchObject({
       depth: 0.7,
-      x: DEFAULT_WORKBENCH_VIEWPORT.centerX + 112,
-      y: DEFAULT_WORKBENCH_VIEWPORT.centerY + 56,
+      x: DEFAULT_WORKBENCH_VIEWPORT.centerX + 107,
+      y: DEFAULT_WORKBENCH_VIEWPORT.centerY + 53.5,
     });
   });
 

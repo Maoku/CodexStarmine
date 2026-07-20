@@ -25,10 +25,21 @@ import {
   pointToSection,
   sameSection,
   sectionRadius,
+  sectionRatioIndex,
   type Point3D,
   type SectionPoint2D,
 } from "./SliceGeometry";
 import { renderShellSliceNavigator } from "./ShellSliceNavigator";
+import {
+  clampPointToSectionDisc,
+  DEFAULT_WORKBENCH_VIEW_STATE,
+  normalizeWorkbenchViewState,
+  projectWorkbenchPoint,
+  projectWorkbenchSectionOutline,
+  stableDepthSort,
+  unprojectWorkbenchPointToSection,
+  type WorkbenchViewState,
+} from "./WorkbenchViewGeometry";
 
 export type PlacementTemplate = ManualPlacementKind | "image" | "manual";
 export type TemplateApplyMode = "append" | "replace";
@@ -103,7 +114,20 @@ export function canvasPointOnSection(
   svgX: number,
   svgY: number,
   section: SectionRef,
+  viewState: WorkbenchViewState = DEFAULT_WORKBENCH_VIEW_STATE,
 ): SectionPoint2D {
+  const point = unprojectWorkbenchPointToSection(
+    { x: svgX, y: svgY },
+    section,
+    viewState,
+  );
+  if (point) {
+    const local = pointToSection(
+      section,
+      clampPointToSectionDisc(point, section),
+    );
+    return clampSectionPoint(local);
+  }
   const pixelRadius = SPHERE_RADIUS_PX * sectionRadius(section);
   return clampSectionPoint({
     x: (svgX - CANVAS_CENTER.x) / pixelRadius,
@@ -114,13 +138,19 @@ export function canvasPointOnSection(
 export function projectSectionPoint(
   point: Point3D,
   section: SectionRef,
-): { distanceFromPlane: number; x: number; y: number } {
-  const projected = pointToSection(section, point);
-  const pixelRadius = SPHERE_RADIUS_PX * sectionRadius(section);
+  viewState: WorkbenchViewState = DEFAULT_WORKBENCH_VIEW_STATE,
+): {
+  depth: number;
+  distanceFromPlane: number;
+  visualScale: number;
+  x: number;
+  y: number;
+} {
+  const local = pointToSection(section, point);
+  const projected = projectWorkbenchPoint(point, viewState);
   return {
-    distanceFromPlane: projected.distanceFromPlane,
-    x: CANVAS_CENTER.x + projected.x * pixelRadius,
-    y: CANVAS_CENTER.y - projected.y * pixelRadius,
+    ...projected,
+    distanceFromPlane: local.distanceFromPlane,
   };
 }
 
@@ -230,6 +260,40 @@ function workbenchPoints(
   });
 }
 
+function pathForProjectedPoints(
+  points: ReadonlyArray<{ x: number; y: number }>,
+): string {
+  return points
+    .map(
+      (point, index) =>
+        `${index === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`,
+    )
+    .join(" ")
+    .concat(" Z");
+}
+
+function sectionStepLabel(section: SectionRef): string {
+  const index = sectionRatioIndex(section.ratio);
+  const position = index < 2 ? "手前" : index === 2 ? "中央" : "奥";
+  return `${position} ${index + 1} / 5`;
+}
+
+function renderWorkbenchViewControls(
+  section: SectionRef,
+  viewState: WorkbenchViewState,
+): string {
+  const state = normalizeWorkbenchViewState(viewState);
+  const zoomPercent = Math.round(state.zoom * 100);
+  const stepIndex = sectionRatioIndex(section.ratio);
+  const stepLabel = sectionStepLabel(section);
+  return `<div class="workbench-view-toolbar">
+    <label class="workbench-zoom-control"><span>縮小</span><input name="workbench-zoom" data-workbench-zoom type="range" min="50" max="200" step="10" value="${zoomPercent}" aria-label="玉の表示倍率" aria-valuetext="${zoomPercent}パーセント" /><span>拡大</span><output>${zoomPercent}%</output></label>
+    <label class="workbench-section-control"><span>${section.plane.toUpperCase()}面</span><input name="section-step" data-section-step type="range" min="0" max="4" step="1" value="${stepIndex}" aria-label="操作面の位置" aria-valuetext="${section.plane.toUpperCase()}面 ${stepLabel}" /><output>${stepLabel}</output></label>
+  </div>
+  <label class="workbench-pitch-control"><span>上下回転</span><input name="workbench-pitch" data-workbench-pitch type="range" min="-60" max="60" step="5" value="${state.pitchDegrees}" aria-label="玉を上下に回転" aria-valuetext="${state.pitchDegrees}度" /><output>${state.pitchDegrees}°</output></label>
+  <label class="workbench-yaw-control"><span>左右回転</span><input name="workbench-yaw" data-workbench-yaw type="range" min="-180" max="180" step="5" value="${state.yawDegrees}" aria-label="玉を左右に回転" aria-valuetext="${state.yawDegrees}度" /><output>${state.yawDegrees}°</output></label>`;
+}
+
 export function renderIntegratedPlacementWorkbench(
   design: FireworkDesign,
   intentDesign: FireworkDesignV4,
@@ -243,16 +307,20 @@ export function renderIntegratedPlacementWorkbench(
   manualPlacementSettings: ManualPlacementSettings = DEFAULT_MANUAL_PLACEMENT_SETTINGS,
   imageTargetCount = DEFAULT_IMAGE_PLACEMENT_SETTINGS.targetCount,
   imageImporting = false,
+  viewState: WorkbenchViewState = DEFAULT_WORKBENCH_VIEW_STATE,
 ): string {
+  const normalizedView = normalizeWorkbenchViewState(viewState);
   const pointEditingAllowed = selectedIntent?.authoringMode === "manual";
-  const points = workbenchPoints(
-    design,
-    intentDesign,
-    selectedLayer?.id,
-    section,
+  const points = stableDepthSort(
+    workbenchPoints(design, intentDesign, selectedLayer?.id, section).map(
+      (item) => ({
+        item,
+        projected: projectSectionPoint(item.point, section, normalizedView),
+      }),
+    ),
+    ({ projected }) => projected.depth,
   )
-    .map((item) => {
-      const projected = projectSectionPoint(item.point, section);
+    .map(({ item, projected }) => {
       const currentSection = item.section
         ? sameSection(item.section, section)
         : false;
@@ -261,6 +329,16 @@ export function renderIntegratedPlacementWorkbench(
         item.selectedLayer &&
         item.index === selectedPointIndex;
       const reference = !currentSection || !item.selectedLayer;
+      const depthOpacity = Math.min(
+        Math.max(0.38 + (projected.depth + 1) * 0.24, 0.24),
+        0.95,
+      );
+      const pointOpacity = reference
+        ? Math.min(depthOpacity, 0.42)
+        : depthOpacity;
+      const radius =
+        (selected ? 6.5 : item.selectedLayer ? 4.2 : 2.8) *
+        projected.visualScale;
       const attributes = `data-layer-id="${item.layerId}" data-point-index="${item.index}" data-point-editable="${item.editable}" data-current-section="${currentSection}"`;
       const hitTarget = item.editable
         ? `<circle cx="${projected.x.toFixed(1)}" cy="${projected.y.toFixed(1)}" r="16" class="workbench-point-hit" ${attributes} />`
@@ -268,15 +346,43 @@ export function renderIntegratedPlacementWorkbench(
       return `${hitTarget}<circle
         cx="${projected.x.toFixed(1)}"
         cy="${projected.y.toFixed(1)}"
-        r="${selected ? 6.5 : item.selectedLayer ? 4.2 : 2.8}"
-        style="--point-color:${colorToCSS(item.color)};--point-depth:${reference ? "0.28" : "0.9"}"
+        r="${radius.toFixed(2)}"
+        style="--point-color:${colorToCSS(item.color)};--point-depth:${pointOpacity.toFixed(2)}"
         class="workbench-point${item.selectedLayer ? " is-layer-selected" : ""}${selected ? " is-point-selected" : ""}${reference ? " is-reference" : ""}"
         data-point-visual="true"
+        data-point-depth="${projected.depth.toFixed(4)}"
         ${attributes}
       />`;
     })
     .join("");
-  const sliceRadius = sectionRadius(section) * SPHERE_RADIUS_PX;
+  const sectionOutline = projectWorkbenchSectionOutline(
+    section,
+    normalizedView,
+  );
+  const sectionPath = pathForProjectedPoints(sectionOutline);
+  const horizontalStart = projectSectionPoint(
+    pointFromSection(section, { x: -1, y: 0 }),
+    section,
+    normalizedView,
+  );
+  const horizontalEnd = projectSectionPoint(
+    pointFromSection(section, { x: 1, y: 0 }),
+    section,
+    normalizedView,
+  );
+  const verticalStart = projectSectionPoint(
+    pointFromSection(section, { x: 0, y: -1 }),
+    section,
+    normalizedView,
+  );
+  const verticalEnd = projectSectionPoint(
+    pointFromSection(section, { x: 0, y: 1 }),
+    section,
+    normalizedView,
+  );
+  const shellRadius = 224 * normalizedView.zoom;
+  const highlightX = 258 + (normalizedView.yawDegrees / 180) * 18;
+  const highlightY = 226 - (normalizedView.pitchDegrees / 60) * 14;
   const patternEditing = selectedIntent?.authoringMode === "pattern";
   const toolControls = pointEditingAllowed
     ? (["manual", "circle", "line", "arc", "grid"] as const)
@@ -305,16 +411,23 @@ export function renderIntegratedPlacementWorkbench(
       ${pointEditingAllowed ? `<button type="button" data-action="delete-point" ${selectedPointIndex === undefined ? "disabled" : ""}>選択点を削除</button>` : ""}
     </div>
     <div class="workbench-canvas-wrap">
+      ${renderWorkbenchViewControls(section, normalizedView)}
       <svg viewBox="0 0 600 544" data-workbench-canvas role="img" aria-label="選択中の切断面と全レイヤーの参照点">
-        <defs><radialGradient id="workbench-shell-fill"><stop offset="0" stop-color="#151d24"/><stop offset=".78" stop-color="#0a1117"/><stop offset="1" stop-color="#302416"/></radialGradient></defs>
-        <circle cx="300" cy="272" r="224" class="workbench-sphere-reference" />
-        <circle cx="300" cy="272" r="${sliceRadius.toFixed(1)}" class="workbench-section-disc" />
+        <defs>
+          <radialGradient id="workbench-shell-fill" cx="35%" cy="28%"><stop offset="0" stop-color="#33444d"/><stop offset=".46" stop-color="#151d24"/><stop offset=".82" stop-color="#0a1117"/><stop offset="1" stop-color="#302416"/></radialGradient>
+          <radialGradient id="workbench-shell-highlight"><stop stop-color="#fff" stop-opacity=".23"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+        </defs>
+        <circle cx="300" cy="272" r="${shellRadius.toFixed(1)}" class="workbench-sphere-reference" />
+        <path d="M${(300 - shellRadius).toFixed(1)} 272 A${shellRadius.toFixed(1)} ${shellRadius.toFixed(1)} 0 0 0 ${(300 + shellRadius).toFixed(1)} 272" class="workbench-sphere-rear" />
+        <ellipse cx="${highlightX.toFixed(1)}" cy="${highlightY.toFixed(1)}" rx="${(shellRadius * 0.42).toFixed(1)}" ry="${(shellRadius * 0.3).toFixed(1)}" class="workbench-sphere-highlight" />
+        <path d="${sectionPath}" class="workbench-section-disc" />
         <g class="workbench-section-grid">
-          <line x1="${(300 - sliceRadius).toFixed(1)}" y1="272" x2="${(300 + sliceRadius).toFixed(1)}" y2="272" />
-          <line x1="300" y1="${(272 - sliceRadius).toFixed(1)}" x2="300" y2="${(272 + sliceRadius).toFixed(1)}" />
+          <line x1="${horizontalStart.x.toFixed(1)}" y1="${horizontalStart.y.toFixed(1)}" x2="${horizontalEnd.x.toFixed(1)}" y2="${horizontalEnd.y.toFixed(1)}" />
+          <line x1="${verticalStart.x.toFixed(1)}" y1="${verticalStart.y.toFixed(1)}" x2="${verticalEnd.x.toFixed(1)}" y2="${verticalEnd.y.toFixed(1)}" />
         </g>
         <g class="workbench-points">${points}</g>
-        <circle cx="300" cy="272" r="${sliceRadius.toFixed(1)}" class="workbench-section-edge" />
+        <path d="${sectionPath}" class="workbench-section-edge" />
+        <circle cx="300" cy="272" r="${shellRadius.toFixed(1)}" class="workbench-sphere-front" />
       </svg>
       ${renderShellSliceNavigator(section)}
       <p class="slice-announcement" aria-live="polite">${escapeHTML(sliceAnnouncement)}</p>

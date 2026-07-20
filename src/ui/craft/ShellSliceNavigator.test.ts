@@ -13,8 +13,11 @@ describe("ShellSliceNavigator", () => {
     expect(markup).toContain(">X<");
     expect(markup).toContain(">Y<");
     expect(markup).toContain(">Z<");
-    expect(markup).not.toContain("断面の向き");
-    expect(markup).not.toContain("断面位置");
+    expect(markup).toContain('data-axis="x" data-section-plane="yz"');
+    expect(markup).toContain('data-axis="y" data-section-plane="xz"');
+    expect(markup).toContain(
+      'data-axis="z" data-section-plane="xy" aria-label="Z軸に直交するXY面" aria-pressed="true"',
+    );
   });
 
   it("maps horizontal rotation and vertical travel to compatible sections", () => {

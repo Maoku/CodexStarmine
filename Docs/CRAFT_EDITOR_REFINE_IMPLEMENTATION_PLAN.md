@@ -1,7 +1,7 @@
 # 花火エディタ改良 実装計画書
 
 - 作成日: 2026-07-20
-- ステータス: 実装中（Refine Phase 3 完了）
+- ステータス: 実装中（Refine Phase 4 完了）
 - 基準資料: [CRAFT_EDITOR_REFINE_PLAN.md](CRAFT_EDITOR_REFINE_PLAN.md)
 - 関連計画: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RENEWAL_IMPLEMENTATION_PLAN3.md](RENEWAL_IMPLEMENTATION_PLAN3.md)
 - 対象: アプリ全体の文字可読性、製作エディタのヘッダー／フッター、玉内配置ワークベンチ、選択レイヤー、打上結果プレビュー
@@ -642,3 +642,12 @@ viewport:
 - 3面×5位置と代表view／zoomで投影→逆投影のround-tripを単体テストした。
 - YZの型物と手動点がv4 export／import後も同じ面・座標で復元され、YZ型物がcompile結果のX方向へ反映されることを固定した。
 - 既存のbuilt-in preset決定性、XY／XZ recipe、migration／storage回帰テストは継続して成功した。
+
+### Refine Phase 4: workbench controlsと3D表示
+
+- X／Y／ZのHTML buttonを追加し、YZ／XZ／XY面との対応と`aria-pressed`を固定した。
+- 操作面を`SECTION_RATIOS`由来の5段階rangeへ接続し、zoom 50〜200%、pitch -60〜60°、yaw -180〜180°の表示操作を追加した。
+- 玉皮、操作面、グリッド、仮想星をyaw／pitch／zoomでSVG投影し、depth順、前後の濃淡、面の楕円変化を表示した。
+- 点の追加／ドラッグは同じview geometryのray-plane逆投影を通し、回転・zoom後も画面座標と保存座標が往復する単体テストを追加した。
+- view-only更新は対象SVGだけをanimation frame単位で差し替え、保存状態、Undo履歴、fixed seed previewを変更しない経路へ分離した。
+- 実ブラウザでX→YZ、Y→XZ、Z→XY、44px以上の全操作領域、desktop／mobileの横overflowなしを確認した。390 × 844ではworkbench下端632px、footer上端722pxで重なりはなかった。

@@ -34,7 +34,7 @@ export const DEFAULT_WORKBENCH_VIEW_STATE: Readonly<WorkbenchViewState> = {
 export const DEFAULT_WORKBENCH_VIEWPORT: Readonly<WorkbenchViewport> = {
   centerX: 300,
   centerY: 272,
-  radius: 224,
+  radius: 214,
 };
 
 function finiteOr(value: number, fallback: number): number {

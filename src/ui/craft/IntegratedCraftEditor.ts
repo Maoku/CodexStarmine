@@ -55,7 +55,14 @@ import {
   StarLongPressGesture,
 } from "./StarLongPressGesture";
 import { sectionAfterNavigatorDrag } from "./ShellSliceNavigator";
-import { pointFromSection, stepSection, type Point3D } from "./SliceGeometry";
+import {
+  pointFromSection,
+  sectionPlaneForAxis,
+  sectionRatioAt,
+  stepSection,
+  type Point3D,
+  type SectionAxis,
+} from "./SliceGeometry";
 import { clientPointToSvg } from "./SvgCoordinateTransform";
 import { escapeHTML } from "./viewUtils";
 import {
@@ -64,6 +71,11 @@ import {
   type EditorMessageKind,
 } from "./EditorTransport";
 import { renderSelectedLayerInspector } from "./SelectedLayerInspector";
+import {
+  DEFAULT_WORKBENCH_VIEW_STATE,
+  normalizeWorkbenchViewState,
+  type WorkbenchViewState,
+} from "./WorkbenchViewGeometry";
 
 export interface IntegratedCraftEditorCallbacks {
   onCheck: (design: FireworkDesign) => void;
@@ -133,6 +145,8 @@ export class IntegratedCraftEditor {
   #starPreviewPosition?: StarPreviewPosition;
   #suppressStarClickId?: string;
   #unsubscribe: () => void;
+  #viewRenderFrame = 0;
+  #viewState: WorkbenchViewState = { ...DEFAULT_WORKBENCH_VIEW_STATE };
 
   constructor(
     controller: CraftController,
@@ -148,6 +162,7 @@ export class IntegratedCraftEditor {
     this.element.className = "craft-workspace integrated-craft-editor";
     this.element.addEventListener("click", this.#handleClick);
     this.element.addEventListener("change", this.#handleChange);
+    this.element.addEventListener("input", this.#handleInput);
     this.element.addEventListener("dragstart", this.#handleDragStart);
     this.element.addEventListener("dragover", this.#handleDragOver);
     this.element.addEventListener("drop", this.#handleDrop);
@@ -168,12 +183,14 @@ export class IntegratedCraftEditor {
   }
 
   destroy(): void {
+    window.cancelAnimationFrame(this.#viewRenderFrame);
     window.clearTimeout(this.#messageTimer);
     window.clearTimeout(this.#previewTimer);
     this.#cancelStarPress();
     this.#unsubscribe();
     this.element.removeEventListener("click", this.#handleClick);
     this.element.removeEventListener("change", this.#handleChange);
+    this.element.removeEventListener("input", this.#handleInput);
     this.element.removeEventListener("dragstart", this.#handleDragStart);
     this.element.removeEventListener("dragover", this.#handleDragOver);
     this.element.removeEventListener("drop", this.#handleDrop);
@@ -237,6 +254,7 @@ export class IntegratedCraftEditor {
           this.#manualPlacementSettings,
           this.#imageTargetCount,
           this.#imageImporting,
+          this.#viewState,
         )}
         <div class="workbench-bottom-dock">
           ${renderInlineDiagnosticPreview(
@@ -361,7 +379,20 @@ export class IntegratedCraftEditor {
     const layerId =
       button.closest<HTMLElement>("[data-layer-id]")?.dataset.layerId ??
       snapshot.selection.layerId;
-    if (action === "toggle-drawer") {
+    if (action === "select-section-axis") {
+      const axis = button.dataset.axis as SectionAxis;
+      if (!(["x", "y", "z"] as const).includes(axis)) return;
+      const plane = sectionPlaneForAxis(axis);
+      this.#viewState = normalizeWorkbenchViewState({
+        pitchDegrees: plane === "xz" ? -60 : 0,
+        yawDegrees: plane === "yz" ? 90 : 0,
+        zoom: this.#viewState.zoom,
+      });
+      this.#setSection({ plane, ratio: this.#section.ratio });
+      this.#focusAfterRender(
+        `[data-action="select-section-axis"][data-axis="${axis}"]`,
+      );
+    } else if (action === "toggle-drawer") {
       const drawer = button.dataset.drawer as MobileDrawer;
       this.#drawer = this.#drawer === drawer ? undefined : drawer;
       this.#render();
@@ -499,11 +530,80 @@ export class IntegratedCraftEditor {
     }
   }
 
+  readonly #handleInput = (event: Event): void => {
+    const input = event.target as HTMLInputElement;
+    const numericValue = Number(input.value);
+    if (!Number.isFinite(numericValue)) return;
+    if (input.name === "workbench-zoom") {
+      this.#viewState = normalizeWorkbenchViewState({
+        ...this.#viewState,
+        zoom: numericValue / 100,
+      });
+      input.setAttribute(
+        "aria-valuetext",
+        `${Math.round(this.#viewState.zoom * 100)}パーセント`,
+      );
+      const output = input
+        .closest("label")
+        ?.querySelector<HTMLOutputElement>("output");
+      if (output) output.value = `${Math.round(this.#viewState.zoom * 100)}%`;
+    } else if (input.name === "workbench-pitch") {
+      this.#viewState = normalizeWorkbenchViewState({
+        ...this.#viewState,
+        pitchDegrees: numericValue,
+      });
+      input.setAttribute("aria-valuetext", `${this.#viewState.pitchDegrees}度`);
+      const output = input
+        .closest("label")
+        ?.querySelector<HTMLOutputElement>("output");
+      if (output) output.value = `${this.#viewState.pitchDegrees}°`;
+    } else if (input.name === "workbench-yaw") {
+      this.#viewState = normalizeWorkbenchViewState({
+        ...this.#viewState,
+        yawDegrees: numericValue,
+      });
+      input.setAttribute("aria-valuetext", `${this.#viewState.yawDegrees}度`);
+      const output = input
+        .closest("label")
+        ?.querySelector<HTMLOutputElement>("output");
+      if (output) output.value = `${this.#viewState.yawDegrees}°`;
+    } else if (input.name === "section-step") {
+      this.#section = {
+        plane: this.#section.plane,
+        ratio: sectionRatioAt(numericValue),
+      };
+      const index = Number(input.value);
+      const position = index < 2 ? "手前" : index === 2 ? "中央" : "奥";
+      const valueText = `${this.#section.plane.toUpperCase()}面 ${position} ${index + 1} / 5`;
+      input.setAttribute("aria-valuetext", valueText);
+      const output = input
+        .closest("label")
+        ?.querySelector<HTMLOutputElement>("output");
+      if (output) output.value = `${position} ${index + 1} / 5`;
+    } else {
+      return;
+    }
+    this.#scheduleWorkbenchViewRender();
+  };
+
   readonly #handleChange = (event: Event): void => {
     const input = event.target as HTMLInputElement | HTMLSelectElement;
     if (!this.#snapshot) return;
     this.#dismissEditorWarning();
-    if (input.name === "image-placement-file") {
+    if (
+      input.name === "workbench-zoom" ||
+      input.name === "workbench-pitch" ||
+      input.name === "workbench-yaw"
+    ) {
+      return;
+    }
+    if (input.name === "section-step") {
+      this.#setSection({
+        plane: this.#section.plane,
+        ratio: sectionRatioAt(Number(input.value)),
+      });
+      this.#focusAfterRender('input[name="section-step"]');
+    } else if (input.name === "image-placement-file") {
       const file = (input as HTMLInputElement).files?.[0];
       (input as HTMLInputElement).value = "";
       if (file) void this.#applyImagePlacement(file);
@@ -559,6 +659,7 @@ export class IntegratedCraftEditor {
 
   readonly #handlePointerDown = (event: PointerEvent): void => {
     const target = event.target as HTMLElement;
+    if (target.closest("button[data-action='select-section-axis']")) return;
     const navigator = target.closest<HTMLElement>(
       "[data-shell-slice-navigator]",
     );
@@ -648,7 +749,11 @@ export class IntegratedCraftEditor {
     drag.position = pointFromSection(this.#section, local);
     drag.moved ||=
       Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 3;
-    const projected = projectSectionPoint(drag.position, this.#section);
+    const projected = projectSectionPoint(
+      drag.position,
+      this.#section,
+      this.#viewState,
+    );
     drag.target.setAttribute("cx", projected.x.toFixed(1));
     drag.target.setAttribute("cy", projected.y.toFixed(1));
     event.preventDefault();
@@ -691,6 +796,7 @@ export class IntegratedCraftEditor {
 
   readonly #handleKeyDown = (event: KeyboardEvent): void => {
     const target = event.target as HTMLElement;
+    if (target.closest("button[data-action='select-section-axis']")) return;
     if (target.closest("[data-shell-slice-navigator]")) {
       const planeStep = ["ArrowLeft", "ArrowRight"].includes(event.key) ? 1 : 0;
       const ratioStep =
@@ -760,6 +866,60 @@ export class IntegratedCraftEditor {
       true,
     );
   };
+
+  #scheduleWorkbenchViewRender(): void {
+    if (this.#viewRenderFrame) return;
+    this.#viewRenderFrame = window.requestAnimationFrame(() => {
+      this.#viewRenderFrame = 0;
+      this.#refreshWorkbenchView();
+    });
+  }
+
+  #refreshWorkbenchView(): void {
+    const snapshot = this.#snapshot;
+    if (!snapshot) return;
+    const selectedLayer = snapshot.draft.layers.find(
+      (layer) => layer.id === snapshot.selection.layerId,
+    );
+    const selectedIntent = snapshot.intentDraft.layers.find(
+      (layer) => layer.id === snapshot.selection.layerId,
+    );
+    const markup = renderIntegratedPlacementWorkbench(
+      snapshot.draft,
+      snapshot.intentDraft,
+      selectedLayer,
+      selectedIntent,
+      this.#section,
+      this.#placementTemplate,
+      selectedIntent?.authoringMode === "manual"
+        ? this.#selectedPointIndex
+        : undefined,
+      this.#templateApplyMode,
+      this.#sliceAnnouncement,
+      this.#manualPlacementSettings,
+      this.#imageTargetCount,
+      this.#imageImporting,
+      this.#viewState,
+    );
+    const template = document.createElement("template");
+    template.innerHTML = markup;
+    const nextCanvas = template.content.querySelector<SVGSVGElement>(
+      "[data-workbench-canvas]",
+    );
+    const currentCanvas = this.element.querySelector<SVGSVGElement>(
+      "[data-workbench-canvas]",
+    );
+    if (nextCanvas && currentCanvas) currentCanvas.replaceWith(nextCanvas);
+    const nextNavigatorSvg = template.content.querySelector<SVGSVGElement>(
+      ".shell-slice-navigator > svg",
+    );
+    const currentNavigatorSvg = this.element.querySelector<SVGSVGElement>(
+      ".shell-slice-navigator > svg",
+    );
+    if (nextNavigatorSvg && currentNavigatorSvg) {
+      currentNavigatorSvg.replaceWith(nextNavigatorSvg);
+    }
+  }
 
   #schedulePreview(design: FireworkDesignV4): void {
     const signature = JSON.stringify({
@@ -856,7 +1016,7 @@ export class IntegratedCraftEditor {
     canvas: SVGSVGElement,
   ): { x: number; y: number } {
     const { x: svgX, y: svgY } = clientPointToSvg(clientX, clientY, canvas);
-    return canvasPointOnSection(svgX, svgY, this.#section);
+    return canvasPointOnSection(svgX, svgY, this.#section, this.#viewState);
   }
 
   #selectedIntentLayer(): LayerIntentV4 | undefined {

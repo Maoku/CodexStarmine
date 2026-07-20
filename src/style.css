@@ -6131,10 +6131,9 @@ h3,
 
 .craft-transport.integrated-transport {
   display: grid;
-  grid-template-columns: auto auto minmax(10rem, 1fr) minmax(
-      12rem,
-      auto
-    ) auto auto;
+  grid-template-columns:
+    auto auto minmax(10rem, 1fr) minmax(12rem, auto)
+    auto auto;
   gap: 0.45rem;
   padding: 0.45rem 0.55rem;
 }
@@ -6378,5 +6377,280 @@ h3,
 
   .workbench-bottom-dock .inline-diagnostic-preview > header strong {
     display: none;
+  }
+}
+
+/* Craft editor refine Phase 4: workbench view controls and 3D projection. */
+
+.workbench-view-toolbar {
+  position: absolute;
+  z-index: 5;
+  top: 0.55rem;
+  right: 12.5rem;
+  left: 0.75rem;
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  gap: 0.45rem;
+  pointer-events: none;
+}
+
+.workbench-view-toolbar label,
+.workbench-pitch-control,
+.workbench-yaw-control {
+  border: 1px solid rgb(201 166 118 / 18%);
+  border-radius: 0.35rem;
+  background: rgb(5 12 16 / 88%);
+  box-shadow: 0 0.45rem 1.4rem rgb(0 0 0 / 22%);
+  color: #9b8f80;
+  font-size: var(--font-ui-xs);
+  font-weight: var(--font-control-weight);
+  pointer-events: auto;
+}
+
+.workbench-view-toolbar label {
+  display: grid;
+  min-width: 0;
+  min-height: 2.75rem;
+  flex: 1 1 11rem;
+  grid-template-columns: auto minmax(4rem, 1fr) auto auto;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.workbench-view-toolbar input,
+.workbench-yaw-control input {
+  min-width: 0;
+  min-height: 2.75rem;
+  margin: -0.25rem 0;
+  accent-color: #d09c5f;
+}
+
+.workbench-view-toolbar output,
+.workbench-pitch-control output,
+.workbench-yaw-control output {
+  min-width: 2.9rem;
+  color: #d1b184;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-ui-xs);
+  text-align: right;
+}
+
+.workbench-section-control > span {
+  color: #e0bc86;
+}
+
+.workbench-pitch-control {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  left: 0.55rem;
+  display: grid;
+  width: 3.2rem;
+  min-height: 12rem;
+  grid-template-rows: auto minmax(7rem, 1fr) auto;
+  place-items: center;
+  gap: 0.2rem;
+  padding: 0.45rem 0.2rem;
+  transform: translateY(-45%);
+}
+
+.workbench-pitch-control > span {
+  writing-mode: vertical-rl;
+}
+
+.workbench-pitch-control input {
+  width: 2.75rem;
+  height: min(14rem, 38vh);
+  min-height: 7rem;
+  margin: 0;
+  accent-color: #d09c5f;
+  direction: rtl;
+  writing-mode: vertical-lr;
+}
+
+.workbench-pitch-control output {
+  min-width: 0;
+  text-align: center;
+}
+
+.workbench-yaw-control {
+  position: absolute;
+  z-index: 5;
+  right: 12.5rem;
+  bottom: 0.45rem;
+  left: 4.15rem;
+  display: grid;
+  min-height: 2.75rem;
+  grid-template-columns: auto minmax(6rem, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2rem 0.55rem;
+}
+
+.workbench-canvas-wrap > p:not(.slice-announcement) {
+  bottom: 3.65rem;
+}
+
+.slice-axis-buttons {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.slice-axis-buttons button {
+  position: absolute;
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: rgb(7 15 19 / 94%);
+  box-shadow: 0 0.35rem 0.8rem rgb(0 0 0 / 35%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-ui-sm);
+  font-weight: 700;
+  pointer-events: auto;
+}
+
+.slice-axis-buttons button[aria-pressed="true"] {
+  background: currentColor;
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 16%);
+  color: #081015;
+}
+
+.slice-axis-buttons .axis-x {
+  top: 44%;
+  right: 0.05rem;
+  color: #f16f68;
+}
+
+.slice-axis-buttons .axis-y {
+  top: 0.05rem;
+  left: 40%;
+  color: #73cb81;
+}
+
+.slice-axis-buttons .axis-z {
+  bottom: 17%;
+  left: 0.05rem;
+  color: #6e9fe7;
+}
+
+.shell-slice-navigator > span {
+  display: none;
+}
+
+.workbench-sphere-reference {
+  fill: url("#workbench-shell-fill");
+  stroke: rgb(165 132 88 / 24%);
+  stroke-dasharray: none;
+  pointer-events: none;
+}
+
+.workbench-sphere-rear {
+  fill: none;
+  stroke: rgb(211 171 112 / 36%);
+  stroke-dasharray: 4 8;
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.workbench-sphere-highlight {
+  fill: url("#workbench-shell-highlight");
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.workbench-sphere-front {
+  fill: none;
+  stroke: rgb(209 159 94 / 58%);
+  stroke-width: 5;
+  filter: drop-shadow(0 0 0.55rem rgb(209 159 94 / 18%));
+  pointer-events: none;
+}
+
+.workbench-section-disc {
+  fill: rgb(194 143 78 / 13%);
+  stroke: none;
+  pointer-events: none;
+}
+
+.workbench-section-edge,
+.workbench-section-grid {
+  pointer-events: none;
+}
+
+.workbench-canvas-wrap > svg[data-workbench-canvas] {
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .workbench-view-toolbar {
+    right: 9.2rem;
+    left: 0.4rem;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .workbench-view-toolbar label {
+    min-height: 2.75rem;
+    flex-basis: auto;
+  }
+
+  .workbench-pitch-control {
+    left: 0.35rem;
+    min-height: 9.5rem;
+  }
+
+  .workbench-pitch-control input {
+    height: 8rem;
+  }
+
+  .workbench-yaw-control {
+    right: 0.4rem;
+    bottom: 0.35rem;
+    left: 3.85rem;
+  }
+
+  .workbench-canvas-wrap > p:not(.slice-announcement) {
+    right: 0.4rem;
+    bottom: 3.45rem;
+    left: 3.85rem;
+  }
+}
+
+@media (max-width: 620px) {
+  .workbench-view-toolbar {
+    right: 8.9rem;
+  }
+
+  .workbench-view-toolbar label {
+    grid-template-columns: auto minmax(2.8rem, 1fr) auto;
+    padding-inline: 0.35rem;
+  }
+
+  .workbench-view-toolbar label > span:nth-of-type(2),
+  .workbench-view-toolbar output {
+    display: none;
+  }
+
+  .workbench-pitch-control {
+    width: 2.95rem;
+  }
+
+  .workbench-yaw-control > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .workbench-yaw-control {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
