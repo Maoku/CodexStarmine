@@ -1,7 +1,7 @@
 # 花火エディタ改良 実装計画書
 
 - 作成日: 2026-07-20
-- ステータス: 実装中（Refine Phase 2 完了）
+- ステータス: 実装中（Refine Phase 3 完了）
 - 基準資料: [CRAFT_EDITOR_REFINE_PLAN.md](CRAFT_EDITOR_REFINE_PLAN.md)
 - 関連計画: [CRAFT_EDITOR_IMPLEMENTATION_PLAN.md](CRAFT_EDITOR_IMPLEMENTATION_PLAN.md)、[RENEWAL_IMPLEMENTATION_PLAN3.md](RENEWAL_IMPLEMENTATION_PLAN3.md)
 - 対象: アプリ全体の文字可読性、製作エディタのヘッダー／フッター、玉内配置ワークベンチ、選択レイヤー、打上結果プレビュー
@@ -633,3 +633,12 @@ viewport:
 - `SelectedLayerInspector`へ見出し内のレイヤー名inputと既存設定を分離し、右ペインの負荷カードとpreviewを削除した。
 - fixed seed previewを中央workbench右下へ移し、desktop 224 × 144px、mobile既定168 × 80pxのdockとした。
 - 390 × 844ではfooterを2段116pxにし、保存／湖面確認を44px高で下段へ配置した。横overflowと主要操作の重なりはなかった。
+
+### Refine Phase 3: YZ面と幾何基盤
+
+- `SectionPlane`とv4 validatorへ`yz`を追加し、schemaVersionは4のまま維持した。
+- XY／XZ／YZのframe、投影、逆変換、X/Y/ZからYZ/XZ/XYへの対応、5段階index変換を`SliceGeometry`へ追加した。
+- `WorkbenchViewGeometry`へview stateのclamp、yaw／pitch回転、zoom投影、操作面へのray-plane逆投影、操作面outline、depth sortを追加した。
+- 3面×5位置と代表view／zoomで投影→逆投影のround-tripを単体テストした。
+- YZの型物と手動点がv4 export／import後も同じ面・座標で復元され、YZ型物がcompile結果のX方向へ反映されることを固定した。
+- 既存のbuilt-in preset決定性、XY／XZ recipe、migration／storage回帰テストは継続して成功した。

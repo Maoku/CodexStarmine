@@ -154,6 +154,10 @@ describe("Phase 6.5 burst compiler", () => {
       patternDesign("circle", { plane: "xz", ratio: 0.7 }),
       50_411,
     );
+    const shiftedYZ = compileFireworkDesign(
+      patternDesign("circle", { plane: "yz", ratio: 0.7 }),
+      50_411,
+    );
     const averageRadius = (design: typeof small) =>
       design.stars.reduce(
         (sum, star) =>
@@ -173,6 +177,7 @@ describe("Phase 6.5 burst compiler", () => {
     expect(averageRadius(large)).toBeGreaterThan(averageRadius(small) * 2.4);
     expect(Math.abs(centroid(shiftedXY).z)).toBeGreaterThan(10);
     expect(Math.abs(centroid(shiftedXZ).y)).toBeGreaterThan(10);
+    expect(Math.abs(centroid(shiftedYZ).x)).toBeGreaterThan(10);
   });
 
   it("rejects zero, non-finite, and out-of-shell authored points", () => {

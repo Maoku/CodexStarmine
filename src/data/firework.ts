@@ -301,7 +301,7 @@ export interface FireworkDesignV3 extends Omit<
 export type LayerAuthoringMode = "preset" | "pattern" | "manual";
 export type PatternTemplate =
   "circle" | "heart" | "star" | "square" | "triangle" | "hexagon";
-export type SectionPlane = "xy" | "xz";
+export type SectionPlane = "xy" | "xz" | "yz";
 export type SectionRatio = 0.1 | 0.3 | 0.5 | 0.7 | 0.9;
 
 export interface SectionRef {
@@ -588,7 +588,7 @@ export function isFireworkDesignV3(value: unknown): value is FireworkDesignV3 {
 function isSectionRef(value: unknown): value is SectionRef {
   return (
     isRecord(value) &&
-    (value.plane === "xy" || value.plane === "xz") &&
+    (value.plane === "xy" || value.plane === "xz" || value.plane === "yz") &&
     [0.1, 0.3, 0.5, 0.7, 0.9].includes(Number(value.ratio))
   );
 }

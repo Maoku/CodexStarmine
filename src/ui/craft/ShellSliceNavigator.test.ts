@@ -23,6 +23,12 @@ describe("ShellSliceNavigator", () => {
       plane: "xz",
       ratio: 0.5,
     });
+    expect(
+      sectionAfterNavigatorDrag({ plane: "xz", ratio: 0.5 }, 40, 0),
+    ).toEqual({
+      plane: "yz",
+      ratio: 0.5,
+    });
     expect(sectionAfterNavigatorDrag(source, 0, -30)).toEqual({
       plane: "xy",
       ratio: 0.7,

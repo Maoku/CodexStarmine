@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { ensureFireworkDesignV4 } from "./migrations/v3ToV4";
 import { CHRYSANTHEMUM_PRESET } from "./presets";
 import {
   DesignRepository,
@@ -105,6 +106,69 @@ describe("DesignRepository", () => {
     expect(target.listEntries()[0]).toMatchObject({
       design: { id: saved.id, name: "JSON側の花火玉" },
       updatedAt: "2026-07-17T02:00:00.000Z",
+    });
+  });
+
+  it("round trips YZ pattern and manual sections through v4 export", () => {
+    const source = new DesignRepository(memoryStorage(), () => "yz-source");
+    const design = ensureFireworkDesignV4(CHRYSANTHEMUM_PRESET);
+    const defaultStarId = design.layers[0]?.defaultStarId ?? "star-solid-red";
+    design.layers = [
+      {
+        authoringMode: "pattern",
+        defaultStarId,
+        id: "yz-pattern",
+        ignitionOffset: 0,
+        locked: false,
+        name: "YZ型物",
+        pattern: {
+          density: 36,
+          rotationDegrees: 15,
+          scale: 0.7,
+          section: { plane: "yz", ratio: 0.3 },
+          template: "heart",
+        },
+        radialSpeedScale: 0.9,
+        visible: true,
+      },
+      {
+        authoringMode: "manual",
+        defaultStarId,
+        id: "yz-manual",
+        ignitionOffset: 0,
+        locked: false,
+        name: "YZ手動",
+        points: [
+          {
+            id: "yz-point",
+            position: { x: -0.4, y: 0.25, z: 0.35 },
+            section: { plane: "yz", ratio: 0.3 },
+            starId: defaultStarId,
+          },
+        ],
+        radialSpeedScale: 1,
+        visible: true,
+      },
+    ];
+    source.saveIntent(design);
+
+    const target = new DesignRepository(memoryStorage(), () => "unused");
+    expect(target.importLibraryJSON(source.exportLibraryJSON())).toMatchObject({
+      added: 1,
+    });
+    const restored = target.listIntents()[0];
+    expect(restored.layers[0]).toMatchObject({
+      authoringMode: "pattern",
+      pattern: { section: { plane: "yz", ratio: 0.3 } },
+    });
+    expect(restored.layers[1]).toMatchObject({
+      authoringMode: "manual",
+      points: [
+        {
+          position: { x: -0.4, y: 0.25, z: 0.35 },
+          section: { plane: "yz", ratio: 0.3 },
+        },
+      ],
     });
   });
 

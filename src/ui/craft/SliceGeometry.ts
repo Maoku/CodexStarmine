@@ -1,8 +1,11 @@
-import type { SectionRef, SectionRatio } from "../../data";
+import type { SectionPlane, SectionRef, SectionRatio } from "../../data";
 
 export const SECTION_RATIOS: readonly SectionRatio[] = [
   0.1, 0.3, 0.5, 0.7, 0.9,
 ];
+export const SECTION_PLANES: readonly SectionPlane[] = ["xy", "xz", "yz"];
+
+export type SectionAxis = "x" | "y" | "z";
 
 export interface SectionPoint2D {
   x: number;
@@ -43,12 +46,21 @@ export function sliceFrame(section: SectionRef, sphereRadius = 1): SliceFrame {
       tangentY: { x: 0, y: 1, z: 0 },
     };
   }
+  if (section.plane === "xz") {
+    return {
+      center: { x: 0, y: fixed, z: 0 },
+      normal: { x: 0, y: 1, z: 0 },
+      radius: sectionRadius(section, sphereRadius),
+      tangentX: { x: 1, y: 0, z: 0 },
+      tangentY: { x: 0, y: 0, z: 1 },
+    };
+  }
   return {
-    center: { x: 0, y: fixed, z: 0 },
-    normal: { x: 0, y: 1, z: 0 },
+    center: { x: fixed, y: 0, z: 0 },
+    normal: { x: 1, y: 0, z: 0 },
     radius: sectionRadius(section, sphereRadius),
-    tangentX: { x: 1, y: 0, z: 0 },
-    tangentY: { x: 0, y: 0, z: 1 },
+    tangentX: { x: 0, y: 0, z: 1 },
+    tangentY: { x: 0, y: 1, z: 0 },
   };
 }
 
@@ -105,6 +117,24 @@ export function sameSection(a: SectionRef, b: SectionRef): boolean {
   return a.plane === b.plane && a.ratio === b.ratio;
 }
 
+export function sectionPlaneForAxis(axis: SectionAxis): SectionPlane {
+  if (axis === "x") return "yz";
+  if (axis === "y") return "xz";
+  return "xy";
+}
+
+export function sectionRatioAt(index: number): SectionRatio {
+  const safeIndex = Number.isFinite(index)
+    ? Math.min(Math.max(Math.round(index), 0), SECTION_RATIOS.length - 1)
+    : 2;
+  return SECTION_RATIOS[safeIndex];
+}
+
+export function sectionRatioIndex(ratio: SectionRatio): number {
+  const index = SECTION_RATIOS.indexOf(ratio);
+  return index < 0 ? 2 : index;
+}
+
 export function stepSection(
   section: SectionRef,
   planeSteps: number,
@@ -117,11 +147,10 @@ export function stepSection(
   );
   return {
     plane:
-      Math.abs(planeSteps) % 2 === 0
-        ? section.plane
-        : section.plane === "xy"
-          ? "xz"
-          : "xy",
+      SECTION_PLANES[
+        (SECTION_PLANES.indexOf(section.plane) + Math.abs(planeSteps)) %
+          SECTION_PLANES.length
+      ],
     ratio: SECTION_RATIOS[nextIndex],
   };
 }

@@ -47,7 +47,7 @@ describe("PatternRecipe", () => {
   });
 
   it("keeps all templates, densities, and rotations inside the safety margin", () => {
-    const planes: SectionPlane[] = ["xy", "xz"];
+    const planes: SectionPlane[] = ["xy", "xz", "yz"];
     planes.forEach((plane) => {
       SECTION_RATIOS.forEach((ratio) => {
         PATTERN_TEMPLATES.forEach((template) => {
