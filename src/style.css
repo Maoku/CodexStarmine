@@ -24,8 +24,8 @@
 
 .integrated-craft-editor {
   grid-template-columns: minmax(15rem, 17rem) minmax(30rem, 1fr) minmax(
-      17rem,
-      19rem
+      11rem,
+      13rem
     );
   grid-template-rows: minmax(0, 1fr) 4.5rem;
   overflow: hidden;
@@ -5527,8 +5527,8 @@ input[type="range"] {
 .craft-workspace.integrated-craft-editor {
   display: grid;
   grid-template-columns: minmax(15rem, 17rem) minmax(30rem, 1fr) minmax(
-      17rem,
-      19rem
+      11rem,
+      13rem
     );
   grid-template-rows: minmax(0, 1fr) 4.5rem;
   overflow: hidden;
@@ -5544,7 +5544,7 @@ input[type="range"] {
 
 @media (max-width: 1180px) {
   .craft-workspace.integrated-craft-editor {
-    grid-template-columns: 14rem minmax(27rem, 1fr) 16rem;
+    grid-template-columns: 14rem minmax(27rem, 1fr) 10rem;
   }
 }
 
@@ -6043,7 +6043,7 @@ h3,
   display: grid;
   width: 100%;
   min-height: 0;
-  height: 9rem;
+  height: 18rem;
   grid-template-rows: auto minmax(0, 1fr) auto;
   transition: height 160ms ease;
 }

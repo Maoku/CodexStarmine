@@ -685,3 +685,13 @@ viewport:
 - 1280 × 720ではcontrol cluster 168 × 188px、390 × 844では140 × 168pxとなり、いずれも横overflowはなかった。
 - 390 × 844の設定drawerではpreview 336 × 144px、折り畳み時336 × 44pxとなり、drawer内に収まった。
 - UI追補後の品質ゲートは`lint`、61ファイル／250テスト、`build`がすべて成功した。
+
+### UI追補: workbench幅とpreview高の再配分
+
+- 実施日: 2026-07-20
+- desktopの右ペイン幅を約302pxから208pxへ縮め、差分の約96pxを中央workbenchへ配分した。
+- 1440 × 900ではworkbench幅922px、右ペイン幅208px、inspector高431px、preview 206 × 288pxとなった。
+- 1280 × 720ではworkbench幅762px、右ペイン幅208px、inspector高251px、preview 206 × 288pxとなった。
+- previewの展開高を144pxから288pxへ倍増し、折り畳み高は44pxを維持した。1280 × 720で折り畳むとinspector高は495pxまで戻る。
+- 390 × 844の設定drawerではinspector 336 × 401px、preview 336 × 288pxとなり、drawer内に重なりなく収まった。
+- UI追補後の品質ゲートは変更ファイルのformat、`lint`、61ファイル／250テスト、`build`がすべて成功した。
