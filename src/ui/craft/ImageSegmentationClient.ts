@@ -7,6 +7,7 @@ import type {
   SegmentationDiagnostics,
   SegmentationInteractionProfile,
   SegmentationMode,
+  SegmentationModelBackendPreference,
   SegmentationProvider,
   SubjectMask,
 } from "./GuidedImagePlacementTypes";
@@ -35,6 +36,7 @@ interface PendingSegmentation {
 
 export interface ImageSegmentationClientOptions {
   mode?: SegmentationMode;
+  modelBackend?: SegmentationModelBackendPreference;
   modelBaseUrl?: string;
   onProgress?: (stage: string, progress?: number) => void;
   onProviderChange?: (
@@ -62,6 +64,29 @@ function defaultSegmentationMode(): SegmentationMode {
   return "auto";
 }
 
+interface NavigatorPlatformInfo {
+  maxTouchPoints?: number;
+  platform?: string;
+  userAgent: string;
+}
+
+export function isIOSPlatform(
+  platformInfo: NavigatorPlatformInfo | undefined,
+): boolean {
+  if (!platformInfo) return false;
+  if (/iPad|iPhone|iPod/i.test(platformInfo.userAgent)) return true;
+  return (
+    platformInfo.platform === "MacIntel" &&
+    (platformInfo.maxTouchPoints ?? 0) > 1
+  );
+}
+
+function defaultModelBackend(): SegmentationModelBackendPreference {
+  return isIOSPlatform(typeof navigator === "undefined" ? undefined : navigator)
+    ? "wasm"
+    : "auto";
+}
+
 function cloneImage(image: ImageDataLike): ImageDataLike {
   return {
     data: Uint8ClampedArray.from(image.data),
@@ -72,6 +97,7 @@ function cloneImage(image: ImageDataLike): ImageDataLike {
 
 export class ImageSegmentationClient {
   readonly #mode: SegmentationMode;
+  readonly #modelBackend: SegmentationModelBackendPreference;
   readonly #modelBaseUrl: string;
   readonly #onProgress?: (stage: string, progress?: number) => void;
   readonly #onProviderChange?: ImageSegmentationClientOptions["onProviderChange"];
@@ -91,6 +117,7 @@ export class ImageSegmentationClient {
 
   constructor(options: ImageSegmentationClientOptions = {}) {
     this.#mode = options.mode ?? defaultSegmentationMode();
+    this.#modelBackend = options.modelBackend ?? defaultModelBackend();
     this.#modelBaseUrl = options.modelBaseUrl ?? localAssetUrl("models/");
     this.#onProgress = options.onProgress;
     this.#onProviderChange = options.onProviderChange;
@@ -212,6 +239,7 @@ export class ImageSegmentationClient {
     worker.addEventListener("error", this.#handleWorkerError);
     const request: ImageWorkerRequest = {
       mode: this.#mode,
+      modelBackend: this.#modelBackend,
       modelBaseUrl: this.#modelBaseUrl,
       requestId: this.#nextRequestId++,
       type: "initialize",

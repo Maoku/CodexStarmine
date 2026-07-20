@@ -3,6 +3,7 @@ import type {
   ImageWorkerResponse,
   PromptMaskProvider,
   SegmentationMode,
+  SegmentationModelBackendPreference,
   SubjectMask,
 } from "./GuidedImagePlacementTypes";
 import type { ImageDataLike } from "./ImagePlacementRecipe";
@@ -33,6 +34,7 @@ interface WorkerImage {
 const scope = self as unknown as WorkerScope;
 let image: WorkerImage | undefined;
 let mode: SegmentationMode = "auto";
+let modelBackend: SegmentationModelBackendPreference = "auto";
 let modelBaseUrl = "";
 let wasmBaseUrl = "";
 let provider: PromptMaskProvider | undefined;
@@ -160,6 +162,17 @@ async function activateSlimSam(requestId: number): Promise<void> {
       if (failedBackend === "wasm") return;
     }
   }
+  if (modelBackend === "wasm") {
+    try {
+      provider = await createSlimSamProvider("wasm", requestId, image.id);
+      await encodeWithProvider(provider, requestId);
+    } catch {
+      provider?.dispose();
+      provider = undefined;
+      appendFallbackReason("wasm-initialization-or-warmup-failed");
+    }
+    return;
+  }
   try {
     provider = await createSlimSamProvider("webgpu", requestId, image.id);
     await encodeWithProvider(provider, requestId);
@@ -259,6 +272,7 @@ async function handleInitialize(
   request: Extract<ImageWorkerRequest, { type: "initialize" }>,
 ): Promise<void> {
   mode = request.mode;
+  modelBackend = request.modelBackend;
   modelBaseUrl = request.modelBaseUrl;
   wasmBaseUrl = request.wasmBaseUrl;
   scope.postMessage({

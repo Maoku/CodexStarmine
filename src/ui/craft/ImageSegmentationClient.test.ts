@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type {
   ImageWorkerRequest,
   ImageWorkerResponse,
 } from "./GuidedImagePlacementTypes";
-import { ImageSegmentationClient } from "./ImageSegmentationClient";
+import {
+  ImageSegmentationClient,
+  isIOSPlatform,
+} from "./ImageSegmentationClient";
 import type { ImageDataLike } from "./ImagePlacementRecipe";
 
 class FakeWorker {
@@ -52,6 +55,76 @@ function pixels(): ImageDataLike {
 }
 
 describe("ImageSegmentationClient", () => {
+  it("recognizes iOS and touch-based iPadOS desktop user agents", () => {
+    expect(
+      isIOSPlatform({
+        maxTouchPoints: 5,
+        platform: "iPhone",
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
+      }),
+    ).toBe(true);
+    expect(
+      isIOSPlatform({
+        maxTouchPoints: 5,
+        platform: "MacIntel",
+        userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)",
+      }),
+    ).toBe(true);
+    expect(
+      isIOSPlatform({
+        maxTouchPoints: 0,
+        platform: "MacIntel",
+        userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)",
+      }),
+    ).toBe(false);
+  });
+
+  it("passes an explicit WASM model preference to the worker", () => {
+    const worker = new FakeWorker();
+    const client = new ImageSegmentationClient({
+      modelBackend: "wasm",
+      workerFactory: () => worker as unknown as Worker,
+    });
+    client.setImage(
+      { close: () => undefined, height: 4, width: 4 } as ImageBitmap,
+      pixels(),
+    );
+
+    expect(worker.messages[0]).toMatchObject({
+      mode: "auto",
+      modelBackend: "wasm",
+      type: "initialize",
+    });
+    client.dispose();
+  });
+
+  it("defaults the model backend to WASM on iOS", () => {
+    vi.stubGlobal("navigator", {
+      maxTouchPoints: 5,
+      platform: "iPhone",
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
+    });
+    const worker = new FakeWorker();
+    const client = new ImageSegmentationClient({
+      workerFactory: () => worker as unknown as Worker,
+    });
+    try {
+      client.setImage(
+        { close: () => undefined, height: 4, width: 4 } as ImageBitmap,
+        pixels(),
+      );
+
+      expect(worker.messages[0]).toMatchObject({
+        mode: "auto",
+        modelBackend: "wasm",
+        type: "initialize",
+      });
+    } finally {
+      client.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("reports model and classic interaction profiles as providers settle", () => {
     const worker = new FakeWorker();
     const profiles: string[] = [];
@@ -110,6 +183,7 @@ describe("ImageSegmentationClient", () => {
     );
     expect(worker.messages[0]).toMatchObject({
       mode: "auto",
+      modelBackend: "auto",
       modelBaseUrl: "http://localhost/models/",
       type: "initialize",
       wasmBaseUrl: "http://localhost/wasm/",

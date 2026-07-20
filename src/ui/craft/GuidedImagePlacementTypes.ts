@@ -134,6 +134,7 @@ export interface GuidedImagePlacementResult extends ImagePlacementResult {
 export type SegmentationInteractionProfile = "model" | "classic";
 
 export type SegmentationMode = "auto" | "fast";
+export type SegmentationModelBackendPreference = "auto" | "wasm";
 
 export interface SegmentationImageSource {
   pixels: Uint8ClampedArray;
@@ -170,6 +171,7 @@ export type ImageWorkerRequest =
       type: "initialize";
       requestId: number;
       mode: SegmentationMode;
+      modelBackend: SegmentationModelBackendPreference;
       modelBaseUrl: string;
       wasmBaseUrl: string;
     }
