@@ -7,6 +7,10 @@ GPT-5.6 Sol / Codex （実装計画書サポートと画像から花火を作る
 
 初めて使う場合は、画面ごとの操作をまとめた [`Docs/USER_GUIDE.md`](Docs/USER_GUIDE.md) のスクリーンショット付き操作ガイドを参照してください。
 
+## 公開版
+
+GitHub Pagesを有効化すると、[https://maoku.github.io/CodexStarmine/](https://maoku.github.io/CodexStarmine/) で利用できます。
+
 ## 遊び方
 
 1. 起動時に「花火を作る」または「フリー鑑賞」を選ぶ
@@ -60,6 +64,12 @@ npm run test:run
 npm run format:check
 npm run build
 ```
+
+### GitHub Pagesへの公開
+
+`.github/workflows/deploy-pages.yml` が、`main` ブランチへのpush時に依存関係のインストール、SlimSAM資産の検証、TypeScriptの型検査、Viteのproduction build、GitHub Pagesへのデプロイを自動実行します。
+
+初回だけGitHubの `Settings` → `Pages` → `Build and deployment` で、`Source` を `GitHub Actions` に設定してください。その後は `main` へのpushで自動公開されます。GitHubの `Actions` タブから `Deploy to GitHub Pages` を選び、`Run workflow` で手動実行することもできます。
 
 現行仕様と関連資料は [`Docs/README.md`](Docs/README.md)、設計とフェーズごとの実装範囲は [`Docs/plans/IMPLEMENTATION_PLAN.md`](Docs/plans/IMPLEMENTATION_PLAN.md)、最新の編集体験リニューアル計画は [`Docs/plans/RENEWAL_IMPLEMENTATION_PLAN3.md`](Docs/plans/RENEWAL_IMPLEMENTATION_PLAN3.md) を参照してください。
 
