@@ -1,4 +1,5 @@
 import type { ImageDataLike } from "./ImagePlacementRecipe";
+import { segmentationImageMaximumEdge } from "./iOSPlatform";
 
 export const IMAGE_FILE_MAXIMUM_BYTES = 20 * 1024 * 1024;
 export const IMAGE_PIXEL_MAXIMUM_EDGE = 256;
@@ -92,6 +93,13 @@ async function imagePixels(
   return { data: imageData.data, height, width };
 }
 
+function currentSegmentationMaximumEdge(): number {
+  return segmentationImageMaximumEdge(
+    SEGMENTATION_IMAGE_PIXEL_MAXIMUM_EDGE,
+    typeof navigator === "undefined" ? undefined : navigator,
+  );
+}
+
 export async function loadImagePixels(file: File): Promise<ImageDataLike> {
   await validateFile(file);
   const image = await loadImage(file);
@@ -111,7 +119,6 @@ export async function loadImagePixels(file: File): Promise<ImageDataLike> {
 
 export interface GuidedImagePixels {
   analysisPixels: ImageDataLike;
-  bitmap?: ImageBitmap;
   pixels: ImageDataLike;
   previewUrl: string;
   sourceHeight: number;
@@ -123,9 +130,10 @@ export async function loadGuidedImagePixels(
 ): Promise<GuidedImagePixels> {
   await validateFile(file);
   const previewUrl = URL.createObjectURL(file);
+  const segmentationMaximumEdge = currentSegmentationMaximumEdge();
   try {
     if (typeof createImageBitmap === "function") {
-      const sourceBitmap = await createImageBitmap(file, {
+      let workingBitmap = await createImageBitmap(file, {
         imageOrientation: "from-image",
       });
       let analysisPixels: ImageDataLike;
@@ -133,39 +141,57 @@ export async function loadGuidedImagePixels(
       let sourceHeight: number;
       let sourceWidth: number;
       try {
-        if (sourceBitmap.width <= 0 || sourceBitmap.height <= 0) {
+        if (workingBitmap.width <= 0 || workingBitmap.height <= 0) {
           throw new ImagePixelLoadError(
             "empty-image",
             "画像の大きさを取得できませんでした。",
           );
         }
-        sourceWidth = sourceBitmap.width;
-        sourceHeight = sourceBitmap.height;
+        sourceWidth = workingBitmap.width;
+        sourceHeight = workingBitmap.height;
+        if (sourceWidth * sourceHeight > IMAGE_TOTAL_PIXEL_MAXIMUM) {
+          throw new ImagePixelLoadError(
+            "pixel-count-too-large",
+            "総画素数が24メガピクセル以下の画像を選んでください。",
+          );
+        }
+        const scale = Math.min(
+          1,
+          segmentationMaximumEdge / Math.max(sourceWidth, sourceHeight),
+        );
+        if (scale < 1) {
+          workingBitmap.close();
+          try {
+            workingBitmap = await createImageBitmap(file, {
+              imageOrientation: "from-image",
+              resizeHeight: Math.max(1, Math.round(sourceHeight * scale)),
+              resizeQuality: "high",
+              resizeWidth: Math.max(1, Math.round(sourceWidth * scale)),
+            });
+          } catch {
+            // Older Safari versions still use canvas downscaling below.
+            workingBitmap = await createImageBitmap(file, {
+              imageOrientation: "from-image",
+            });
+          }
+        }
         pixels = await imagePixels(
-          sourceBitmap,
-          sourceWidth,
-          sourceHeight,
+          workingBitmap,
+          workingBitmap.width,
+          workingBitmap.height,
           GUIDED_IMAGE_PIXEL_MAXIMUM_EDGE,
         );
         analysisPixels = await imagePixels(
-          sourceBitmap,
-          sourceWidth,
-          sourceHeight,
-          SEGMENTATION_IMAGE_PIXEL_MAXIMUM_EDGE,
+          workingBitmap,
+          workingBitmap.width,
+          workingBitmap.height,
+          segmentationMaximumEdge,
         );
       } finally {
-        sourceBitmap.close();
+        workingBitmap.close();
       }
-      const bitmap = await createImageBitmap(
-        new ImageData(
-          Uint8ClampedArray.from(analysisPixels.data),
-          analysisPixels.width,
-          analysisPixels.height,
-        ),
-      );
       return {
         analysisPixels,
-        bitmap,
         pixels,
         previewUrl,
         sourceHeight,
@@ -183,7 +209,7 @@ export async function loadGuidedImagePixels(
       image,
       image.naturalWidth,
       image.naturalHeight,
-      SEGMENTATION_IMAGE_PIXEL_MAXIMUM_EDGE,
+      segmentationMaximumEdge,
     );
     return {
       analysisPixels,

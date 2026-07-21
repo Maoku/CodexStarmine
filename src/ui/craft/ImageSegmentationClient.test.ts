@@ -85,10 +85,7 @@ describe("ImageSegmentationClient", () => {
       modelBackend: "wasm",
       workerFactory: () => worker as unknown as Worker,
     });
-    client.setImage(
-      { close: () => undefined, height: 4, width: 4 } as ImageBitmap,
-      pixels(),
-    );
+    client.setImage(pixels());
 
     expect(worker.messages[0]).toMatchObject({
       mode: "auto",
@@ -109,15 +106,13 @@ describe("ImageSegmentationClient", () => {
       workerFactory: () => worker as unknown as Worker,
     });
     try {
-      client.setImage(
-        { close: () => undefined, height: 4, width: 4 } as ImageBitmap,
-        pixels(),
-      );
+      client.setImage(pixels());
 
       expect(worker.messages[0]).toMatchObject({
         mode: "auto",
         modelBackend: "wasm",
         type: "initialize",
+        wasmNumThreads: 1,
       });
     } finally {
       client.dispose();
@@ -133,10 +128,7 @@ describe("ImageSegmentationClient", () => {
         profiles.push(`${profile}:${provider ?? "pending"}`),
       workerFactory: () => worker as unknown as Worker,
     });
-    client.setImage(
-      { close: () => undefined, height: 4, width: 4 } as ImageBitmap,
-      pixels(),
-    );
+    client.setImage(pixels());
     worker.respond({
       backend: "wasm",
       provider: "slimsam",
@@ -161,7 +153,7 @@ describe("ImageSegmentationClient", () => {
 
   it("falls back without a worker and returns the requested revision", async () => {
     const client = new ImageSegmentationClient();
-    client.setImage(undefined, pixels());
+    client.setImage(pixels());
     const result = await client.segment(
       [{ id: "subject", kind: "subject", point: { x: 0.3, y: 0.3 } }],
       4,
@@ -177,10 +169,7 @@ describe("ImageSegmentationClient", () => {
     const client = new ImageSegmentationClient({
       workerFactory: () => worker as unknown as Worker,
     });
-    client.setImage(
-      { close: () => undefined, height: 4, width: 4 } as ImageBitmap,
-      pixels(),
-    );
+    client.setImage(pixels());
     expect(worker.messages[0]).toMatchObject({
       mode: "auto",
       modelBackend: "auto",

@@ -12,7 +12,10 @@ import type {
   SubjectMask,
 } from "./GuidedImagePlacementTypes";
 import type { ImageDataLike } from "./ImagePlacementRecipe";
+import { isIOSPlatform } from "./iOSPlatform";
 import { createFastPromptMask } from "./PromptMaskProvider";
+
+export { isIOSPlatform } from "./iOSPlatform";
 
 export interface ImageSegmentationResult {
   constraintsSatisfied: boolean;
@@ -45,6 +48,7 @@ export interface ImageSegmentationClientOptions {
     fallbackReason?: string,
   ) => void;
   wasmBaseUrl?: string;
+  wasmNumThreads?: number;
   workerFactory?: () => Worker;
 }
 
@@ -64,30 +68,20 @@ function defaultSegmentationMode(): SegmentationMode {
   return "auto";
 }
 
-interface NavigatorPlatformInfo {
-  maxTouchPoints?: number;
-  platform?: string;
-  userAgent: string;
-}
-
-export function isIOSPlatform(
-  platformInfo: NavigatorPlatformInfo | undefined,
-): boolean {
-  if (!platformInfo) return false;
-  if (/iPad|iPhone|iPod/i.test(platformInfo.userAgent)) return true;
-  return (
-    platformInfo.platform === "MacIntel" &&
-    (platformInfo.maxTouchPoints ?? 0) > 1
-  );
-}
-
 function defaultModelBackend(): SegmentationModelBackendPreference {
   return isIOSPlatform(typeof navigator === "undefined" ? undefined : navigator)
     ? "wasm"
     : "auto";
 }
 
-function cloneImage(image: ImageDataLike): ImageDataLike {
+interface BufferedImageData extends ImageDataLike {
+  data: Uint8ClampedArray;
+}
+
+function bufferedImage(image: ImageDataLike): BufferedImageData {
+  if (image.data instanceof Uint8ClampedArray) {
+    return { data: image.data, height: image.height, width: image.width };
+  }
   return {
     data: Uint8ClampedArray.from(image.data),
     height: image.height,
@@ -102,6 +96,7 @@ export class ImageSegmentationClient {
   readonly #onProgress?: (stage: string, progress?: number) => void;
   readonly #onProviderChange?: ImageSegmentationClientOptions["onProviderChange"];
   readonly #wasmBaseUrl: string;
+  readonly #wasmNumThreads?: number;
   readonly #workerFactory: () => Worker;
   readonly #workerSupported: boolean;
   #currentImageId?: string;
@@ -122,6 +117,13 @@ export class ImageSegmentationClient {
     this.#onProgress = options.onProgress;
     this.#onProviderChange = options.onProviderChange;
     this.#wasmBaseUrl = options.wasmBaseUrl ?? localAssetUrl("wasm/");
+    this.#wasmNumThreads =
+      options.wasmNumThreads ??
+      (isIOSPlatform(
+        typeof navigator === "undefined" ? undefined : navigator,
+      )
+        ? 1
+        : undefined);
     this.#workerSupported =
       options.workerFactory !== undefined || typeof Worker !== "undefined";
     this.#workerFactory =
@@ -133,7 +135,7 @@ export class ImageSegmentationClient {
     this.#onProviderChange?.(this.#mode === "fast" ? "classic" : "model");
   }
 
-  setImage(bitmap: ImageBitmap | undefined, pixels: ImageDataLike): string {
+  setImage(pixels: ImageDataLike): string {
     this.#assertActive();
     this.cancel();
     if (this.#currentImageId) {
@@ -147,17 +149,23 @@ export class ImageSegmentationClient {
     this.#currentImageId = imageId;
     this.#latestMaskId = undefined;
     this.#fallbackPreviousMask = undefined;
-    this.#fallbackImage = cloneImage(pixels);
-    if (!bitmap || !this.#workerSupported) return imageId;
+    const bufferedPixels = bufferedImage(pixels);
+    this.#fallbackImage = bufferedPixels;
+    if (!this.#workerSupported) return imageId;
     try {
       this.#worker ??= this.#createWorker();
+      const workerPixels = {
+        data: Uint8ClampedArray.from(bufferedPixels.data),
+        height: bufferedPixels.height,
+        width: bufferedPixels.width,
+      };
       const request: ImageWorkerRequest = {
-        image: bitmap,
         imageId,
+        pixels: workerPixels,
         requestId: this.#nextRequestId++,
         type: "set-image",
       };
-      this.#worker.postMessage(request, [bitmap]);
+      this.#worker.postMessage(request, [workerPixels.data.buffer]);
     } catch {
       this.#worker?.terminate();
       this.#worker = undefined;
@@ -244,6 +252,7 @@ export class ImageSegmentationClient {
       requestId: this.#nextRequestId++,
       type: "initialize",
       wasmBaseUrl: this.#wasmBaseUrl,
+      wasmNumThreads: this.#wasmNumThreads,
     };
     worker.postMessage(request);
     return worker;

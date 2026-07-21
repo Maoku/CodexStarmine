@@ -424,7 +424,6 @@ class GuidedImagePlacementDialog {
       const loadImage = this.#options.loadImage ?? loadGuidedImagePixels;
       const loaded = await loadImage(this.#file);
       if (this.#closed) {
-        loaded.bitmap?.close();
         URL.revokeObjectURL(loaded.previewUrl);
         return;
       }
@@ -481,7 +480,7 @@ class GuidedImagePlacementDialog {
           }
         },
       });
-      this.#client.setImage(loaded.bitmap, loaded.analysisPixels);
+      this.#client.setImage(loaded.analysisPixels);
       const provisional = createFastPromptMask(loaded.pixels, []);
       this.#mask = provisional.mask;
       this.#maskProvider = provisional.provider;
@@ -1701,7 +1700,6 @@ class GuidedImagePlacementDialog {
     this.#placementRequestId += 1;
     this.#placementWorker?.terminate();
     this.#placementWorker = undefined;
-    this.#loaded?.bitmap?.close();
     if (this.#loaded) URL.revokeObjectURL(this.#loaded.previewUrl);
     this.#backdrop.remove();
     this.#inertSiblings.forEach(({ ariaHidden, element, inert }) => {

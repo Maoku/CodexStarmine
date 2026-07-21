@@ -96,6 +96,7 @@ describe("SlimSamPromptMaskProvider", () => {
       loadRuntime: async () => runtime,
       modelBaseUrl: "https://example.test/app/models/",
       wasmBaseUrl: "https://example.test/app/wasm/",
+      wasmNumThreads: 1,
     });
 
     await provider.setImage({
@@ -116,6 +117,7 @@ describe("SlimSamPromptMaskProvider", () => {
     expect(configure).toHaveBeenCalledWith({
       modelBaseUrl: "https://example.test/app/models/",
       wasmBaseUrl: "https://example.test/app/wasm/",
+      wasmNumThreads: 1,
     });
     expect(encode).toHaveBeenCalledTimes(1);
     expect(decode).toHaveBeenCalledTimes(2);

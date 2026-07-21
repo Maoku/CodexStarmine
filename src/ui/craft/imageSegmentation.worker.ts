@@ -37,6 +37,7 @@ let mode: SegmentationMode = "auto";
 let modelBackend: SegmentationModelBackendPreference = "auto";
 let modelBaseUrl = "";
 let wasmBaseUrl = "";
+let wasmNumThreads: number | undefined;
 let provider: PromptMaskProvider | undefined;
 let providerFallbackReason: string | undefined;
 let encodeDurationMs: number | undefined;
@@ -113,6 +114,7 @@ async function createSlimSamProvider(
     modelBaseUrl,
     onProgress: (stage, value) => progress(requestId, stage, value, imageId),
     wasmBaseUrl,
+    wasmNumThreads,
   });
   try {
     await withTimeout(
@@ -275,6 +277,7 @@ async function handleInitialize(
   modelBackend = request.modelBackend;
   modelBaseUrl = request.modelBaseUrl;
   wasmBaseUrl = request.wasmBaseUrl;
+  wasmNumThreads = request.wasmNumThreads;
   scope.postMessage({
     backend: "cpu",
     modelVersion: SLIMSAM_MODEL_REVISION,
@@ -291,18 +294,10 @@ async function handleSetImage(
   providerFallbackReason = undefined;
   progress(request.requestId, "decoding", 0, request.imageId);
   try {
-    const canvas = new OffscreenCanvas(
-      request.image.width,
-      request.image.height,
-    );
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    if (!context) throw new Error("offscreen-canvas-unavailable");
-    context.drawImage(request.image, 0, 0);
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
     const pixelData = {
-      data: pixels.data,
-      height: pixels.height,
-      width: pixels.width,
+      data: request.pixels.data,
+      height: request.pixels.height,
+      width: request.pixels.width,
     };
     image = {
       id: request.imageId,
@@ -314,7 +309,7 @@ async function handleSetImage(
     scope.postMessage({
       backend: image.usefulAlpha ? "none" : (provider?.backend ?? "cpu"),
       imageId: request.imageId,
-      inputEdge: Math.max(pixels.width, pixels.height),
+      inputEdge: Math.max(pixelData.width, pixelData.height),
       provider: image.usefulAlpha ? "alpha" : (provider?.provider ?? "fast"),
       requestId: request.requestId,
       type: "embedding-ready",
@@ -328,8 +323,6 @@ async function handleSetImage(
       requestId: request.requestId,
       type: "error",
     });
-  } finally {
-    request.image.close();
   }
 }
 

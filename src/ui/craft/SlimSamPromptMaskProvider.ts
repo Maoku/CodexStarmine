@@ -70,7 +70,11 @@ export interface SlimSamModelLike {
 }
 
 export interface SlimSamRuntime {
-  configure(options: { modelBaseUrl: string; wasmBaseUrl: string }): void;
+  configure(options: {
+    modelBaseUrl: string;
+    wasmBaseUrl: string;
+    wasmNumThreads?: number;
+  }): void;
   createRawImage(
     data: Uint8ClampedArray,
     width: number,
@@ -90,6 +94,7 @@ export interface SlimSamPromptMaskProviderOptions {
   modelBaseUrl: string;
   onProgress?: (stage: string, progress?: number) => void;
   wasmBaseUrl: string;
+  wasmNumThreads?: number;
 }
 
 interface StoredImage {
@@ -138,16 +143,19 @@ export function ensureProcessorInputLabels(
 async function loadTransformersRuntime(): Promise<SlimSamRuntime> {
   const transformers = await import("@huggingface/transformers");
   return {
-    configure: ({ modelBaseUrl, wasmBaseUrl }) => {
+    configure: ({ modelBaseUrl, wasmBaseUrl, wasmNumThreads }) => {
       transformers.env.allowLocalModels = true;
       transformers.env.allowRemoteModels = false;
       transformers.env.localModelPath = modelBaseUrl;
       transformers.env.useBrowserCache = true;
       const onnxEnvironment = transformers.env.backends.onnx as {
-        wasm?: { wasmPaths?: string };
+        wasm?: { numThreads?: number; wasmPaths?: string };
       };
       onnxEnvironment.wasm ??= {};
       onnxEnvironment.wasm.wasmPaths = wasmBaseUrl;
+      if (wasmNumThreads !== undefined) {
+        onnxEnvironment.wasm.numThreads = wasmNumThreads;
+      }
     },
     createRawImage: (data, width, height) =>
       new transformers.RawImage(data, width, height, 4),
@@ -201,6 +209,7 @@ export class SlimSamPromptMaskProvider implements PromptMaskProvider {
     runtime.configure({
       modelBaseUrl: this.#options.modelBaseUrl,
       wasmBaseUrl: this.#options.wasmBaseUrl,
+      wasmNumThreads: this.#options.wasmNumThreads,
     });
     const processor = await runtime.loadProcessor(SLIMSAM_MODEL_ID);
     const model = await runtime.loadModel({

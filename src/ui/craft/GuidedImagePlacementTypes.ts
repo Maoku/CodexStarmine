@@ -174,12 +174,17 @@ export type ImageWorkerRequest =
       modelBackend: SegmentationModelBackendPreference;
       modelBaseUrl: string;
       wasmBaseUrl: string;
+      wasmNumThreads?: number;
     }
   | {
       type: "set-image";
       requestId: number;
       imageId: string;
-      image: ImageBitmap;
+      pixels: {
+        data: Uint8ClampedArray;
+        height: number;
+        width: number;
+      };
     }
   | {
       type: "segment";
