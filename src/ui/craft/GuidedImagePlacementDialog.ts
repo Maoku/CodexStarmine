@@ -162,6 +162,25 @@ export function moveImageCrosshair(
   };
 }
 
+export function imageSegmentationRuntimeLabel(
+  provider: SegmentationProvider,
+  backend: SegmentationDiagnostics["backend"] | undefined,
+): string {
+  if (provider === "alpha") return "画像解析: アルファ / モデル不使用";
+  if (provider === "slimsam" && backend === "webgpu") {
+    return "画像解析: SlimSAM / WebGPU (fp16)";
+  }
+  if (provider === "slimsam" && backend === "wasm") {
+    return "画像解析: SlimSAM / WASM (q8)";
+  }
+  if (provider === "slimsam" && backend === "cpu") {
+    return "画像解析: SlimSAM / CPU";
+  }
+  if (provider === "slimsam") return "画像解析: SlimSAM / 準備中";
+  if (provider === "grabcut") return "画像解析: GrabCut / CPU";
+  return "画像解析: 高速方式 / CPU";
+}
+
 export function renderGuidedImagePlacementDialogShell(
   fileName: string,
   targetCount: number,
@@ -1447,7 +1466,7 @@ class GuidedImagePlacementDialog {
         this.#placement.diagnostics.featurePointCounts,
       ).reduce((sum, count) => sum + count, 0);
       const backend = this.#segmentationDiagnostics?.backend;
-      diagnostics.textContent = `外形 ${this.#placement.diagnostics.outlinePointCount}点 / 内部境界 ${this.#placement.diagnostics.internalBoundaryPointCount}点（${this.#placement.diagnostics.internalBoundaryCount}本） / 内部 ${this.#placement.diagnostics.interiorPointCount}点 / 特徴 ${featureCount}点 / 代表色 ${this.#placement.diagnostics.paletteColorCount}色 / ${this.#providerLabel(this.#maskProvider, backend)}`;
+      diagnostics.textContent = `外形 ${this.#placement.diagnostics.outlinePointCount}点 / 内部境界 ${this.#placement.diagnostics.internalBoundaryPointCount}点（${this.#placement.diagnostics.internalBoundaryCount}本） / 内部 ${this.#placement.diagnostics.interiorPointCount}点 / 特徴 ${featureCount}点 / 代表色 ${this.#placement.diagnostics.paletteColorCount}色 / ${imageSegmentationRuntimeLabel(this.#maskProvider, backend)}`;
       diagnostics.classList.toggle(
         "has-warning",
         this.#placement.warnings.length > 0 || !this.#constraintsSatisfied,
@@ -1511,17 +1530,6 @@ class GuidedImagePlacementDialog {
     return star
       ? { color: virtualStarRepresentativeColor(star), starId: star.id }
       : undefined;
-  }
-
-  #providerLabel(
-    provider: SegmentationProvider,
-    backend: SegmentationDiagnostics["backend"] | undefined,
-  ): string {
-    if (provider === "alpha") return "アルファマスク";
-    if (provider === "slimsam" && backend === "webgpu") return "高精度・GPU";
-    if (provider === "slimsam") return "高精度・互換";
-    if (provider === "grabcut") return "軽量補正";
-    return "高速プレビュー";
   }
 
   #drawOverlay(): void {

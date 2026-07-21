@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { snapshotStarLibrary } from "../../data";
 import {
+  imageSegmentationRuntimeLabel,
   moveImageCrosshair,
   normalizedImagePoint,
   renderGuidedImagePlacementDialogShell,
@@ -145,5 +146,20 @@ describe("GuidedImagePlacementDialog", () => {
       x: 0.99,
       y: 0,
     });
+  });
+
+  it("labels the image segmentation provider and its actual runtime", () => {
+    expect(imageSegmentationRuntimeLabel("slimsam", "webgpu")).toBe(
+      "画像解析: SlimSAM / WebGPU (fp16)",
+    );
+    expect(imageSegmentationRuntimeLabel("slimsam", "wasm")).toBe(
+      "画像解析: SlimSAM / WASM (q8)",
+    );
+    expect(imageSegmentationRuntimeLabel("fast", "cpu")).toBe(
+      "画像解析: 高速方式 / CPU",
+    );
+    expect(imageSegmentationRuntimeLabel("alpha", "none")).toBe(
+      "画像解析: アルファ / モデル不使用",
+    );
   });
 });
