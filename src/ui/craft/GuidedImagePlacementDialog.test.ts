@@ -18,6 +18,11 @@ describe("GuidedImagePlacementDialog", () => {
 
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('aria-modal="true"');
+    expect(markup).toContain(
+      '<div class="guided-image-title-row"><h2 id="guided-image-dialog-title">画像から仮想星を作る</h2><span class="guided-image-runtime" data-guided-runtime',
+    );
+    expect(markup).toContain('data-backend="none"');
+    expect(markup).toContain("画像解析: 準備中");
     expect(markup).toContain('data-input-mode="box"');
     expect(markup).toContain("被写体を囲む");
     expect(markup).toContain('data-prompt-kind="subject"');

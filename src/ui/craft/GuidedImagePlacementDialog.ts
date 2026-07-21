@@ -207,7 +207,7 @@ export function renderGuidedImagePlacementDialogShell(
     .join("");
   return `<section class="guided-image-dialog" role="dialog" aria-modal="true" aria-labelledby="guided-image-dialog-title" aria-describedby="guided-image-dialog-help">
     <header class="guided-image-dialog-header">
-      <div><p>POINT-GUIDED IMAGE</p><h2 id="guided-image-dialog-title">画像から仮想星を作る</h2></div>
+      <div><p>POINT-GUIDED IMAGE</p><div class="guided-image-title-row"><h2 id="guided-image-dialog-title">画像から仮想星を作る</h2><span class="guided-image-runtime" data-guided-runtime data-backend="none" role="status" aria-live="polite">画像解析: 準備中</span></div></div>
       <button type="button" data-guided-action="close" aria-label="画像から仮想星を作る画面を閉じる">×</button>
     </header>
     <div class="guided-image-dialog-body">
@@ -344,6 +344,8 @@ class GuidedImagePlacementDialog {
   #maskProvider: SegmentationProvider = "fast";
   #maskRevision = 0;
   #probabilityMask?: ProbabilityMask;
+  #runtimeBackend?: SegmentationDiagnostics["backend"];
+  #runtimeProvider?: SegmentationProvider;
   #segmentationDiagnostics?: SegmentationDiagnostics;
   #segmentationPending = false;
   #constraintsSatisfied = false;
@@ -455,20 +457,26 @@ class GuidedImagePlacementDialog {
         this.#options.createSegmentationClient ??
         ((options) => new ImageSegmentationClient(options))
       )({
-        onProviderChange: (profile, _provider, fallbackReason) => {
-          if (this.#closed || profile === this.#interactionProfile) return;
-          this.#interactionProfile = profile;
-          if (
-            profile === "model" &&
-            (this.#activeMode === "feature" ||
-              this.#activeMode === "background")
-          ) {
-            this.#activeMode = "box";
+        onProviderChange: (profile, provider, fallbackReason, backend) => {
+          if (this.#closed) return;
+          if (provider) {
+            this.#runtimeProvider = provider;
+            this.#runtimeBackend = backend;
           }
-          if (profile === "classic" && fallbackReason) {
-            this.#announce(
-              "軽量方式へ切り替えました。必要なら特徴・背景を追加できます。",
-            );
+          if (profile !== this.#interactionProfile) {
+            this.#interactionProfile = profile;
+            if (
+              profile === "model" &&
+              (this.#activeMode === "feature" ||
+                this.#activeMode === "background")
+            ) {
+              this.#activeMode = "box";
+            }
+            if (profile === "classic" && fallbackReason) {
+              this.#announce(
+                "軽量方式へ切り替えました。必要なら特徴・背景を追加できます。",
+              );
+            }
           }
           this.#renderState();
         },
@@ -1357,6 +1365,14 @@ class GuidedImagePlacementDialog {
     if (this.#closed) return;
     this.#renderOutlineStarState();
     this.#renderTargetCountInputs();
+    const runtime = this.#query<HTMLElement>("[data-guided-runtime]");
+    runtime.textContent = this.#runtimeProvider
+      ? imageSegmentationRuntimeLabel(
+          this.#runtimeProvider,
+          this.#runtimeBackend,
+        )
+      : "画像解析: 準備中";
+    runtime.dataset.backend = this.#runtimeBackend ?? "none";
     this.#backdrop.setAttribute(
       "aria-busy",
       String(
@@ -1465,8 +1481,7 @@ class GuidedImagePlacementDialog {
       const featureCount = Object.values(
         this.#placement.diagnostics.featurePointCounts,
       ).reduce((sum, count) => sum + count, 0);
-      const backend = this.#segmentationDiagnostics?.backend;
-      diagnostics.textContent = `外形 ${this.#placement.diagnostics.outlinePointCount}点 / 内部境界 ${this.#placement.diagnostics.internalBoundaryPointCount}点（${this.#placement.diagnostics.internalBoundaryCount}本） / 内部 ${this.#placement.diagnostics.interiorPointCount}点 / 特徴 ${featureCount}点 / 代表色 ${this.#placement.diagnostics.paletteColorCount}色 / ${imageSegmentationRuntimeLabel(this.#maskProvider, backend)}`;
+      diagnostics.textContent = `外形 ${this.#placement.diagnostics.outlinePointCount}点 / 内部境界 ${this.#placement.diagnostics.internalBoundaryPointCount}点（${this.#placement.diagnostics.internalBoundaryCount}本） / 内部 ${this.#placement.diagnostics.interiorPointCount}点 / 特徴 ${featureCount}点 / 代表色 ${this.#placement.diagnostics.paletteColorCount}色`;
       diagnostics.classList.toggle(
         "has-warning",
         this.#placement.warnings.length > 0 || !this.#constraintsSatisfied,

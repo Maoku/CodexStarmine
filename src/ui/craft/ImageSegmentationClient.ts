@@ -5,6 +5,7 @@ import type {
   NormalizedImageRect,
   ProbabilityMask,
   SegmentationDiagnostics,
+  SegmentationExecutionBackend,
   SegmentationInteractionProfile,
   SegmentationMode,
   SegmentationModelBackendPreference,
@@ -46,6 +47,7 @@ export interface ImageSegmentationClientOptions {
     profile: SegmentationInteractionProfile,
     provider?: SegmentationProvider,
     fallbackReason?: string,
+    backend?: SegmentationExecutionBackend,
   ) => void;
   wasmBaseUrl?: string;
   wasmNumThreads?: number;
@@ -270,14 +272,18 @@ export class ImageSegmentationClient {
     }
     if (response.type === "embedding-ready") {
       if (response.imageId === this.#currentImageId) {
-        this.#notifyProvider(response.provider);
+        this.#notifyProvider(response.provider, undefined, response.backend);
         this.#onProgress?.("embedding-ready", 1);
       }
       return;
     }
     if (response.type === "initialized") {
       if (this.#mode === "fast" || response.provider !== "fast") {
-        this.#notifyProvider(response.provider, response.fallbackReason);
+        this.#notifyProvider(
+          response.provider,
+          response.fallbackReason,
+          response.backend,
+        );
       }
       return;
     }
@@ -311,6 +317,7 @@ export class ImageSegmentationClient {
     this.#notifyProvider(
       response.diagnostics.provider,
       response.diagnostics.fallbackReason,
+      response.diagnostics.backend,
     );
     this.#fallbackPreviousMask = {
       data: response.mask.data.slice(),
@@ -376,7 +383,11 @@ export class ImageSegmentationClient {
       height: result.mask.height,
       width: result.mask.width,
     };
-    this.#notifyProvider(result.provider, fallbackReason);
+    this.#notifyProvider(
+      result.provider,
+      fallbackReason,
+      result.diagnostics.backend,
+    );
     return {
       ...result,
       diagnostics: {
@@ -396,9 +407,10 @@ export class ImageSegmentationClient {
   #notifyProvider(
     provider: SegmentationProvider,
     fallbackReason?: string,
+    backend?: SegmentationExecutionBackend,
   ): void {
     const profile: SegmentationInteractionProfile =
       provider === "slimsam" || provider === "alpha" ? "model" : "classic";
-    this.#onProviderChange?.(profile, provider, fallbackReason);
+    this.#onProviderChange?.(profile, provider, fallbackReason, backend);
   }
 }

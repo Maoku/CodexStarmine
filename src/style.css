@@ -469,6 +469,42 @@ body.has-guided-image-dialog {
   font-weight: 500;
 }
 
+.guided-image-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.guided-image-runtime {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.35rem;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid rgb(99 210 198 / 24%);
+  border-radius: 999px;
+  background: rgb(65 173 162 / 9%);
+  color: #8bc7bf;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.guided-image-runtime[data-backend="wasm"] {
+  border-color: rgb(220 169 91 / 30%);
+  background: rgb(220 169 91 / 10%);
+  color: #d7b77f;
+}
+
+.guided-image-runtime[data-backend="cpu"],
+.guided-image-runtime[data-backend="none"] {
+  border-color: rgb(155 171 183 / 22%);
+  background: rgb(155 171 183 / 8%);
+  color: #a8b5be;
+}
+
 .guided-image-dialog button,
 .guided-image-dialog input,
 .guided-image-dialog select {

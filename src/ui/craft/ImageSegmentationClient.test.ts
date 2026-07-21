@@ -124,8 +124,10 @@ describe("ImageSegmentationClient", () => {
     const worker = new FakeWorker();
     const profiles: string[] = [];
     const client = new ImageSegmentationClient({
-      onProviderChange: (profile, provider) =>
-        profiles.push(`${profile}:${provider ?? "pending"}`),
+      onProviderChange: (profile, provider, _fallbackReason, backend) =>
+        profiles.push(
+          `${profile}:${provider ?? "pending"}:${backend ?? "pending"}`,
+        ),
       workerFactory: () => worker as unknown as Worker,
     });
     client.setImage(pixels());
@@ -136,7 +138,10 @@ describe("ImageSegmentationClient", () => {
       type: "initialized",
     });
 
-    expect(profiles).toEqual(["model:pending", "model:slimsam"]);
+    expect(profiles).toEqual([
+      "model:pending:pending",
+      "model:slimsam:wasm",
+    ]);
     client.dispose();
   });
 
