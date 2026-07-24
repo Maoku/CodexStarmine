@@ -3,7 +3,15 @@ export interface ModeSelectionScreenCallbacks {
   onChooseFree: () => void;
 }
 
-export function renderModeSelectionScreenMarkup(): string {
+export function renderModeSelectionScreenMarkup(locale: Locale = "ja"): string {
+  if (locale === "en")
+    return `<main class="mode-selection-main">
+    <h1 class="visually-hidden" id="mode-selection-heading">Choose a virtual fireworks activity</h1>
+    <div class="mode-choice-grid">
+      <button class="mode-choice mode-choice--craft" type="button" data-choice="craft" autofocus><span class="mode-choice__number">01 / CRAFT</span><strong>Create fireworks</strong><small>Open your firework shelf to create, edit, and save individual shells.</small><i aria-hidden="true">Go to the workbench →</i></button>
+      <button class="mode-choice mode-choice--free" type="button" data-choice="free"><span class="mode-choice__number">02 / VIEW</span><strong>Free viewing</strong><small>Watch an automatic program of fireworks across the lakeside nightscape.</small><i aria-hidden="true">Go to the lakeside →</i></button>
+    </div>
+  </main><p class="mode-safety-note"><span>Virtual fireworks</span> No real materials, formulas, or manufacturing conditions are used</p><footer class="renewal-screen-note">The title demo is silent · Adjust sound on the viewing screen</footer>`;
   return `<main class="mode-selection-main">
     <h1 class="visually-hidden" id="mode-selection-heading">仮想花火の操作を選ぶ</h1>
     <div class="mode-choice-grid">
@@ -29,11 +37,11 @@ export class ModeSelectionScreen {
   readonly element = document.createElement("section");
   readonly #callbacks: ModeSelectionScreenCallbacks;
 
-  constructor(callbacks: ModeSelectionScreenCallbacks) {
+  constructor(callbacks: ModeSelectionScreenCallbacks, locale: Locale = "ja") {
     this.#callbacks = callbacks;
     this.element.className = "renewal-screen mode-selection-screen";
     this.element.setAttribute("aria-labelledby", "mode-selection-heading");
-    this.element.innerHTML = renderModeSelectionScreenMarkup();
+    this.element.innerHTML = renderModeSelectionScreenMarkup(locale);
     this.element.addEventListener("click", this.#handleClick);
   }
 
@@ -50,3 +58,4 @@ export class ModeSelectionScreen {
     if (choice === "free") this.#callbacks.onChooseFree();
   };
 }
+import type { Locale } from "../../i18n";

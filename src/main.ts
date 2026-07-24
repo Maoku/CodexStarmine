@@ -1,6 +1,7 @@
 import "./style.css";
 
 import { NightSkyApp } from "./render/NightSkyApp";
+import { initialLocale, text } from "./i18n";
 
 const root = document.querySelector<HTMLElement>("#app");
 
@@ -9,9 +10,15 @@ if (!root) {
 }
 
 let app: NightSkyApp | undefined;
+const locale = initialLocale();
+document.documentElement.lang = locale;
+document.title = "Codex Starmine";
+document
+  .querySelector<HTMLMetaElement>('meta[name="description"]')
+  ?.setAttribute("content", text(locale, "description"));
 
 try {
-  app = new NightSkyApp(root);
+  app = new NightSkyApp(root, locale);
   app.start();
 } catch (error) {
   console.error(error);
@@ -19,8 +26,8 @@ try {
   root.innerHTML = `
     <section class="webgl-error" role="alert">
       <p class="status-panel__eyebrow">CODEX STARMINE</p>
-      <h1>夜空を表示できませんでした</h1>
-      <p>WebGL 2 が利用できるブラウザで、もう一度お試しください。</p>
+      <h1>${text(locale, "webglHeading")}</h1>
+      <p>${text(locale, "webglDetail")}</p>
     </section>
   `;
 }

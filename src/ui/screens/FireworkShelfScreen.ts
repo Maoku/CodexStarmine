@@ -1,8 +1,12 @@
 import {
-  FIREWORK_PATTERN_LABELS,
   type FireworkDesign,
   type FireworkLibraryImportPreview,
 } from "../../data";
+import {
+  patternLabel as localizedPatternLabel,
+  sizeLabel,
+} from "../../i18n/catalog";
+import type { Locale } from "../../i18n";
 import { escapeHTML } from "../craft/viewUtils";
 
 export type ShelfSortOrder = "updated" | "name";
@@ -98,6 +102,7 @@ export function filterAndSortShelfDesigns(
   designs: readonly FireworkDesign[],
   query: string,
   sortOrder: ShelfSortOrder,
+  locale: Intl.LocalesArgument = "ja",
 ): FireworkDesign[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filtered = designs.filter((design) => {
@@ -107,14 +112,14 @@ export function filterAndSortShelfDesigns(
       .includes(normalizedQuery);
   });
   if (sortOrder === "name") {
-    filtered.sort((a, b) => a.name.localeCompare(b.name, "ja"));
+    filtered.sort((a, b) => a.name.localeCompare(b.name, locale));
   }
   return filtered;
 }
 
-function renderThumbnail(design: FireworkDesign): string {
+function renderThumbnail(design: FireworkDesign, locale: Locale): string {
   const model = buildShelfThumbnailModel(design);
-  return `<span class="shelf-thumbnail shelf-thumbnail--${model.kind}" style="--shelf-accent:${model.accent}" role="img" aria-label="${escapeHTML(design.name)}の抽象化した玉内配置">
+  return `<span class="shelf-thumbnail shelf-thumbnail--${model.kind}" style="--shelf-accent:${model.accent}" role="img" aria-label="${escapeHTML(design.name)}${locale === "en" ? " abstract shell layout" : "の抽象化した玉内配置"}">
     <i class="shelf-thumbnail__paper"></i>
     ${model.rings
       .map(
@@ -124,10 +129,6 @@ function renderThumbnail(design: FireworkDesign): string {
       .join("")}
     <i class="shelf-thumbnail__band"></i>
   </span>`;
-}
-
-function patternLabel(design: FireworkDesign): string {
-  return FIREWORK_PATTERN_LABELS[design.pattern];
 }
 
 export class FireworkShelfScreen {
@@ -142,20 +143,28 @@ export class FireworkShelfScreen {
   #selectedDesignId?: string;
   #sortOrder: ShelfSortOrder = "updated";
   #updatedAtById: Record<string, string>;
+  readonly #locale: Locale;
 
   constructor(
     designs: readonly FireworkDesign[],
     selectedDesignId: string | undefined,
     callbacks: FireworkShelfScreenCallbacks,
     updatedAtById: Readonly<Record<string, string>> = {},
+    locale: Locale = "ja",
   ) {
     this.#callbacks = callbacks;
     this.#designs = structuredClone([...designs]);
     this.#selectedDesignId = selectedDesignId;
     this.#updatedAtById = { ...updatedAtById };
+    this.#locale = locale;
     this.element.className = "renewal-screen firework-shelf-screen";
     this.element.setAttribute("aria-labelledby", "firework-shelf-heading");
-    this.element.innerHTML = `
+    this.element.innerHTML =
+      locale === "en"
+        ? `
+      <header class="renewal-brand renewal-brand--toolbar"><button class="renewal-back" type="button" data-action="back">← Mode selection</button><div class="screen-context-title"><p>FIREWORK SHELF</p><h1>Firework shelf</h1></div><p><span data-shelf-count>${this.#designs.length}</span> works stored</p></header>
+      <main class="shelf-main"><div class="shelf-heading"><div><p class="renewal-kicker">FIREWORK SHELF</p><h2 id="firework-shelf-heading">Firework shelf</h2></div><p>Your workbench for creating, editing, and organizing saved fireworks.</p></div><section class="shelf-cabinet" aria-label="Saved firework workbench"><div class="shelf-tools"><label class="shelf-search"><span>Find a work</span><input name="shelf-search" type="search" placeholder="Search by name" autocomplete="off" /></label><label class="shelf-sort"><span>Sort</span><select name="shelf-sort"><option value="updated">Last updated</option><option value="name">Name</option></select></label><div class="shelf-file-actions" aria-label="Firework JSON file actions"><input class="shelf-import-input" name="shelf-import" type="file" accept="application/json,.json" tabindex="-1" aria-hidden="true" hidden /><button type="button" data-action="import">Import</button><button type="button" data-action="export">Export</button><button class="shelf-clear-action" type="button" data-action="clear-library">Clear all local works</button></div></div><div class="shelf-results" role="list" data-shelf-results></div><div class="shelf-drawers" aria-hidden="true"><i></i><i></i><i></i></div></section></main><div data-shelf-dialog-host></div>`
+        : `
       <header class="renewal-brand renewal-brand--toolbar">
         <button class="renewal-back" type="button" data-action="back">← モード選択</button>
         <div class="screen-context-title">
@@ -442,18 +451,19 @@ export class FireworkShelfScreen {
       this.#designs,
       this.#query,
       this.#sortOrder,
+      this.#locale,
     );
     const stateCard =
       this.#designs.length === 0
-        ? `<div class="shelf-empty" role="listitem"><strong>棚は空です</strong><p>「新しい花火」から最初の一発を仕立てられます。</p></div>`
+        ? `<div class="shelf-empty" role="listitem"><strong>${this.#locale === "en" ? "The shelf is empty" : "棚は空です"}</strong><p>${this.#locale === "en" ? "Create your first shell with New firework." : "「新しい花火」から最初の一発を仕立てられます。"}</p></div>`
         : visibleDesigns.length === 0
-          ? `<div class="shelf-empty" role="listitem"><strong>該当する作品がありません</strong><p>検索語を変えると、保存作品はそのまま表示できます。</p></div>`
+          ? `<div class="shelf-empty" role="listitem"><strong>${this.#locale === "en" ? "No matching works" : "該当する作品がありません"}</strong><p>${this.#locale === "en" ? "Try a different search term; your saved works remain unchanged." : "検索語を変えると、保存作品はそのまま表示できます。"}</p></div>`
           : "";
     host.innerHTML = `
       <article class="shelf-design-card shelf-design-card--new" role="listitem">
         <button type="button" data-action="create">
           <span class="shelf-new-shell" aria-hidden="true">＋</span>
-          <span><small>NEW WORK</small><strong>新しい花火</strong><i>大きさと型を選んで仕立てる</i></span>
+          <span><small>NEW WORK</small><strong>${this.#locale === "en" ? "New firework" : "新しい花火"}</strong><i>${this.#locale === "en" ? "Choose a size and starting pattern" : "大きさと型を選んで仕立てる"}</i></span>
         </button>
       </article>
       ${visibleDesigns.map((design) => this.#renderDesignCard(design)).join("")}
@@ -473,25 +483,20 @@ export class FireworkShelfScreen {
     const selected = design.id === this.#selectedDesignId;
     const isPreset = isBuiltInShelfPreset(design);
     const updatedAt = this.#updatedAtById[design.id];
-    const sizeLabel =
-      design.sizeClass === "small"
-        ? "小玉"
-        : design.sizeClass === "large"
-          ? "大玉"
-          : "中玉";
+    const size = sizeLabel(this.#locale, design.sizeClass);
     return `<article class="shelf-design-card ${selected ? "is-selected" : ""}" role="listitem" data-design-id="${escapeHTML(design.id)}">
       <button class="shelf-design-card__body" type="button" data-action="select" data-design-id="${escapeHTML(design.id)}" aria-pressed="${selected}">
-        ${renderThumbnail(design)}
+        ${renderThumbnail(design, this.#locale)}
         <span class="shelf-design-card__copy">
-          <small>${isPreset ? "内蔵見本 · " : ""}${sizeLabel} · ${patternLabel(design)}</small>
+          <small>${isPreset ? (this.#locale === "en" ? "Built-in sample · " : "内蔵見本 · ") : ""}${size} · ${localizedPatternLabel(this.#locale, design.pattern)}</small>
           <strong>${escapeHTML(design.name)}</strong>
-          <i>${escapeHTML(design.description || "仮想星の配置を保存した作品")}</i>
-          ${!isPreset && updatedAt ? `<time datetime="${escapeHTML(updatedAt)}">更新日: ${escapeHTML(formatShelfUpdatedAt(updatedAt))}</time>` : ""}
+          <i>${escapeHTML(design.description || (this.#locale === "en" ? "A saved virtual-star layout" : "仮想星の配置を保存した作品"))}</i>
+          ${!isPreset && updatedAt ? `<time datetime="${escapeHTML(updatedAt)}">${this.#locale === "en" ? "Updated: " : "更新日: "}${escapeHTML(formatShelfUpdatedAt(updatedAt, this.#locale))}</time>` : ""}
         </span>
       </button>
       <div class="shelf-design-card__actions">
-        <button class="primary-action" type="button" data-action="edit" data-design-id="${escapeHTML(design.id)}" aria-label="${escapeHTML(design.name)}を編集">${isPreset ? "見本から編集" : "編集"}</button>
-        ${isPreset ? "" : `<button class="shelf-delete-action" type="button" data-action="delete" data-design-id="${escapeHTML(design.id)}" aria-label="${escapeHTML(design.name)}を削除">削除</button>`}
+        <button class="primary-action" type="button" data-action="edit" data-design-id="${escapeHTML(design.id)}" aria-label="${this.#locale === "en" ? "Edit " : ""}${escapeHTML(design.name)}${this.#locale === "en" ? "" : "を編集"}">${isPreset ? (this.#locale === "en" ? "Edit from sample" : "見本から編集") : this.#locale === "en" ? "Edit" : "編集"}</button>
+        ${isPreset ? "" : `<button class="shelf-delete-action" type="button" data-action="delete" data-design-id="${escapeHTML(design.id)}" aria-label="${this.#locale === "en" ? "Delete " : ""}${escapeHTML(design.name)}${this.#locale === "en" ? "" : "を削除"}">${this.#locale === "en" ? "Delete" : "削除"}</button>`}
       </div>
     </article>`;
   }

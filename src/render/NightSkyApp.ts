@@ -33,6 +33,8 @@ import {
   HOME_FREE_VIEW_PRESET_ID,
 } from "../modes/viewFree";
 import { AppShell } from "../ui/AppShell";
+import type { Locale } from "../i18n";
+import { text } from "../i18n";
 import { AdvertiseCameraController, FreeViewCameraController } from "./camera";
 import { FireworkSystem } from "./fx";
 import { prepareShowLaunch } from "./prepareShowLaunch";
@@ -68,7 +70,7 @@ export class NightSkyApp {
     runtime: BackgroundRuntime;
   };
 
-  constructor(host: HTMLElement) {
+  constructor(host: HTMLElement, locale: Locale = "ja") {
     this.#host = host;
     this.#timer.connect(document);
 
@@ -109,7 +111,9 @@ export class NightSkyApp {
     this.#renderer.domElement.setAttribute("role", "img");
     this.#renderer.domElement.setAttribute(
       "aria-label",
-      NIGHT_SCENE_ACCESSIBLE_LABEL,
+      locale === "ja"
+        ? NIGHT_SCENE_ACCESSIBLE_LABEL
+        : text(locale, "sceneLabel"),
     );
     this.#renderer.outputColorSpace = SRGBColorSpace;
     this.#renderer.toneMapping = ACESFilmicToneMapping;
@@ -182,10 +186,7 @@ export class NightSkyApp {
     this.#freeShow = new FreeShowController({
       getDesigns,
       onCue: (cue) => {
-        launchShowCue(
-          cue,
-          Math.floor(cue.time * 10_000) + cue.id.length * 97,
-        );
+        launchShowCue(cue, Math.floor(cue.time * 10_000) + cue.id.length * 97);
       },
       onState: (state) => {
         this.#ui.setFreeState(state);
@@ -194,10 +195,7 @@ export class NightSkyApp {
     this.#advertiseDemo = new AdvertiseDemoController({
       getDesigns,
       onCue: (cue) => {
-        launchShowCue(
-          cue,
-          Math.floor(cue.time * 8_000) + cue.id.length * 131,
-        );
+        launchShowCue(cue, Math.floor(cue.time * 8_000) + cue.id.length * 131);
       },
     });
     this.#advertiseDemo.setPageVisible(document.visibilityState === "visible");
@@ -231,30 +229,34 @@ export class NightSkyApp {
         this.#freeShow.stop();
       },
     });
-    this.#ui = new AppShell(craft, {
-      onAudioPhysicality: (value) => {
-        this.#audio.physicality = value;
+    this.#ui = new AppShell(
+      craft,
+      {
+        onAudioPhysicality: (value) => {
+          this.#audio.physicality = value;
+        },
+        onCheckLoopChange: (enabled) => this.#check.setLoopEnabled(enabled),
+        onCheckToggle: () => this.#check.toggle(),
+        onDesignLibraryChange: () => undefined,
+        onFreeDensityChange: (value) => this.#freeShow.setDensity(value),
+        onBackgroundRuntimeChange: (runtime, design) => {
+          if (!this.#isUiReady) {
+            this.#pendingRuntime = { runtime, design };
+            return;
+          }
+          this.#setBackgroundRuntime(runtime, design);
+        },
+        onFreeToggle: () => this.#freeShow.toggle(),
+        onFreeViewPresetChange: (presetId) => {
+          this.#freeView.applyPreset(presetId);
+        },
+        onFreeViewReset: () => {
+          this.#freeView.reset();
+          this.#ui.setFreeViewPreset(HOME_FREE_VIEW_PRESET_ID);
+        },
       },
-      onCheckLoopChange: (enabled) => this.#check.setLoopEnabled(enabled),
-      onCheckToggle: () => this.#check.toggle(),
-      onDesignLibraryChange: () => undefined,
-      onFreeDensityChange: (value) => this.#freeShow.setDensity(value),
-      onBackgroundRuntimeChange: (runtime, design) => {
-        if (!this.#isUiReady) {
-          this.#pendingRuntime = { runtime, design };
-          return;
-        }
-        this.#setBackgroundRuntime(runtime, design);
-      },
-      onFreeToggle: () => this.#freeShow.toggle(),
-      onFreeViewPresetChange: (presetId) => {
-        this.#freeView.applyPreset(presetId);
-      },
-      onFreeViewReset: () => {
-        this.#freeView.reset();
-        this.#ui.setFreeViewPreset(HOME_FREE_VIEW_PRESET_ID);
-      },
-    });
+      locale,
+    );
     this.#isUiReady = true;
     if (this.#pendingRuntime) {
       this.#setBackgroundRuntime(

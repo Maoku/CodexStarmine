@@ -1,4 +1,6 @@
 import type { SingleLoopCheckState } from "../../modes/check";
+import type { Locale } from "../../i18n";
+import { viewLabel } from "../../i18n/catalog";
 import {
   FREE_VIEW_PRESET_IDS,
   FREE_VIEW_PRESETS,
@@ -28,6 +30,7 @@ export interface ViewingStageOptions {
   freeDensity: number;
   freeState: FreeShowState;
   freeViewPresetId: FreeViewPresetId;
+  locale?: Locale;
 }
 
 interface ViewerPanelTogglePresentation {
@@ -78,6 +81,7 @@ export class ViewingStage {
   #freeState: FreeShowState;
   #freeViewPresetId: FreeViewPresetId;
   #panelExpanded = true;
+  readonly #locale: Locale;
 
   constructor(options: ViewingStageOptions) {
     this.#callbacks = options.callbacks;
@@ -85,6 +89,7 @@ export class ViewingStage {
     this.#context = options.context;
     this.#freeState = options.freeState;
     this.#freeViewPresetId = options.freeViewPresetId;
+    this.#locale = options.locale ?? "ja";
     this.element.className = `renewal-viewer-screen viewing-stage viewing-stage--${this.#context}`;
     this.element.setAttribute(
       "aria-labelledby",
@@ -95,12 +100,12 @@ export class ViewingStage {
         <button class="renewal-back" type="button" data-viewer-action="back">← ${this.#context === "check" ? "編集に戻る" : "モード選択"}</button>
         <div class="screen-context-title">
           <p>${this.#context === "check" ? "CHECK" : "FREE VIEW"}</p>
-          <h1>${this.#context === "check" ? "確認" : "フリー鑑賞"}</h1>
+          <h1>${this.#context === "check" ? (this.#locale === "en" ? "Check" : "確認") : this.#locale === "en" ? "Free viewing" : "フリー鑑賞"}</h1>
         </div>
         <div class="sound-control">
-          <label for="viewer-sound-delay">音の距離感</label>
+          <label for="viewer-sound-delay">${this.#locale === "en" ? "Sound distance" : "音の距離感"}</label>
           <input id="viewer-sound-delay" name="viewer-sound-delay" type="range" min="0" max="100" value="100" />
-          <output for="viewer-sound-delay">実距離</output>
+          <output for="viewer-sound-delay">${this.#locale === "en" ? "Physical" : "実距離"}</output>
         </div>
       </header>
       ${this.#context === "check" ? this.#renderCheckPanel() : this.#renderFreePanel(options.freeDensity)}
@@ -195,7 +200,7 @@ export class ViewingStage {
     );
     if (select) select.value = presetId;
     const label = this.element.querySelector<HTMLElement>("[data-view-label]");
-    if (label) label.textContent = FREE_VIEW_PRESETS[presetId].label;
+    if (label) label.textContent = viewLabel(this.#locale, presetId);
   }
 
   #renderCheckPanel(): string {
@@ -288,9 +293,9 @@ export class ViewingStage {
 
   #renderSceneCaption(): string {
     if (this.#context === "check") {
-      return `<div class="scene-caption"><span>SEED</span><strong>FIXED</strong><i></i><span>VIEW</span><strong data-view-label>${FREE_VIEW_PRESETS[this.#freeViewPresetId].label}</strong></div>`;
+      return `<div class="scene-caption"><span>SEED</span><strong>FIXED</strong><i></i><span>VIEW</span><strong data-view-label>${viewLabel(this.#locale, this.#freeViewPresetId)}</strong></div>`;
     }
-    return `<div class="scene-caption"><span>WIND</span><strong>東 1.3 m/s</strong><i></i><span>VIEW</span><strong data-view-label>${FREE_VIEW_PRESETS[this.#freeViewPresetId].label}</strong></div>`;
+    return `<div class="scene-caption"><span>WIND</span><strong>${this.#locale === "en" ? "East" : "東"} 1.3 m/s</strong><i></i><span>VIEW</span><strong data-view-label>${viewLabel(this.#locale, this.#freeViewPresetId)}</strong></div>`;
   }
 
   readonly #handleClick = (event: Event): void => {

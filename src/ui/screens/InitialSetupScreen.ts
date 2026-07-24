@@ -1,4 +1,5 @@
 import type { InitialSetupDraft, AppScreen } from "../../app/AppFlowController";
+import type { Locale } from "../../i18n";
 
 export interface InitialSetupScreenCallbacks {
   onBack: () => void;
@@ -51,12 +52,64 @@ export class InitialSetupScreen {
   constructor(
     screen: InitialSetupScreenState,
     callbacks: InitialSetupScreenCallbacks,
+    locale: Locale = "ja",
   ) {
     this.#callbacks = callbacks;
     this.#draft = structuredClone(screen.draft);
     this.element.className = "renewal-screen initial-setup-screen";
     this.element.setAttribute("aria-labelledby", "initial-setup-heading");
-    this.element.innerHTML = `
+    this.element.innerHTML =
+      locale === "en"
+        ? `
+      <header class="renewal-brand renewal-brand--toolbar"><button class="renewal-back" type="button" data-action="back">← Back to firework shelf</button><div class="screen-context-title"><p>NEW FIREWORK</p><h1>New firework</h1></div><p><span>New</span> Choose only the starting conditions</p></header>
+      <main class="setup-main"><div class="setup-heading"><p class="renewal-kicker">NEW FIREWORK</p><h2 id="initial-setup-heading">Build a new firework</h2><p>Choose a size and a starting pattern. Fine placement can be edited in the next workshop.</p></div>
+      <form class="setup-form"><fieldset><legend><span>1</span> Shell size</legend><div class="setup-option-grid setup-option-grid--sizes">${[
+        {
+          value: "small",
+          label: "Small",
+          description: "A light, compact spread",
+        },
+        {
+          value: "medium",
+          label: "Medium",
+          description: "A balanced size for placement and spread",
+        },
+        {
+          value: "large",
+          label: "Large",
+          description: "A generous spread with room for layers",
+        },
+      ]
+        .map(
+          (option) =>
+            `<label class="setup-option setup-size-option"><input type="radio" name="setup-size" value="${option.value}" ${this.#draft.sizeClass === option.value ? "checked" : ""} /><i class="setup-size-shell setup-size-shell--${option.value}" aria-hidden="true"></i><strong>${option.label}</strong><small>${option.description}</small></label>`,
+        )
+        .join("")}</div></fieldset>
+      <fieldset><legend><span>2</span> Starting pattern</legend><div class="setup-option-grid setup-option-grid--templates">${[
+        {
+          value: "chrysanthemum",
+          label: "Chrysanthemum",
+          description: "Trailing stars arranged into a sphere",
+        },
+        {
+          value: "peony",
+          label: "Peony",
+          description: "Color points spread in a clean shape",
+        },
+        {
+          value: "blank",
+          label: "Start blank",
+          description: "Begin with only a minimal outer ring",
+        },
+      ]
+        .map(
+          (option) =>
+            `<label class="setup-option setup-template-option"><input type="radio" name="setup-template" value="${option.value}" ${this.#draft.template === option.value ? "checked" : ""} /><i class="setup-template-mark setup-template-mark--${option.value}" aria-hidden="true"></i><strong>${option.label}</strong><small>${option.description}</small></label>`,
+        )
+        .join(
+          "",
+        )}</div></fieldset><div class="setup-actions"><button type="button" data-action="back">Back to firework shelf</button><button class="primary-action" type="submit">Start creating →</button></div></form></main>`
+        : `
       <header class="renewal-brand renewal-brand--toolbar">
         <button class="renewal-back" type="button" data-action="back">← 花火棚へ戻る</button>
         <div class="screen-context-title">

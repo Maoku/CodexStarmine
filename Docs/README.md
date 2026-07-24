@@ -1,5 +1,7 @@
 # CodexStarmine ドキュメント
 
+[English](README.en.md)
+
 このディレクトリには、現在の実装に関する仕様、調査資料、検証用アセットをまとめています。過去の要求書と実装計画は [`plans/`](plans/README.md) に分離しています。
 
 ## 現行仕様

@@ -1,5 +1,7 @@
 # Codex Starmine
 
+[English](README.en.md)
+
 GPT-5.6 Sol / Codex （実装計画書サポートと画像から花火を作る機能は Claude Fable 5 ）で作成した
 自分でデザインした打ち上げ花火を、湖畔の夜景で鑑賞するブラウザシミュレーションです。
 

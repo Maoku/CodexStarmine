@@ -2950,7 +2950,10 @@ input[type="range"] {
   position: fixed;
   position-anchor: --preset-layer-menu-trigger;
   position-area: block-end span-inline-end;
-  position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  position-try-fallbacks:
+    flip-block,
+    flip-inline,
+    flip-block flip-inline;
   width: max(8rem, anchor-size(width));
   height: fit-content;
   min-height: 0;
@@ -6759,4 +6762,29 @@ h3,
   overflow-y: auto;
   scrollbar-color: rgb(205 158 96 / 35%) transparent;
   scrollbar-width: thin;
+}
+
+.app-language-switcher {
+  display: flex;
+  gap: 0.35rem;
+  position: fixed;
+  z-index: 20;
+  top: max(0.7rem, env(safe-area-inset-top));
+  right: max(0.7rem, env(safe-area-inset-right));
+}
+
+.app-language-switcher button {
+  min-height: 2.75rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid rgb(255 235 186 / 38%);
+  border-radius: 999px;
+  background: rgb(2 5 17 / 76%);
+  color: #fff6df;
+  font: inherit;
+}
+
+.app-language-switcher button[aria-pressed="true"] {
+  border-color: #ffd17a;
+  background: #795129;
+  color: white;
 }

@@ -22,6 +22,7 @@ import {
 import { InitialSetupScreen } from "./screens/InitialSetupScreen";
 import { ModeSelectionScreen } from "./screens/ModeSelectionScreen";
 import { ViewingStage, type ViewerContext } from "./viewer";
+import { I18n, type Locale } from "../i18n";
 
 export type AppMode = "craft" | "free";
 
@@ -48,7 +49,17 @@ interface MountedScreen {
 export function renderEditorHeader(
   name: string,
   sizeClass: FireworkDesign["sizeClass"],
+  locale: Locale = "ja",
 ): string {
+  if (locale === "en") {
+    return `<header class="app-header renewal-editor-header" data-editor-header>
+      <button class="renewal-back" type="button" data-shell-action="back">← Back to firework shelf</button>
+      <div class="editor-work-header" aria-label="Work being edited">
+        <label><span>Work name</span><input name="editor-design-name" type="text" maxlength="32" value="${escapeHTML(name)}" /></label>
+        <label><span>Shell size</span><select name="editor-size"><option value="small" ${sizeClass === "small" ? "selected" : ""}>Small</option><option value="medium" ${sizeClass === "medium" ? "selected" : ""}>Medium</option><option value="large" ${sizeClass === "large" ? "selected" : ""}>Large</option></select></label>
+      </div>
+    </header>`;
+  }
   return `<header class="app-header renewal-editor-header" data-editor-header>
     <button class="renewal-back" type="button" data-shell-action="back">← 花火棚へ戻る</button>
     <div class="editor-work-header" aria-label="編集中の作品">
@@ -63,6 +74,7 @@ export class AppShell {
   readonly #callbacks: AppShellCallbacks;
   readonly #controller: CraftController;
   readonly #flow: AppFlowController;
+  readonly #i18n: I18n;
   readonly #unsubscribeDocument: () => void;
   readonly #unsubscribeFlow: () => void;
   #activeViewerContext?: ViewerContext;
@@ -86,15 +98,29 @@ export class AppShell {
   #toastTimer = 0;
   #viewingStage?: ViewingStage;
 
-  constructor(controller: CraftController, callbacks: AppShellCallbacks) {
+  constructor(
+    controller: CraftController,
+    callbacks: AppShellCallbacks,
+    locale: Locale = "ja",
+  ) {
     this.#callbacks = callbacks;
     this.#controller = controller;
+    this.#i18n = new I18n(locale);
+    this.#i18n.setLocale(locale);
     this.#flow = new AppFlowController({
       confirmDiscard: () =>
-        window.confirm("保存していない変更があります。花火棚へ戻りますか？"),
+        window.confirm(
+          locale === "en"
+            ? "You have unsaved changes. Return to the firework shelf?"
+            : "保存していない変更があります。花火棚へ戻りますか？",
+        ),
     });
     this.element.className = "app-shell renewal-app-shell";
     this.element.innerHTML = `
+      <div class="app-language-switcher" role="group" aria-label="Language">
+        <button type="button" data-locale="ja" aria-pressed="${locale === "ja"}">日本語</button>
+        <button type="button" data-locale="en" aria-pressed="${locale === "en"}">English</button>
+      </div>
       <div class="renewal-screen-host" data-screen-host></div>
       <div class="toast" role="status" aria-live="polite" data-toast></div>`;
     this.element.addEventListener("click", this.#handleClick);
@@ -182,10 +208,13 @@ export class AppShell {
 
   #createScreen(screen: AppScreen): MountedScreen {
     if (screen.kind === "mode-select") {
-      return new ModeSelectionScreen({
-        onChooseCraft: () => this.#flow.navigate("choose-craft"),
-        onChooseFree: () => this.#flow.navigate("choose-free"),
-      });
+      return new ModeSelectionScreen(
+        {
+          onChooseCraft: () => this.#flow.navigate("choose-craft"),
+          onChooseFree: () => this.#flow.navigate("choose-free"),
+        },
+        this.#i18n.locale,
+      );
     }
     if (screen.kind === "library") {
       const library = this.#controller.shelfLibrary;
@@ -204,7 +233,9 @@ export class AppShell {
               this.#controller.savedDesigns,
             );
             return libraryState(
-              `ローカル保存作品 ${cleared} 件を消去しました。`,
+              this.#i18n.locale === "en"
+                ? `Cleared ${cleared} local work${cleared === 1 ? "" : "s"}.`
+                : `ローカル保存作品 ${cleared} 件を消去しました。`,
             );
           },
           onCreate: () => this.#flow.navigate("create-design"),
@@ -233,7 +264,9 @@ export class AppShell {
               this.#controller.savedDesigns,
             );
             return libraryState(
-              `JSONを読み込みました。新規 ${result.added} 件、置換 ${result.replaced} 件、重複スキップ ${result.skipped} 件。`,
+              this.#i18n.locale === "en"
+                ? `Imported JSON. Added ${result.added}, replaced ${result.replaced}, skipped ${result.skipped} duplicates.`
+                : `JSONを読み込みました。新規 ${result.added} 件、置換 ${result.replaced} 件、重複スキップ ${result.skipped} 件。`,
             );
           },
           onPreviewImport: (raw) =>
@@ -241,19 +274,24 @@ export class AppShell {
           onNotice: (message) => this.showToast(message),
         },
         library.updatedAtById,
+        this.#i18n.locale,
       );
     }
     if (screen.kind === "initial-setup") {
-      return new InitialSetupScreen(screen, {
-        onBack: () => this.#flow.back(),
-        onBegin: (draft) => {
-          this.#controller.startNewDraft(draft.sizeClass, draft.template);
-          this.#flow.navigate("begin-editing", {
-            designId: this.#controller.draft.id,
-            origin: "new",
-          });
+      return new InitialSetupScreen(
+        screen,
+        {
+          onBack: () => this.#flow.back(),
+          onBegin: (draft) => {
+            this.#controller.startNewDraft(draft.sizeClass, draft.template);
+            this.#flow.navigate("begin-editing", {
+              designId: this.#controller.draft.id,
+              origin: "new",
+            });
+          },
         },
-      });
+        this.#i18n.locale,
+      );
     }
     if (screen.kind === "editor") return this.#createEditorScreen(screen);
     return this.#createViewerScreen(screen.context);
@@ -271,6 +309,7 @@ export class AppShell {
       ${renderEditorHeader(
         this.#controller.draft.name,
         this.#controller.draft.sizeClass,
+        this.#i18n.locale,
       )}
       <div class="craft-host" data-editor-host></div>`;
     const workspace = new IntegratedCraftEditor(this.#controller, {
@@ -278,7 +317,11 @@ export class AppShell {
       onDesignLibraryChange: this.#callbacks.onDesignLibraryChange,
       onSaveToLibrary: (design) => {
         this.#flow.navigate("save-to-library", { designId: design.id });
-        this.showToast(`「${design.name}」を保存しました`);
+        this.showToast(
+          this.#i18n.locale === "en"
+            ? `Saved “${design.name}”.`
+            : `「${design.name}」を保存しました`,
+        );
       },
     });
     const host = element.querySelector<HTMLElement>("[data-editor-host]");
@@ -324,6 +367,7 @@ export class AppShell {
       freeDensity: this.#freeDensity,
       freeState: this.#freeState,
       freeViewPresetId: this.#freeViewPresetId,
+      locale: this.#i18n.locale,
     });
     this.#viewingStage = stage;
     return {
@@ -336,6 +380,24 @@ export class AppShell {
   }
 
   readonly #handleClick = (event: Event): void => {
+    const localeButton = (
+      event.target as HTMLElement
+    ).closest<HTMLButtonElement>("button[data-locale]");
+    if (
+      localeButton?.dataset.locale === "ja" ||
+      localeButton?.dataset.locale === "en"
+    ) {
+      this.#i18n.setLocale(localeButton.dataset.locale);
+      this.element
+        .querySelectorAll<HTMLButtonElement>("button[data-locale]")
+        .forEach((button) => {
+          button.ariaPressed = String(
+            button.dataset.locale === this.#i18n.locale,
+          );
+        });
+      this.#renderScreen(this.#flow.screen);
+      return;
+    }
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
       "button[data-shell-action]",
     );
