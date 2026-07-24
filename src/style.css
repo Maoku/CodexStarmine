@@ -5736,6 +5736,51 @@ input[type="range"] {
   display: none;
 }
 
+.viewer-volume-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+  margin: 0.8rem 1.15rem 0.15rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgb(233 164 95 / 18%);
+  border-radius: 0.55rem;
+  background:
+    linear-gradient(110deg, rgb(233 164 95 / 7%), transparent 62%),
+    rgb(255 255 255 / 2.5%);
+}
+
+.viewer-volume-control > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.viewer-volume-control strong {
+  color: #d0c7ba;
+  font-size: 0.65rem;
+  font-weight: 650;
+}
+
+.viewer-volume-control output {
+  min-width: 2.5rem;
+  color: #d4b184;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.62rem;
+  text-align: right;
+}
+
+.viewer-volume-control input {
+  width: 100%;
+  accent-color: #d29353;
+}
+
+.viewer-volume-control small {
+  color: #747d86;
+  font-size: 0.52rem;
+  line-height: 1.4;
+}
+
 .viewing-panel.is-collapsed {
   bottom: auto;
   width: auto;
@@ -5950,7 +5995,8 @@ input[type="range"] {
 
   .check-design-card,
   .check-timing,
-  .check-loop-control {
+  .check-loop-control,
+  .viewer-volume-control {
     margin-right: 0.85rem;
     margin-left: 0.85rem;
   }

@@ -29,6 +29,7 @@ export type AppMode = "craft" | "free";
 
 export interface AppShellCallbacks {
   onAudioPhysicality: (value: number) => void;
+  onAudioVolume: (value: number) => void;
   onCheckLoopChange?: (enabled: boolean) => void;
   onCheckToggle?: () => void;
   onDesignLibraryChange: (designs: FireworkDesign[]) => void;
@@ -80,6 +81,7 @@ export class AppShell {
   readonly #unsubscribeFlow: () => void;
   readonly #stopDOMLocalizer: () => void;
   #activeViewerContext?: ViewerContext;
+  #audioVolume: number;
   #checkState: SingleLoopCheckState = {
     active: false,
     designName: "編集中の花火",
@@ -104,9 +106,11 @@ export class AppShell {
     controller: CraftController,
     callbacks: AppShellCallbacks,
     locale: Locale = "ja",
+    audioVolume = 0.7,
   ) {
     this.#callbacks = callbacks;
     this.#controller = controller;
+    this.#audioVolume = audioVolume;
     this.#i18n = new I18n(locale);
     this.#i18n.setLocale(locale);
     this.#flow = new AppFlowController({
@@ -351,6 +355,10 @@ export class AppShell {
     const stage = new ViewingStage({
       callbacks: {
         onAudioPhysicality: this.#callbacks.onAudioPhysicality,
+        onAudioVolume: (value) => {
+          this.#audioVolume = value;
+          this.#callbacks.onAudioVolume(value);
+        },
         onBack: () => this.#flow.back(),
         onCheckLoopChange: (enabled) =>
           this.#callbacks.onCheckLoopChange?.(enabled),
@@ -370,6 +378,7 @@ export class AppShell {
         },
         onToast: (message) => this.showToast(message),
       },
+      audioVolume: this.#audioVolume,
       checkState:
         context === "check"
           ? { ...this.#checkState, designName: this.#controller.draft.name }
@@ -419,17 +428,7 @@ export class AppShell {
 
   readonly #handleInput = (event: Event): void => {
     const input = event.target as HTMLInputElement;
-    if (input.name === "sound-delay") {
-      const value = Number(input.value) / 100;
-      this.#callbacks.onAudioPhysicality(value);
-      const output = input
-        .closest<HTMLElement>(".sound-control")
-        ?.querySelector<HTMLOutputElement>("output");
-      if (output) {
-        output.value =
-          value > 0.8 ? "実距離" : value > 0.25 ? "演出寄り" : "即時";
-      }
-    } else if (input.name === "editor-design-name") {
+    if (input.name === "editor-design-name") {
       this.#controller.updateName(input.value);
     } else if (input.name === "editor-size") {
       this.#controller.updateSize(input.value as FireworkDesign["sizeClass"]);

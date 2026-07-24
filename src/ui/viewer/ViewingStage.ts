@@ -13,6 +13,7 @@ export type ViewerContext = "check" | "free";
 
 export interface ViewingStageCallbacks {
   onAudioPhysicality: (value: number) => void;
+  onAudioVolume: (value: number) => void;
   onBack: () => void;
   onCheckLoopChange: (enabled: boolean) => void;
   onCheckToggle: () => void;
@@ -24,6 +25,7 @@ export interface ViewingStageCallbacks {
 }
 
 export interface ViewingStageOptions {
+  audioVolume: number;
   callbacks: ViewingStageCallbacks;
   checkState: SingleLoopCheckState;
   context: ViewerContext;
@@ -105,6 +107,21 @@ export function renderViewerCameraControl(
   </section>`;
 }
 
+export function renderViewerVolumeControl(
+  volume: number,
+  locale: Locale = "ja",
+): string {
+  const percent = Math.round(Math.min(Math.max(volume, 0), 1) * 100);
+  return `<label class="viewer-volume-control">
+    <span>
+      <strong>${locale === "en" ? "Firework volume" : "花火の音量"}</strong>
+      <output for="viewer-volume" data-output="viewer-volume">${percent}%</output>
+    </span>
+    <input id="viewer-volume" name="viewer-volume" type="range" min="0" max="100" step="1" value="${percent}" aria-label="${locale === "en" ? "Firework volume" : "花火の音量"}" />
+    <small>${locale === "en" ? "Controls launch and burst sounds" : "打上音と開花音をまとめて調整"}</small>
+  </label>`;
+}
+
 export class ViewingStage {
   readonly element = document.createElement("section");
   readonly #callbacks: ViewingStageCallbacks;
@@ -114,9 +131,11 @@ export class ViewingStage {
   #freeViewPresetId: FreeViewPresetId;
   #panelExpanded = true;
   readonly #locale: Locale;
+  #audioVolume: number;
 
   constructor(options: ViewingStageOptions) {
     this.#callbacks = options.callbacks;
+    this.#audioVolume = options.audioVolume;
     this.#checkState = options.checkState;
     this.#context = options.context;
     this.#freeState = options.freeState;
@@ -273,6 +292,7 @@ export class ViewingStage {
         </div>
       </div>
       <div class="viewing-panel__content" id="check-view-panel-content">
+        ${this.#renderVolumeControl()}
         <div class="viewer-context-copy">
           <p>${this.#locale === "en" ? "Launch only the work being edited, one shell at a time under the same conditions. The final view includes lake reflections, smoke, and sound." : "編集中の作品だけを、同じ条件で一発ずつ打ち上げます。湖面反射、煙、音まで含む完成表示です。"}</p>
         </div>
@@ -305,6 +325,7 @@ export class ViewingStage {
         </div>
       </div>
       <div class="viewing-panel__content" id="free-view-panel-content">
+        ${this.#renderVolumeControl()}
         <div class="viewer-context-copy">
           <p>${this.#locale === "en" ? "The show begins with small shells, spreads left and right, pauses, then closes with a large shell. It is composed automatically around smoke and afterglow." : "小さな一発から始まり、左右へ広がり、間を置いて大玉で締める。煙と余韻を読みながら、自動で演目を紡ぎます。"}</p>
           <div class="show-template"><span>${this.#locale === "en" ? "Opening" : "導入"}</span><i></i><span>${this.#locale === "en" ? "Development" : "展開"}</span><i></i><span>${this.#locale === "en" ? "Quiet" : "静寂"}</span><i></i><span>${this.#locale === "en" ? "Finale" : "終幕"}</span></div>
@@ -327,6 +348,10 @@ export class ViewingStage {
       this.#locale,
     );
     return `<button class="viewing-panel-toggle" type="button" data-viewer-action="toggle-panel" aria-controls="${this.#context}-view-panel-content" aria-expanded="${this.#panelExpanded}" aria-label="${presentation.ariaLabel}">${presentation.text}</button>`;
+  }
+
+  #renderVolumeControl(): string {
+    return renderViewerVolumeControl(this.#audioVolume, this.#locale);
   }
 
   #setPanelExpanded(expanded: boolean): void {
@@ -383,7 +408,15 @@ export class ViewingStage {
 
   readonly #handleInput = (event: Event): void => {
     const input = event.target as HTMLInputElement;
-    if (input.name === "viewer-sound-delay") {
+    if (input.name === "viewer-volume") {
+      const value = Math.min(Math.max(Number(input.value) / 100, 0), 1);
+      this.#audioVolume = value;
+      this.#callbacks.onAudioVolume(value);
+      const output = this.element.querySelector<HTMLOutputElement>(
+        "[data-output='viewer-volume']",
+      );
+      if (output) output.value = `${Math.round(value * 100)}%`;
+    } else if (input.name === "viewer-sound-delay") {
       const value = Number(input.value) / 100;
       this.#callbacks.onAudioPhysicality(value);
       const output = input

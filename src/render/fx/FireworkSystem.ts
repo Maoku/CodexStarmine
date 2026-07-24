@@ -90,8 +90,16 @@ export interface LaunchKinematics {
 }
 
 export interface FireworkSystemCallbacks {
-  onBurst?: (position: Vector3Value, design: FireworkDesign) => void;
-  onLaunch?: (design: FireworkDesign) => void;
+  onBurst?: (
+    position: Vector3Value,
+    design: FireworkDesign,
+    plan: CompiledBurstPlan,
+  ) => void;
+  onLaunch?: (
+    position: Vector3Value,
+    design: FireworkDesign,
+    plan?: CompiledBurstPlan,
+  ) => void;
 }
 
 export function deriveLaunchKinematics(
@@ -321,7 +329,7 @@ export class FireworkSystem {
       velocity,
       windResponse: 0.12,
     });
-    this.#callbacks.onLaunch?.(design);
+    this.#callbacks.onLaunch?.(position, design, options.compiledPlan);
   }
 
   clear(): void {
@@ -414,13 +422,15 @@ export class FireworkSystem {
   }
 
   #burst(shell: Shell): void {
+    const plan =
+      shell.compiledPlan ?? compileFireworkDesign(shell.design, shell.seed);
     this.#emitBurst(
       shell.position,
       shell.velocity,
       shell.design,
       shell.seed,
       true,
-      shell.compiledPlan,
+      plan,
     );
     this.#spawnBurstSmoke(shell.position, shell.design);
     this.#illuminateSmoke(
@@ -430,7 +440,11 @@ export class FireworkSystem {
         0xffffff,
       resolveSizePreset(shell.design.sizeClass).burstScale,
     );
-    this.#callbacks.onBurst?.(clonePosition(shell.position), shell.design);
+    this.#callbacks.onBurst?.(
+      clonePosition(shell.position),
+      shell.design,
+      plan,
+    );
   }
 
   #updateDelayedBursts(delta: number): void {

@@ -13,7 +13,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { Vector2 } from "three";
 
-import { FireworkAudio } from "../audio";
+import { FireworkAudio, loadAudioVolume, saveAudioVolume } from "../audio";
 import { BackgroundRuntimeController } from "../app/BackgroundRuntimeController";
 import type { BackgroundRuntime } from "../app/renewalContracts";
 import { clampPixelRatio } from "../core/env";
@@ -82,11 +82,18 @@ export class NightSkyApp {
     this.#camera = nightSky.camera;
     this.#scene = nightSky.scene;
     this.#updateScene = nightSky.update;
-    this.#audio = new FireworkAudio();
+    let storage: Storage | undefined;
+    try {
+      storage = window.localStorage;
+    } catch {
+      storage = undefined;
+    }
+    const audioVolume = loadAudioVolume(storage);
+    this.#audio = new FireworkAudio(audioVolume);
     this.#fireworks = new FireworkSystem(this.#scene, {
-      onBurst: (position, design) => {
+      onBurst: (position, design, plan) => {
         if (this.#backgroundRuntimeKind !== "advertise") {
-          this.#audio.playBurst(position, design);
+          this.#audio.playBurst(position, design, plan);
         }
         const stage = design.colorStages[1] ?? design.colorStages[0];
         const size = resolveSizePreset(design.sizeClass);
@@ -96,9 +103,9 @@ export class NightSkyApp {
           (stage?.intensity ?? 1) * size.pointScale,
         );
       },
-      onLaunch: (design) => {
+      onLaunch: (position, design, plan) => {
         if (this.#backgroundRuntimeKind !== "advertise") {
-          this.#audio.playLaunch(design);
+          this.#audio.playLaunch(position, design, plan);
         }
       },
     });
@@ -142,12 +149,6 @@ export class NightSkyApp {
     );
     this.#composer.addPass(new OutputPass());
 
-    let storage: Storage | undefined;
-    try {
-      storage = window.localStorage;
-    } catch {
-      storage = undefined;
-    }
     const repository = new DesignRepository(storage);
     const craft = new CraftController(repository);
     const getDesigns = () => [...FIREWORK_PRESETS, ...repository.list()];
@@ -235,6 +236,10 @@ export class NightSkyApp {
         onAudioPhysicality: (value) => {
           this.#audio.physicality = value;
         },
+        onAudioVolume: (value) => {
+          this.#audio.volume = value;
+          saveAudioVolume(storage, value);
+        },
         onCheckLoopChange: (enabled) => this.#check.setLoopEnabled(enabled),
         onCheckToggle: () => this.#check.toggle(),
         onDesignLibraryChange: () => undefined,
@@ -256,6 +261,7 @@ export class NightSkyApp {
         },
       },
       locale,
+      audioVolume,
     );
     this.#isUiReady = true;
     if (this.#pendingRuntime) {
