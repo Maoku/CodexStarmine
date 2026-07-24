@@ -41,7 +41,15 @@ interface ViewerPanelTogglePresentation {
 export function getViewerPanelTogglePresentation(
   context: ViewerContext,
   expanded: boolean,
+  locale: Locale = "ja",
 ): ViewerPanelTogglePresentation {
+  if (locale === "en") {
+    const panelName = context === "check" ? "check" : "free viewing";
+    return {
+      ariaLabel: `${expanded ? "Collapse" : "Open"} ${panelName} panel`,
+      text: expanded ? "Collapse" : "Open panel",
+    };
+  }
   const panelName = context === "check" ? "確認" : "フリー鑑賞";
   return {
     ariaLabel: `${panelName}パネルを${expanded ? "折りたたむ" : "開く"}`,
@@ -57,19 +65,43 @@ function escapeHTML(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
-export function renderViewerCameraControl(presetId: FreeViewPresetId): string {
+function localizedShowText(locale: Locale, value: string): string {
+  if (locale !== "en") return value;
+  const english: Record<string, string> = {
+    演目を準備しています: "Preparing the show",
+    演目を終了しました: "The show has ended",
+    湖畔の演目: "Lakeside show",
+    湖畔の序章: "Lakeside prelude",
+    風渡る彩霞: "Windborne color haze",
+    星屑の水鏡: "Starlight on the water",
+    錦秋の余韻: "Autumnal afterglow",
+    "導入 · テーマ色を提示": "Opening · introducing the theme colors",
+    "展開 · 左右へ広がる連続打上":
+      "Development · launches spreading left and right",
+    "間 · 煙と残光を鑑賞": "Interlude · smoke and afterglow",
+    "終幕 · スターマイン": "Finale · starmine",
+    "余韻 · 次の演目へ": "Afterglow · moving to the next show",
+    余韻を残して一時停止中: "Paused with afterglow remaining",
+  };
+  return english[value] ?? value;
+}
+
+export function renderViewerCameraControl(
+  presetId: FreeViewPresetId,
+  locale: Locale = "ja",
+): string {
   const viewPresetOptions = FREE_VIEW_PRESET_IDS.map(
     (candidate) =>
-      `<option value="${candidate}" ${candidate === presetId ? "selected" : ""}>${FREE_VIEW_PRESETS[candidate].label}</option>`,
+      `<option value="${candidate}" ${candidate === presetId ? "selected" : ""}>${locale === "en" ? viewLabel(locale, candidate) : FREE_VIEW_PRESETS[candidate].label}</option>`,
   ).join("");
   return `<section class="free-view-control" aria-labelledby="viewer-camera-heading">
-    <div class="free-view-heading"><span id="viewer-camera-heading">視点を動かす</span><b>FREE CAMERA</b></div>
+    <div class="free-view-heading"><span id="viewer-camera-heading">${locale === "en" ? "Move camera" : "視点を動かす"}</span><b>FREE CAMERA</b></div>
     <div class="free-view-row">
-      <label class="free-view-select"><span>プリセット視点</span><select name="viewer-view-preset">${viewPresetOptions}</select></label>
-      <button class="secondary-action free-view-reset" type="button" data-viewer-action="view-reset">元の位置に戻る</button>
+      <label class="free-view-select"><span>${locale === "en" ? "Camera preset" : "プリセット視点"}</span><select name="viewer-view-preset">${viewPresetOptions}</select></label>
+      <button class="secondary-action free-view-reset" type="button" data-viewer-action="view-reset">${locale === "en" ? "Reset position" : "元の位置に戻る"}</button>
     </div>
-    <p>ドラッグ／1本指で見回す · 右ドラッグ／2本指で移動 · ホイール／ピンチで接近</p>
-    <p class="free-view-keys"><kbd>WASD / 矢印</kbd> 前後左右 · <kbd>Q / E</kbd> 上下 · <kbd>Shift</kbd> 高速</p>
+    <p>${locale === "en" ? "Drag / one finger to look around · right-drag / two fingers to move · wheel / pinch to zoom" : "ドラッグ／1本指で見回す · 右ドラッグ／2本指で移動 · ホイール／ピンチで接近"}</p>
+    <p class="free-view-keys"><kbd>WASD / ${locale === "en" ? "arrow keys" : "矢印"}</kbd> ${locale === "en" ? "move" : "前後左右"} · <kbd>Q / E</kbd> ${locale === "en" ? "up/down" : "上下"} · <kbd>Shift</kbd> ${locale === "en" ? "faster" : "高速"}</p>
   </section>`;
 }
 
@@ -97,7 +129,7 @@ export class ViewingStage {
     );
     this.element.innerHTML = `
       <header class="renewal-viewer-toolbar viewing-stage__toolbar">
-        <button class="renewal-back" type="button" data-viewer-action="back">← ${this.#context === "check" ? "編集に戻る" : "モード選択"}</button>
+        <button class="renewal-back" type="button" data-viewer-action="back">← ${this.#context === "check" ? (this.#locale === "en" ? "Back to editor" : "編集に戻る") : this.#locale === "en" ? "Mode selection" : "モード選択"}</button>
         <div class="screen-context-title">
           <p>${this.#context === "check" ? "CHECK" : "FREE VIEW"}</p>
           <h1>${this.#context === "check" ? (this.#locale === "en" ? "Check" : "確認") : this.#locale === "en" ? "Free viewing" : "フリー鑑賞"}</h1>
@@ -137,16 +169,28 @@ export class ViewingStage {
     if (countdown) {
       countdown.textContent = state.running
         ? state.secondsUntilLaunch <= 0
-          ? "打上中"
-          : `${Math.max(Math.ceil(state.secondsUntilLaunch), 1)}秒`
+          ? this.#locale === "en"
+            ? "Launching"
+            : "打上中"
+          : this.#locale === "en"
+            ? `${Math.max(Math.ceil(state.secondsUntilLaunch), 1)} sec`
+            : `${Math.max(Math.ceil(state.secondsUntilLaunch), 1)}秒`
         : state.loopEnabled
-          ? "一時停止中"
-          : "待機中";
+          ? this.#locale === "en"
+            ? "Paused"
+            : "一時停止中"
+          : this.#locale === "en"
+            ? "Waiting"
+            : "待機中";
     }
     const count = this.element.querySelector<HTMLElement>(
       "[data-check-shot-count]",
     );
-    if (count) count.textContent = `${state.shotCount}発`;
+    if (count)
+      count.textContent =
+        this.#locale === "en"
+          ? `${state.shotCount} launches`
+          : `${state.shotCount}発`;
     const loop = this.element.querySelector<HTMLInputElement>(
       "[name='check-loop']",
     );
@@ -156,10 +200,16 @@ export class ViewingStage {
     );
     if (toggle) {
       toggle.textContent = state.running
-        ? "一時停止"
+        ? this.#locale === "en"
+          ? "Pause"
+          : "一時停止"
         : state.loopEnabled
-          ? "確認を再開"
-          : "もう一度発射";
+          ? this.#locale === "en"
+            ? "Resume check"
+            : "確認を再開"
+          : this.#locale === "en"
+            ? "Launch again"
+            : "もう一度発射";
     }
     const liveLabel =
       this.element.querySelector<HTMLElement>("[data-live-label]");
@@ -174,18 +224,28 @@ export class ViewingStage {
     const toggle = this.element.querySelector<HTMLButtonElement>(
       "[data-viewer-action='free-toggle']",
     );
-    if (toggle) toggle.textContent = state.running ? "一時停止" : "演目を再開";
+    if (toggle)
+      toggle.textContent = state.running
+        ? this.#locale === "en"
+          ? "Pause"
+          : "一時停止"
+        : this.#locale === "en"
+          ? "Resume show"
+          : "演目を再開";
     const title = this.element.querySelector<HTMLElement>("[data-show-title]");
-    if (title) title.textContent = state.title;
+    if (title) title.textContent = localizedShowText(this.#locale, state.title);
     const detail = this.element.querySelector<HTMLElement>(
       "[data-show-progress]",
     );
-    if (detail) detail.textContent = state.detail;
+    if (detail)
+      detail.textContent = localizedShowText(this.#locale, state.detail);
     const fireworkName = this.element.querySelector<HTMLElement>(
       "[data-show-firework-name]",
     );
     if (fireworkName) {
-      fireworkName.textContent = state.currentFireworkName ?? "打上準備中";
+      fireworkName.textContent =
+        state.currentFireworkName ??
+        (this.#locale === "en" ? "Preparing launch" : "打上準備中");
     }
     const liveLabel =
       this.element.querySelector<HTMLElement>("[data-live-label]");
@@ -204,7 +264,7 @@ export class ViewingStage {
   }
 
   #renderCheckPanel(): string {
-    return `<aside class="control-panel viewing-panel viewing-panel--check" aria-label="湖面で確認パネル">
+    return `<aside class="control-panel viewing-panel viewing-panel--check" aria-label="${this.#locale === "en" ? "Check-on-lake panel" : "湖面で確認パネル"}">
       <div class="panel-heading">
         <div><p class="panel-heading__step">VIEW / CHECK</p><h2 id="check-view-heading-title">一発を確かめる</h2></div>
         <div class="viewing-panel__heading-actions">
@@ -214,21 +274,21 @@ export class ViewingStage {
       </div>
       <div class="viewing-panel__content" id="check-view-panel-content">
         <div class="viewer-context-copy">
-          <p>編集中の作品だけを、同じ条件で一発ずつ打ち上げます。湖面反射、煙、音まで含む完成表示です。</p>
+          <p>${this.#locale === "en" ? "Launch only the work being edited, one shell at a time under the same conditions. The final view includes lake reflections, smoke, and sound." : "編集中の作品だけを、同じ条件で一発ずつ打ち上げます。湖面反射、煙、音まで含む完成表示です。"}</p>
         </div>
-        <section class="check-design-card" aria-label="確認中の作品">
-          <span>確認中の作品</span>
+        <section class="check-design-card" aria-label="${this.#locale === "en" ? "Work being checked" : "確認中の作品"}">
+          <span>${this.#locale === "en" ? "Work being checked" : "確認中の作品"}</span>
           <strong data-check-design>${escapeHTML(this.#checkState.designName)}</strong>
-          <p>固定seedで毎回同じ開花を比較できます</p>
+          <p>${this.#locale === "en" ? "Compare the same burst every time with a fixed seed" : "固定seedで毎回同じ開花を比較できます"}</p>
         </section>
         <section class="check-timing" aria-live="polite">
           <div><span>NEXT LAUNCH</span><strong data-check-countdown>打上準備</strong></div>
           <div><span>THIS SESSION</span><strong data-check-shot-count>0発</strong></div>
         </section>
-        ${renderViewerCameraControl(this.#freeViewPresetId)}
+        ${renderViewerCameraControl(this.#freeViewPresetId, this.#locale)}
         <label class="check-loop-control">
           <input name="check-loop" type="checkbox" ${this.#checkState.loopEnabled ? "checked" : ""} />
-          <span><strong>単発ループ</strong><small>1周期につきこの作品を1発だけ打ち上げます</small></span>
+          <span><strong>${this.#locale === "en" ? "Single-launch loop" : "単発ループ"}</strong><small>${this.#locale === "en" ? "Launch this work once per cycle" : "1周期につきこの作品を1発だけ打ち上げます"}</small></span>
         </label>
         <button class="primary-action viewer-primary-toggle" type="button" data-viewer-action="check-toggle">一時停止</button>
       </div>
@@ -236,7 +296,7 @@ export class ViewingStage {
   }
 
   #renderFreePanel(freeDensity: number): string {
-    return `<aside class="control-panel viewing-panel viewing-panel--free" aria-label="フリー鑑賞パネル">
+    return `<aside class="control-panel viewing-panel viewing-panel--free" aria-label="${this.#locale === "en" ? "Free-viewing panel" : "フリー鑑賞パネル"}">
       <div class="panel-heading">
         <div><p class="panel-heading__step">VIEW / FREE</p><h2 id="free-view-heading-title">湖畔に委ねる</h2></div>
         <div class="viewing-panel__heading-actions">
@@ -246,16 +306,16 @@ export class ViewingStage {
       </div>
       <div class="viewing-panel__content" id="free-view-panel-content">
         <div class="viewer-context-copy">
-          <p>小さな一発から始まり、左右へ広がり、間を置いて大玉で締める。煙と余韻を読みながら、自動で演目を紡ぎます。</p>
-          <div class="show-template"><span>導入</span><i></i><span>展開</span><i></i><span>静寂</span><i></i><span>終幕</span></div>
+          <p>${this.#locale === "en" ? "The show begins with small shells, spreads left and right, pauses, then closes with a large shell. It is composed automatically around smoke and afterglow." : "小さな一発から始まり、左右へ広がり、間を置いて大玉で締める。煙と余韻を読みながら、自動で演目を紡ぎます。"}</p>
+          <div class="show-template"><span>${this.#locale === "en" ? "Opening" : "導入"}</span><i></i><span>${this.#locale === "en" ? "Development" : "展開"}</span><i></i><span>${this.#locale === "en" ? "Quiet" : "静寂"}</span><i></i><span>${this.#locale === "en" ? "Finale" : "終幕"}</span></div>
         </div>
         <label class="field range-field density-control">
-          <span>演出密度 <output data-output="free-density">${["静か", "標準", "華やか"][freeDensity] ?? "標準"}</output></span>
-          <input name="free-density" type="range" min="0" max="2" step="1" value="${freeDensity}" aria-label="演出密度" />
+          <span>${this.#locale === "en" ? "Show density" : "演出密度"} <output data-output="free-density">${this.#locale === "en" ? (["Quiet", "Standard", "Vibrant"][freeDensity] ?? "Standard") : (["静か", "標準", "華やか"][freeDensity] ?? "標準")}</output></span>
+          <input name="free-density" type="range" min="0" max="2" step="1" value="${freeDensity}" aria-label="${this.#locale === "en" ? "Show density" : "演出密度"}" />
         </label>
-        ${renderViewerCameraControl(this.#freeViewPresetId)}
-        <div class="show-now"><p>NOW PLAYING</p><strong data-show-title>${escapeHTML(this.#freeState.title)}</strong><span data-show-progress>${escapeHTML(this.#freeState.detail)}</span><span class="show-now__firework"><small>打上中の玉</small><b data-show-firework-name>${escapeHTML(this.#freeState.currentFireworkName ?? "打上準備中")}</b></span></div>
-        <button class="primary-action viewer-primary-toggle" type="button" data-viewer-action="free-toggle">${this.#freeState.running ? "一時停止" : "演目を再開"}</button>
+        ${renderViewerCameraControl(this.#freeViewPresetId, this.#locale)}
+        <div class="show-now"><p>NOW PLAYING</p><strong data-show-title>${escapeHTML(localizedShowText(this.#locale, this.#freeState.title))}</strong><span data-show-progress>${escapeHTML(localizedShowText(this.#locale, this.#freeState.detail))}</span><span class="show-now__firework"><small>${this.#locale === "en" ? "Launching shell" : "打上中の玉"}</small><b data-show-firework-name>${escapeHTML(this.#freeState.currentFireworkName ?? (this.#locale === "en" ? "Preparing launch" : "打上準備中"))}</b></span></div>
+        <button class="primary-action viewer-primary-toggle" type="button" data-viewer-action="free-toggle">${this.#freeState.running ? (this.#locale === "en" ? "Pause" : "一時停止") : this.#locale === "en" ? "Resume show" : "演目を再開"}</button>
       </div>
     </aside>`;
   }
@@ -264,6 +324,7 @@ export class ViewingStage {
     const presentation = getViewerPanelTogglePresentation(
       this.#context,
       this.#panelExpanded,
+      this.#locale,
     );
     return `<button class="viewing-panel-toggle" type="button" data-viewer-action="toggle-panel" aria-controls="${this.#context}-view-panel-content" aria-expanded="${this.#panelExpanded}" aria-label="${presentation.ariaLabel}">${presentation.text}</button>`;
   }
@@ -285,6 +346,7 @@ export class ViewingStage {
     const presentation = getViewerPanelTogglePresentation(
       this.#context,
       expanded,
+      this.#locale,
     );
     button.ariaExpanded = String(expanded);
     button.ariaLabel = presentation.ariaLabel;
@@ -311,7 +373,11 @@ export class ViewingStage {
       this.#setPanelExpanded(!this.#panelExpanded);
     } else if (action === "view-reset") {
       this.#callbacks.onFreeViewReset();
-      this.#callbacks.onToast("視点を湖畔固定席へ戻しました");
+      this.#callbacks.onToast(
+        this.#locale === "en"
+          ? "Reset the view to the lakeside seat."
+          : "視点を湖畔固定席へ戻しました",
+      );
     }
   };
 
@@ -325,7 +391,17 @@ export class ViewingStage {
         ?.querySelector<HTMLOutputElement>("output");
       if (output) {
         output.value =
-          value > 0.8 ? "実距離" : value > 0.25 ? "演出寄り" : "即時";
+          value > 0.8
+            ? this.#locale === "en"
+              ? "Physical"
+              : "実距離"
+            : value > 0.25
+              ? this.#locale === "en"
+                ? "Cinematic"
+                : "演出寄り"
+              : this.#locale === "en"
+                ? "Immediate"
+                : "即時";
       }
     } else if (input.name === "free-density") {
       const value = Number(input.value);
@@ -333,7 +409,11 @@ export class ViewingStage {
       const output = this.element.querySelector<HTMLOutputElement>(
         "[data-output='free-density']",
       );
-      if (output) output.value = ["静か", "標準", "華やか"][value] ?? "標準";
+      if (output)
+        output.value =
+          this.#locale === "en"
+            ? (["Quiet", "Standard", "Vibrant"][value] ?? "Standard")
+            : (["静か", "標準", "華やか"][value] ?? "標準");
     }
   };
 
@@ -352,7 +432,9 @@ export class ViewingStage {
     this.setFreeViewPreset(input.value);
     this.#callbacks.onFreeViewPresetChange(input.value);
     this.#callbacks.onToast(
-      `視点を「${FREE_VIEW_PRESETS[input.value].label}」へ移動しました`,
+      this.#locale === "en"
+        ? `Moved to “${viewLabel(this.#locale, input.value)}”.`
+        : `視点を「${FREE_VIEW_PRESETS[input.value].label}」へ移動しました`,
     );
   };
 }

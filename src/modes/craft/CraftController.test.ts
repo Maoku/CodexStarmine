@@ -87,6 +87,16 @@ describe("CraftController renewal regression", () => {
     expect(controller.draft.coreLayers).toEqual([]);
   });
 
+  it("materializes an English name for an English draft", () => {
+    const controller = new CraftController(
+      new DesignRepository(memoryStorage()),
+    );
+
+    controller.startNewDraft("medium", "chrysanthemum", "en");
+
+    expect(controller.draft.name).toBe("New chrysanthemum");
+  });
+
   it("keeps the current craft, save, load, completed launch, and delete flow", () => {
     const storage = memoryStorage();
     const controller = new CraftController(

@@ -23,6 +23,7 @@ import { InitialSetupScreen } from "./screens/InitialSetupScreen";
 import { ModeSelectionScreen } from "./screens/ModeSelectionScreen";
 import { ViewingStage, type ViewerContext } from "./viewer";
 import { I18n, type Locale } from "../i18n";
+import { installDOMLocalizer, localizeDOM } from "../i18n/dom";
 
 export type AppMode = "craft" | "free";
 
@@ -77,6 +78,7 @@ export class AppShell {
   readonly #i18n: I18n;
   readonly #unsubscribeDocument: () => void;
   readonly #unsubscribeFlow: () => void;
+  readonly #stopDOMLocalizer: () => void;
   #activeViewerContext?: ViewerContext;
   #checkState: SingleLoopCheckState = {
     active: false,
@@ -117,7 +119,7 @@ export class AppShell {
     });
     this.element.className = "app-shell renewal-app-shell";
     this.element.innerHTML = `
-      <div class="app-language-switcher" role="group" aria-label="Language">
+      <div class="app-language-switcher" role="group" aria-label="Language" data-i18n-skip>
         <button type="button" data-locale="ja" aria-pressed="${locale === "ja"}">日本語</button>
         <button type="button" data-locale="en" aria-pressed="${locale === "en"}">English</button>
       </div>
@@ -131,6 +133,10 @@ export class AppShell {
       this.#syncEditorHeader(snapshot.draft.name, snapshot.draft.sizeClass);
     });
     this.#unsubscribeFlow = this.#flow.subscribe(this.#renderScreen);
+    this.#stopDOMLocalizer = installDOMLocalizer(
+      document.body,
+      () => this.#i18n.locale,
+    );
 
     if (controller.migrationWarning) {
       window.setTimeout(() =>
@@ -175,6 +181,7 @@ export class AppShell {
     window.removeEventListener("beforeunload", this.#handleBeforeUnload);
     this.#unsubscribeFlow();
     this.#unsubscribeDocument();
+    this.#stopDOMLocalizer();
     this.#screenMount?.destroy();
     this.element.removeEventListener("click", this.#handleClick);
     this.element.removeEventListener("input", this.#handleInput);
@@ -283,7 +290,11 @@ export class AppShell {
         {
           onBack: () => this.#flow.back(),
           onBegin: (draft) => {
-            this.#controller.startNewDraft(draft.sizeClass, draft.template);
+            this.#controller.startNewDraft(
+              draft.sizeClass,
+              draft.template,
+              this.#i18n.locale,
+            );
             this.#flow.navigate("begin-editing", {
               designId: this.#controller.draft.id,
               origin: "new",
@@ -396,6 +407,7 @@ export class AppShell {
           );
         });
       this.#renderScreen(this.#flow.screen);
+      localizeDOM(document.body, this.#i18n.locale);
       return;
     }
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>(

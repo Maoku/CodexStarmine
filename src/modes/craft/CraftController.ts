@@ -13,6 +13,7 @@ import {
   type SizeClass,
   type SphericalStarLayer,
 } from "../../data";
+import type { Locale } from "../../i18n";
 import { CraftDocumentStore } from "./CraftDocumentStore";
 
 export interface CraftShelfLibraryState {
@@ -29,6 +30,32 @@ function dimColor(color: number): number {
   const green = Math.round(((color >> 8) & 0xff) * 0.38);
   const blue = Math.round((color & 0xff) * 0.38);
   return (red << 16) | (green << 8) | blue;
+}
+
+function materializeEnglishDefaults(design: FireworkDesign): void {
+  const layerNames: Record<string, string> = {
+    外周: "Outer ring",
+    芯: "Core",
+    子花: "Child burst",
+    枝: "Branches",
+  };
+  const starNames: Record<string, string> = {
+    赤の単色星: "Solid red star",
+    青から銀の変化星: "Blue-to-silver changing star",
+    "炭火引・赤から銀": "Charcoal trail · red to silver",
+    金引星: "Gold trailing star",
+    銀引星: "Silver trailing star",
+    白銀の点滅星: "Silver-white flicker star",
+    長寿命の冠星: "Long-lasting crown star",
+    時間差の子花星: "Delayed child-burst star",
+    "変化菊 外周星": "Changing chrysanthemum outer star",
+  };
+  design.layers.forEach((layer) => {
+    layer.name = layerNames[layer.name] ?? layer.name;
+  });
+  Object.values(design.starDefinitions).forEach((star) => {
+    star.displayName = starNames[star.displayName] ?? star.displayName;
+  });
 }
 
 export class CraftController {
@@ -103,6 +130,7 @@ export class CraftController {
   startNewDraft(
     sizeClass: SizeClass,
     template: "chrysanthemum" | "peony" | "blank",
+    locale: Locale = "ja",
   ): void {
     const source =
       template === "chrysanthemum"
@@ -117,11 +145,18 @@ export class CraftController {
       : this.#createBlankDesign();
     draft.id = "draft-new";
     draft.name =
-      template === "chrysanthemum"
-        ? "新しい菊"
-        : template === "peony"
-          ? "新しい牡丹"
-          : "無題の花火";
+      locale === "en"
+        ? template === "chrysanthemum"
+          ? "New chrysanthemum"
+          : template === "peony"
+            ? "New peony"
+            : "Untitled firework"
+        : template === "chrysanthemum"
+          ? "新しい菊"
+          : template === "peony"
+            ? "新しい牡丹"
+            : "無題の花火";
+    if (locale === "en") materializeEnglishDefaults(draft);
     draft.sizeClass = sizeClass;
     this.document.replace(draft, { unsaved: true });
   }
