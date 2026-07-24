@@ -6768,9 +6768,10 @@ h3,
   display: flex;
   gap: 0.35rem;
   position: fixed;
-  z-index: 20;
+  z-index: 40;
   top: max(0.7rem, env(safe-area-inset-top));
   right: max(0.7rem, env(safe-area-inset-right));
+  pointer-events: auto;
 }
 
 .app-language-switcher button {
@@ -6787,4 +6788,31 @@ h3,
   border-color: #ffd17a;
   background: #795129;
   color: white;
+}
+
+/* Keep the global language control out of the screen toolbar's content area. */
+.renewal-brand,
+.renewal-viewer-toolbar,
+.app-header {
+  padding-right: max(11.5rem, calc(2.8vw + 8.7rem));
+}
+
+@media (max-width: 620px) {
+  .app-language-switcher {
+    top: max(0.35rem, env(safe-area-inset-top));
+    right: max(0.35rem, env(safe-area-inset-right));
+    gap: 0.2rem;
+  }
+
+  .app-language-switcher button {
+    min-height: 2.35rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.68rem;
+  }
+
+  .renewal-brand,
+  .renewal-viewer-toolbar,
+  .app-header {
+    padding-right: 8.6rem;
+  }
 }
