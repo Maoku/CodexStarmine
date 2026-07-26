@@ -101,12 +101,45 @@ export interface FireworkDesignV1 {
 export type VirtualStarEmissionKind =
   "point" | "charcoalTail" | "goldTail" | "silverTail" | "flicker" | "child";
 
+export interface VirtualStarEffectProfile {
+  color?: {
+    mode: "smooth" | "step";
+    playback: "once" | "loop" | "pingPong";
+    repeatCount?: number;
+  };
+  light?: {
+    dutyCycle?: number;
+    edgeSoftness?: number;
+    frequencyHz?: number;
+    mode: "continuous" | "strobe";
+    phaseOffset?: number;
+    terminal?: {
+      duration: number;
+      mode: "none" | "kouro" | "teka";
+      sparkleCount?: number;
+      strength: number;
+    };
+  };
+  motion?: {
+    amplitude?: number;
+    frequencyHz?: number;
+    mode: "ballistic" | "fallingLeaf" | "wander" | "spiral";
+  };
+  secondary?: {
+    count?: number;
+    mode: "none" | "spark" | "microBurst";
+    speedScale?: number;
+    triggerTime?: number;
+  };
+}
+
 export interface VirtualStarPreset {
   brightness: number;
   burnDuration: number;
   colorStages: ColorStage[];
   displayName: string;
   drag: number;
+  effectProfile?: VirtualStarEffectProfile;
   emissionKind: VirtualStarEmissionKind;
   flicker: number;
   gravityScale: number;
@@ -126,6 +159,7 @@ export interface SpatialColoring {
 }
 
 export interface LayerBase {
+  effectTiming?: LayerEffectTiming;
   id: string;
   ignitionOffset: number;
   kind: "spherical" | "pattern" | "branch" | "child";
@@ -136,6 +170,7 @@ export interface LayerBase {
 }
 
 export interface StarPointOverride {
+  effectPhase?: number;
   index: number;
   position?: { x: number; y: number; z: number };
   removed?: boolean;
@@ -299,6 +334,24 @@ export interface FireworkDesignV3 extends Omit<
 }
 
 export type LayerAuthoringMode = "preset" | "pattern" | "manual";
+export type EffectPhaseMapping =
+  | "none"
+  | "random"
+  | "index"
+  | "longitude"
+  | "latitude"
+  | "radius"
+  | "group"
+  | "manual";
+
+export interface LayerEffectTiming {
+  cycles: number;
+  direction: "forward" | "reverse";
+  mapping: EffectPhaseMapping;
+  offset: number;
+  spread: number;
+}
+
 export type PatternTemplate =
   "circle" | "heart" | "star" | "square" | "triangle" | "hexagon";
 export type SectionPlane = "xy" | "xz" | "yz";
@@ -311,6 +364,7 @@ export interface SectionRef {
 
 export interface LayerBaseV4 {
   defaultStarId: string;
+  effectTiming?: LayerEffectTiming;
   id: string;
   ignitionOffset: number;
   locked: boolean;
@@ -355,6 +409,7 @@ export interface PatternLayerIntent extends LayerBaseV4 {
 }
 
 export interface ManualLayerPoint {
+  effectPhase?: number;
   id: string;
   position: { x: number; y: number; z: number };
   section: SectionRef;
@@ -439,6 +494,8 @@ function isVirtualStarPreset(value: unknown): value is VirtualStarPreset {
     typeof value.burnDuration === "number" &&
     typeof value.drag === "number" &&
     typeof value.gravityScale === "number" &&
+    (value.effectProfile === undefined ||
+      isVirtualStarEffectProfile(value.effectProfile)) &&
     Array.isArray(value.colorStages) &&
     value.colorStages.every(
       (stage) =>
@@ -449,6 +506,212 @@ function isVirtualStarPreset(value: unknown): value is VirtualStarPreset {
         typeof stage.trailColor === "number",
     )
   );
+}
+
+function isFiniteInRange(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= minimum &&
+    value <= maximum
+  );
+}
+
+export function isVirtualStarEffectProfile(
+  value: unknown,
+): value is VirtualStarEffectProfile {
+  if (!isRecord(value)) return false;
+  if (value.color !== undefined) {
+    if (
+      !isRecord(value.color) ||
+      !["smooth", "step"].includes(String(value.color.mode)) ||
+      !["once", "loop", "pingPong"].includes(String(value.color.playback)) ||
+      (value.color.repeatCount !== undefined &&
+        !isFiniteInRange(value.color.repeatCount, 1, 8))
+    ) {
+      return false;
+    }
+  }
+  if (value.light !== undefined) {
+    if (
+      !isRecord(value.light) ||
+      !["continuous", "strobe"].includes(String(value.light.mode)) ||
+      (value.light.edgeSoftness !== undefined &&
+        !isFiniteInRange(value.light.edgeSoftness, 0, 0.45)) ||
+      (value.light.frequencyHz !== undefined &&
+        !isFiniteInRange(value.light.frequencyHz, 0.5, 18)) ||
+      (value.light.phaseOffset !== undefined &&
+        !Number.isFinite(value.light.phaseOffset)) ||
+      (value.light.dutyCycle !== undefined &&
+        !isFiniteInRange(value.light.dutyCycle, 0.08, 0.92))
+    ) {
+      return false;
+    }
+    if (value.light.terminal !== undefined) {
+      const terminal = value.light.terminal;
+      if (
+        !isRecord(terminal) ||
+        !["none", "kouro", "teka"].includes(String(terminal.mode)) ||
+        !isFiniteInRange(terminal.duration, 0.01, 0.2) ||
+        !isFiniteInRange(terminal.strength, 0, 3) ||
+        (terminal.sparkleCount !== undefined &&
+          !isFiniteInRange(terminal.sparkleCount, 0, 6))
+      ) {
+        return false;
+      }
+    }
+  }
+  if (value.motion !== undefined) {
+    if (
+      !isRecord(value.motion) ||
+      !["ballistic", "fallingLeaf", "wander", "spiral"].includes(
+        String(value.motion.mode),
+      ) ||
+      (value.motion.amplitude !== undefined &&
+        !isFiniteInRange(value.motion.amplitude, 0, 1)) ||
+      (value.motion.frequencyHz !== undefined &&
+        !isFiniteInRange(value.motion.frequencyHz, 0.1, 8))
+    ) {
+      return false;
+    }
+  }
+  if (value.secondary !== undefined) {
+    if (
+      !isRecord(value.secondary) ||
+      !["none", "spark", "microBurst"].includes(String(value.secondary.mode)) ||
+      (value.secondary.count !== undefined &&
+        !isFiniteInRange(value.secondary.count, 0, 6)) ||
+      (value.secondary.speedScale !== undefined &&
+        !isFiniteInRange(value.secondary.speedScale, 0, 3)) ||
+      (value.secondary.triggerTime !== undefined &&
+        !isFiniteInRange(value.secondary.triggerTime, 0.35, 1))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function clampFinite(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(Math.max(value, minimum), maximum)
+    : fallback;
+}
+
+export function normalizeVirtualStarEffectProfile(
+  value: unknown,
+): VirtualStarEffectProfile | undefined {
+  if (!isRecord(value)) return undefined;
+  const profile: VirtualStarEffectProfile = {};
+  if (isRecord(value.color)) {
+    profile.color = {
+      mode: value.color.mode === "step" ? "step" : "smooth",
+      playback: ["loop", "pingPong"].includes(String(value.color.playback))
+        ? (value.color.playback as "loop" | "pingPong")
+        : "once",
+      repeatCount: clampFinite(value.color.repeatCount, 1, 1, 8),
+    };
+  }
+  if (isRecord(value.light)) {
+    const light: NonNullable<VirtualStarEffectProfile["light"]> = {
+      dutyCycle: clampFinite(value.light.dutyCycle, 0.5, 0.08, 0.92),
+      edgeSoftness: clampFinite(value.light.edgeSoftness, 0.06, 0, 0.45),
+      frequencyHz: clampFinite(value.light.frequencyHz, 6, 0.5, 18),
+      mode: value.light.mode === "strobe" ? "strobe" : "continuous",
+      phaseOffset: clampFinite(value.light.phaseOffset, 0, -1_000, 1_000),
+    };
+    if (isRecord(value.light.terminal)) {
+      light.terminal = {
+        duration: clampFinite(value.light.terminal.duration, 0.08, 0.01, 0.2),
+        mode: ["kouro", "teka"].includes(String(value.light.terminal.mode))
+          ? (value.light.terminal.mode as "kouro" | "teka")
+          : "none",
+        sparkleCount: Math.round(
+          clampFinite(value.light.terminal.sparkleCount, 0, 0, 6),
+        ),
+        strength: clampFinite(value.light.terminal.strength, 1, 0, 3),
+      };
+    }
+    profile.light = light;
+  }
+  if (isRecord(value.motion)) {
+    profile.motion = {
+      amplitude: clampFinite(value.motion.amplitude, 0.35, 0, 1),
+      frequencyHz: clampFinite(value.motion.frequencyHz, 1, 0.1, 8),
+      mode: ["fallingLeaf", "wander", "spiral"].includes(
+        String(value.motion.mode),
+      )
+        ? (value.motion.mode as "fallingLeaf" | "wander" | "spiral")
+        : "ballistic",
+    };
+  }
+  if (isRecord(value.secondary)) {
+    profile.secondary = {
+      count: Math.round(clampFinite(value.secondary.count, 0, 0, 6)),
+      mode: ["spark", "microBurst"].includes(String(value.secondary.mode))
+        ? (value.secondary.mode as "spark" | "microBurst")
+        : "none",
+      speedScale: clampFinite(value.secondary.speedScale, 1, 0, 3),
+      triggerTime: clampFinite(value.secondary.triggerTime, 0.9, 0.35, 1),
+    };
+  }
+  return Object.keys(profile).length > 0 ? profile : undefined;
+}
+
+export function isLayerEffectTiming(
+  value: unknown,
+): value is LayerEffectTiming {
+  return (
+    isRecord(value) &&
+    [
+      "none",
+      "random",
+      "index",
+      "longitude",
+      "latitude",
+      "radius",
+      "group",
+      "manual",
+    ].includes(String(value.mapping)) &&
+    ["forward", "reverse"].includes(String(value.direction)) &&
+    isFiniteInRange(value.cycles, 1, 4) &&
+    isFiniteInRange(value.spread, 0, 1) &&
+    Number.isFinite(value.offset)
+  );
+}
+
+export function normalizeLayerEffectTiming(
+  value: unknown,
+): LayerEffectTiming | undefined {
+  if (!isRecord(value)) return undefined;
+  const mappings: EffectPhaseMapping[] = [
+    "none",
+    "random",
+    "index",
+    "longitude",
+    "latitude",
+    "radius",
+    "group",
+    "manual",
+  ];
+  return {
+    cycles: clampFinite(value.cycles, 1, 1, 4),
+    direction: value.direction === "reverse" ? "reverse" : "forward",
+    mapping: mappings.includes(value.mapping as EffectPhaseMapping)
+      ? (value.mapping as EffectPhaseMapping)
+      : "none",
+    offset: clampFinite(value.offset, 0, -1_000, 1_000),
+    spread: clampFinite(value.spread, 1, 0, 1),
+  };
 }
 
 function hasNumberFields(
@@ -506,6 +769,12 @@ function isIntentLayer(value: unknown): value is IntentLayer {
     typeof value.radialSpeedScale !== "number" ||
     typeof value.visible !== "boolean" ||
     typeof value.locked !== "boolean"
+  ) {
+    return false;
+  }
+  if (
+    value.effectTiming !== undefined &&
+    !isLayerEffectTiming(value.effectTiming)
   ) {
     return false;
   }
@@ -601,7 +870,9 @@ function isLayerBaseV4(value: Record<string, unknown>): boolean {
     typeof value.ignitionOffset === "number" &&
     typeof value.radialSpeedScale === "number" &&
     typeof value.visible === "boolean" &&
-    typeof value.locked === "boolean"
+    typeof value.locked === "boolean" &&
+    (value.effectTiming === undefined ||
+      isLayerEffectTiming(value.effectTiming))
   );
 }
 
@@ -653,6 +924,8 @@ function isLayerIntentV4(value: unknown): value is LayerIntentV4 {
           isRecord(point) &&
           typeof point.id === "string" &&
           typeof point.starId === "string" &&
+          (point.effectPhase === undefined ||
+            isFiniteInRange(point.effectPhase, 0, 1)) &&
           isSectionRef(point.section) &&
           hasNumberFields(point.position, ["x", "y", "z"]),
       )

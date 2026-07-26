@@ -97,4 +97,26 @@ describe("v3ToV4", () => {
       placement: "manual",
     });
   });
+
+  it("preserves optional layer timing and manual point phases", () => {
+    const migrated = migrateV3ToV4(RENEWAL2_MANUAL_OVERRIDE_FIXTURE);
+    const layer = migrated.layers[0]!;
+    layer.effectTiming = {
+      cycles: 2,
+      direction: "reverse",
+      mapping: "manual",
+      offset: 0.15,
+      spread: 0.8,
+    };
+    if (layer.authoringMode !== "manual" || !layer.points[0]) {
+      throw new Error("expected a manual layer");
+    }
+    layer.points[0].effectPhase = 0.42;
+
+    const resolved = resolveLayerIntent(layer);
+    expect(resolved.effectTiming).toEqual(layer.effectTiming);
+    expect(
+      resolved.kind === "spherical" ? resolved.overrides[0] : undefined,
+    ).toMatchObject({ effectPhase: 0.42 });
+  });
 });

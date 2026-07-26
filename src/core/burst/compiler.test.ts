@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createHeartPoints,
+  CHRYSANTHEMUM_PRESET,
   ensureFireworkDesignV4,
   FIREWORK_PRESETS,
   HEART_PRESET,
@@ -185,5 +186,25 @@ describe("Phase 6.5 burst compiler", () => {
     expect(isValidAuthoredPoint({ x: 0, y: 0, z: 0 })).toBe(false);
     expect(isValidAuthoredPoint({ x: Number.NaN, y: 0, z: 0 })).toBe(false);
     expect(isValidAuthoredPoint({ x: 1.01, y: 0, z: 0 })).toBe(false);
+  });
+
+  it("adds effect metadata only to stars that opt into the new effect path", () => {
+    const legacy = ensureFireworkDesignV4(CHRYSANTHEMUM_PRESET);
+    const legacyPlan = compileFireworkDesign(legacy, 7_260);
+    expect(legacyPlan.stars[0]).not.toHaveProperty("effectPhase");
+    expect(legacyPlan.stars[0]).not.toHaveProperty("effectSeed");
+
+    const effected = structuredClone(legacy);
+    const layer = effected.layers[0]!;
+    effected.starDefinitions[layer.defaultStarId].effectProfile = {
+      light: { frequencyHz: 6, mode: "strobe" },
+    };
+    const first = compileFireworkDesign(effected, 7_260);
+    const second = compileFireworkDesign(effected, 99_999);
+    expect(first.stars[0]).toMatchObject({
+      effectPhase: 0,
+      effectSeed: expect.any(Number),
+    });
+    expect(second.stars[0].effectSeed).toBe(first.stars[0].effectSeed);
   });
 });

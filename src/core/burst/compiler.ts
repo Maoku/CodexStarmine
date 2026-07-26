@@ -1,5 +1,6 @@
 import type { Vector3Value } from "../particle";
 import { createSeededRandom } from "../random";
+import { stableSeed } from "../random";
 import type {
   AnyFireworkDesign,
   BranchStarLayer,
@@ -15,6 +16,8 @@ import { deriveVirtualBehavior } from "./deriveVirtualBehavior";
 
 export interface CompiledStar {
   definition: VirtualStarPreset;
+  effectPhase?: number;
+  effectSeed?: number;
   id: string;
   initialPosition: Vector3Value;
   initialVelocity: Vector3Value;
@@ -126,6 +129,7 @@ function compileLayerStar(
   index: number,
   random: ReturnType<typeof createSeededRandom>,
   preserveMagnitude = false,
+  manualEffectPhase?: number,
 ): CompiledStar {
   const sourceDefinition = resolveDefinition(design, definitionId);
   const behavior =
@@ -168,8 +172,21 @@ function compileLayerStar(
         y: direction.y + random.signed() * placementJitter,
         z: direction.z + random.signed() * placementJitter,
       });
+  const hasEffect =
+    sourceDefinition.effectProfile !== undefined ||
+    layer.effectTiming !== undefined;
   return {
     definition,
+    ...(hasEffect
+      ? {
+          effectPhase: manualEffectPhase ?? 0,
+          effectSeed: stableSeed(
+            [design.assemblySeed, layer.id, sourceDefinition.id, index].join(
+              ":",
+            ),
+          ),
+        }
+      : undefined),
     id: `${layer.id}-star-${index}`,
     initialPosition: { x: 0, y: 0, z: 0 },
     initialVelocity: {
@@ -226,6 +243,7 @@ export function compileAuthoredPoints(
         override.index ?? index,
         launchRandom,
         true,
+        override.effectPhase,
       ),
     ];
   });

@@ -172,6 +172,61 @@ describe("DesignRepository", () => {
     });
   });
 
+  it("normalizes malformed optional effects without discarding the design", () => {
+    const values = new Map<string, string>();
+    const design = ensureFireworkDesignV4(CHRYSANTHEMUM_PRESET);
+    const layer = design.layers[0]!;
+    const star = design.starDefinitions[
+      layer.defaultStarId
+    ] as unknown as Record<string, unknown>;
+    star.effectProfile = {
+      color: {
+        mode: "unknown",
+        playback: "loop",
+        repeatCount: 99,
+      },
+      light: {
+        dutyCycle: -2,
+        frequencyHz: 400,
+        mode: "strobe",
+      },
+    };
+    (layer as unknown as Record<string, unknown>).effectTiming = {
+      cycles: 99,
+      direction: "sideways",
+      mapping: "unknown",
+      offset: Number.NaN,
+      spread: -1,
+    };
+    values.set(
+      STORAGE_KEY_V4,
+      JSON.stringify({ designs: [design], version: 4 }),
+    );
+
+    const restored = new DesignRepository(
+      memoryStorage(values),
+    ).listIntents()[0];
+    expect(restored.starDefinitions[layer.defaultStarId].effectProfile).toEqual(
+      {
+        color: { mode: "smooth", playback: "loop", repeatCount: 8 },
+        light: {
+          dutyCycle: 0.08,
+          edgeSoftness: 0.06,
+          frequencyHz: 18,
+          mode: "strobe",
+          phaseOffset: 0,
+        },
+      },
+    );
+    expect(restored.layers[0].effectTiming).toEqual({
+      cycles: 4,
+      direction: "forward",
+      mapping: "none",
+      offset: 0,
+      spread: 0,
+    });
+  });
+
   it("rejects duplicate IDs inside an import file", () => {
     const source = new DesignRepository(memoryStorage(), () => "duplicate");
     source.save(CHRYSANTHEMUM_PRESET);

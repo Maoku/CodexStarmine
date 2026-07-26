@@ -68,6 +68,9 @@ function inferSection(position: {
 function baseIntent(layer: FireworkLayer): LayerBaseV4 {
   return {
     defaultStarId: layer.defaultStarId,
+    ...(layer.effectTiming
+      ? { effectTiming: clone(layer.effectTiming) }
+      : undefined),
     id: layer.id,
     ignitionOffset: layer.ignitionOffset,
     locked: layer.locked,
@@ -202,6 +205,9 @@ export function ensureFireworkDesignV4(
 export function resolveLayerIntent(intent: LayerIntentV4): FireworkLayer {
   const base = {
     defaultStarId: intent.defaultStarId,
+    ...(intent.effectTiming
+      ? { effectTiming: clone(intent.effectTiming) }
+      : undefined),
     id: intent.id,
     ignitionOffset: intent.ignitionOffset,
     locked: intent.locked,
@@ -221,6 +227,9 @@ export function resolveLayerIntent(intent: LayerIntentV4): FireworkLayer {
         intent.points.length === 0
           ? [{ index: 0, removed: true }]
           : intent.points.map((point, index) => ({
+              ...(point.effectPhase === undefined
+                ? undefined
+                : { effectPhase: point.effectPhase }),
               index,
               position: clone(point.position),
               starId: point.starId,

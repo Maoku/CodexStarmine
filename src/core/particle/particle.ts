@@ -1,5 +1,3 @@
-import type { ColorStage } from "../../data";
-
 export interface Vector3Value {
   x: number;
   y: number;
@@ -25,72 +23,6 @@ export const BURST_PARTICLE_ENVIRONMENT: Readonly<ParticleEnvironment> = {
   gravity: 9.81,
   wind: { x: 1.25, y: 0, z: 0.18 },
 };
-
-export interface EvaluatedColor {
-  color: number;
-  intensity: number;
-  trailColor: number;
-}
-
-function mixChannel(start: number, end: number, amount: number): number {
-  return Math.round(start + (end - start) * amount);
-}
-
-export function mixHexColors(
-  start: number,
-  end: number,
-  amount: number,
-): number {
-  const t = Math.min(Math.max(amount, 0), 1);
-  const red = mixChannel((start >> 16) & 0xff, (end >> 16) & 0xff, t);
-  const green = mixChannel((start >> 8) & 0xff, (end >> 8) & 0xff, t);
-  const blue = mixChannel(start & 0xff, end & 0xff, t);
-  return (red << 16) | (green << 8) | blue;
-}
-
-export function evaluateColorStages(
-  stages: ColorStage[],
-  normalizedAge: number,
-): EvaluatedColor {
-  if (stages.length === 0) {
-    return { color: 0xffffff, intensity: 1, trailColor: 0xffffff };
-  }
-
-  const age = Math.min(Math.max(normalizedAge, 0), 1);
-  const sorted = [...stages].sort(
-    (left, right) => left.normalizedTime - right.normalizedTime,
-  );
-  const first = sorted[0];
-  const last = sorted.at(-1) ?? first;
-
-  if (age <= first.normalizedTime) {
-    return {
-      color: first.color,
-      intensity: first.intensity,
-      trailColor: first.trailColor,
-    };
-  }
-
-  for (let index = 1; index < sorted.length; index += 1) {
-    const end = sorted[index];
-    if (age <= end.normalizedTime) {
-      const start = sorted[index - 1];
-      const range = Math.max(end.normalizedTime - start.normalizedTime, 0.0001);
-      const amount = (age - start.normalizedTime) / range;
-      return {
-        color: mixHexColors(start.color, end.color, amount),
-        intensity: start.intensity + (end.intensity - start.intensity) * amount,
-        trailColor: mixHexColors(start.trailColor, end.trailColor, amount),
-      };
-    }
-  }
-
-  return {
-    color: last.color,
-    intensity: last.intensity,
-    trailColor: last.trailColor,
-  };
-}
 
 export function integrateParticle(
   particle: BallisticParticle,
@@ -118,6 +50,12 @@ export function integrateParticle(
   particle.position.z += particle.velocity.z * delta;
   particle.age += delta;
 }
+
+export {
+  evaluateColorStages,
+  mixHexColors,
+  type EvaluatedColor,
+} from "./starEffects";
 
 /**
  * Advances a burst star with the same ignition-delay rule used by the runtime.

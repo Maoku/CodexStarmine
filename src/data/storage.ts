@@ -11,6 +11,8 @@ import {
   isFireworkDesignV2,
   isFireworkDesignV3,
   isFireworkDesignV4,
+  normalizeLayerEffectTiming,
+  normalizeVirtualStarEffectProfile,
 } from "./firework";
 import { isFireworkDesignV1, migrateV1ToV2 } from "./migrations/v1ToV2";
 import {
@@ -94,6 +96,53 @@ interface StoredDesignMetadataV1 {
 
 function clone<T>(value: T): T {
   return structuredClone(value);
+}
+
+function normalizeOptionalEffects(designs: unknown[]): void {
+  for (const designValue of designs) {
+    if (!designValue || typeof designValue !== "object") continue;
+    const design = designValue as Record<string, unknown>;
+    if (
+      design.starDefinitions &&
+      typeof design.starDefinitions === "object" &&
+      !Array.isArray(design.starDefinitions)
+    ) {
+      for (const starValue of Object.values(
+        design.starDefinitions as Record<string, unknown>,
+      )) {
+        if (!starValue || typeof starValue !== "object") continue;
+        const star = starValue as Record<string, unknown>;
+        if (star.effectProfile === undefined) continue;
+        const normalized = normalizeVirtualStarEffectProfile(
+          star.effectProfile,
+        );
+        if (normalized) star.effectProfile = normalized;
+        else delete star.effectProfile;
+      }
+    }
+    if (!Array.isArray(design.layers)) continue;
+    for (const layerValue of design.layers) {
+      if (!layerValue || typeof layerValue !== "object") continue;
+      const layer = layerValue as Record<string, unknown>;
+      if (layer.effectTiming !== undefined) {
+        const normalized = normalizeLayerEffectTiming(layer.effectTiming);
+        if (normalized) layer.effectTiming = normalized;
+        else delete layer.effectTiming;
+      }
+      if (Array.isArray(layer.points)) {
+        for (const pointValue of layer.points) {
+          if (!pointValue || typeof pointValue !== "object") continue;
+          const point = pointValue as Record<string, unknown>;
+          if (point.effectPhase === undefined) continue;
+          point.effectPhase =
+            typeof point.effectPhase === "number" &&
+            Number.isFinite(point.effectPhase)
+              ? Math.min(Math.max(point.effectPhase, 0), 1)
+              : 0;
+        }
+      }
+    }
+  }
 }
 
 function defaultId(): string {
@@ -512,6 +561,7 @@ export class DesignRepository {
     const parsed = JSON.parse(raw) as Partial<StoredLibraryV4>;
     if (parsed.version !== 4 || !Array.isArray(parsed.designs))
       return undefined;
+    normalizeOptionalEffects(parsed.designs);
     if (!parsed.designs.every(isFireworkDesignV4)) return undefined;
     return parsed.designs.map(clone);
   }
@@ -520,6 +570,7 @@ export class DesignRepository {
     const parsed = JSON.parse(raw) as Partial<StoredLibraryV3>;
     if (parsed.version !== 3 || !Array.isArray(parsed.designs))
       return undefined;
+    normalizeOptionalEffects(parsed.designs);
     if (!parsed.designs.every(isFireworkDesignV3)) return undefined;
     return parsed.designs.map(clone);
   }
@@ -528,6 +579,7 @@ export class DesignRepository {
     const parsed = JSON.parse(raw) as Partial<StoredLibraryV2>;
     if (parsed.version !== 2 || !Array.isArray(parsed.designs))
       return undefined;
+    normalizeOptionalEffects(parsed.designs);
     if (!parsed.designs.every(isFireworkDesignV2)) return undefined;
     return parsed.designs.map(clone);
   }
