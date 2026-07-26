@@ -54,9 +54,12 @@ describe("renewal acceptance contracts", () => {
     ).toMatchObject({ dirtyGuard: true, from: "editor", to: "library" });
   });
 
-  it("keeps abstract previews independent from production rendering", () => {
+  it("keeps aggregate previews independent from production rendering", () => {
     const abstractPreviews = RENEWAL_PREVIEW_RESPONSIBILITIES.filter(
       ({ result }) => result === "abstract",
+    );
+    const behaviorSamples = RENEWAL_PREVIEW_RESPONSIBILITIES.filter(
+      ({ result }) => result === "behavior-sample",
     );
     const productionPreviews = RENEWAL_PREVIEW_RESPONSIBILITIES.filter(
       ({ result }) => result === "production",
@@ -65,6 +68,13 @@ describe("renewal acceptance contracts", () => {
     expect(
       abstractPreviews.every(({ renderer }) => renderer === "abstract-2d"),
     ).toBe(true);
+    expect(behaviorSamples).toEqual([
+      expect.objectContaining({
+        input: "single-star",
+        kind: "virtual-star-balloon",
+        renderer: "star-webgl",
+      }),
+    ]);
     expect(
       productionPreviews.every(
         ({ renderer }) => renderer === "firework-system",

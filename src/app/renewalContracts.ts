@@ -122,8 +122,8 @@ export interface RenewalPreviewResponsibility {
   readonly input:
     "single-star" | "draft-aggregate" | "single-design" | "show-plan";
   readonly kind: RenewalPreviewKind;
-  readonly renderer: "abstract-2d" | "firework-system";
-  readonly result: "abstract" | "production";
+  readonly renderer: "abstract-2d" | "firework-system" | "star-webgl";
+  readonly result: "abstract" | "behavior-sample" | "production";
 }
 
 /** Rendering ownership matrix used by Phase 4 and Phase 5 regression tests. */
@@ -131,8 +131,8 @@ export const RENEWAL_PREVIEW_RESPONSIBILITIES = [
   {
     input: "single-star",
     kind: "virtual-star-balloon",
-    renderer: "abstract-2d",
-    result: "abstract",
+    renderer: "star-webgl",
+    result: "behavior-sample",
   },
   {
     input: "draft-aggregate",
