@@ -80,6 +80,85 @@ export const BUILTIN_STAR_PRESETS: VirtualStarPreset[] = [
     soundTag: "crackle",
     trailLifetime: 0.18,
   }),
+  star("star-strobe-white-hard", "強白点滅星", [0xffffff, 0xeaf7ff, 0xffffff], {
+    brightness: 1.42,
+    burnDuration: 2.4,
+    effectProfile: {
+      light: {
+        dutyCycle: 0.28,
+        edgeSoftness: 0.025,
+        frequencyHz: 8,
+        mode: "strobe",
+      },
+    },
+    flicker: 0,
+    soundTag: "crackle",
+  }),
+  star(
+    "star-strobe-pastel",
+    "彩色パステル点滅星",
+    [0xfff5fb, 0xff9fcf, 0xffef8f, 0x8eeeff],
+    {
+      brightness: 1.26,
+      burnDuration: 3,
+      effectProfile: {
+        color: { mode: "step", playback: "loop", repeatCount: 2 },
+        light: {
+          dutyCycle: 0.42,
+          edgeSoftness: 0.045,
+          frequencyHz: 6,
+          mode: "strobe",
+        },
+      },
+      flicker: 0,
+    },
+  ),
+  star("star-kouro", "銀光露星", [0xffffff, 0xcceaff, 0x8cb7d4], {
+    brightness: 1.3,
+    burnDuration: 3.2,
+    effectProfile: {
+      light: {
+        mode: "continuous",
+        terminal: {
+          duration: 0.16,
+          mode: "kouro",
+          sparkleCount: 3,
+          strength: 1.25,
+        },
+      },
+    },
+    emissionKind: "silverTail",
+    trailLifetime: 0.56,
+    trailWidth: 1.05,
+  }),
+  star("star-teka", "白銀輝星", [0xffffff, 0xe7f5ff, 0xffffff], {
+    brightness: 1.36,
+    burnDuration: 2.65,
+    effectProfile: {
+      light: {
+        mode: "continuous",
+        terminal: {
+          duration: 0.07,
+          mode: "teka",
+          sparkleCount: 5,
+          strength: 2.6,
+        },
+      },
+    },
+    emissionKind: "silverTail",
+    flicker: 0.12,
+    soundTag: "crackle",
+    trailLifetime: 0.34,
+  }),
+  star("star-repeat-change", "紅青反復変化星", [0xfff4ee, 0xff405c, 0x4d8dff], {
+    brightness: 1.18,
+    burnDuration: 3.6,
+    effectProfile: {
+      color: { mode: "step", playback: "pingPong", repeatCount: 4 },
+    },
+    flicker: 0,
+    trailLifetime: 0.16,
+  }),
 ];
 
 export function snapshotStarLibrary(): Record<string, VirtualStarPreset> {

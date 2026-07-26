@@ -1,4 +1,5 @@
 import type { FireworkDesign, VirtualStarPreset } from "../../data";
+import { evaluateVirtualStarAppearance } from "../../core/particle";
 import { colorToCSS, escapeHTML } from "./viewUtils";
 
 function emissionLabel(star: VirtualStarPreset): string {
@@ -6,6 +7,51 @@ function emissionLabel(star: VirtualStarPreset): string {
   if (star.emissionKind === "child") return "子花";
   if (star.emissionKind === "flicker") return "点滅";
   return "尾あり";
+}
+
+export function virtualStarEffectTags(star: VirtualStarPreset): string[] {
+  const tags: string[] = [];
+  const color = star.effectProfile?.color;
+  const light = star.effectProfile?.light;
+  const motion = star.effectProfile?.motion;
+  const secondary = star.effectProfile?.secondary;
+  if (color?.mode === "step") tags.push("段階変色");
+  if (color?.playback === "loop") tags.push("反復変色");
+  if (color?.playback === "pingPong") tags.push("往復変色");
+  if (light?.mode === "strobe") {
+    tags.push(`${light.frequencyHz ?? 6}Hz点滅`);
+  }
+  if (light?.terminal?.mode === "kouro") tags.push("光露");
+  if (light?.terminal?.mode === "teka") tags.push("輝");
+  if (motion?.mode === "fallingLeaf") tags.push("葉落");
+  if (motion?.mode === "wander") tags.push("遊泳");
+  if (motion?.mode === "spiral") tags.push("旋回");
+  if (secondary?.mode === "spark") tags.push("終端火花");
+  if (secondary?.mode === "microBurst") tags.push("小分裂");
+  if (star.trailLifetime > 0.24) tags.push("尾あり");
+  return tags.length > 0 ? tags : [emissionLabel(star)];
+}
+
+function representativeAppearance(star: VirtualStarPreset) {
+  const samples = [0.58, 0.12, 0.32, 0.72];
+  return samples
+    .map((normalizedAge) =>
+      evaluateVirtualStarAppearance({
+        ageSeconds: star.burnDuration * normalizedAge,
+        colorStages: star.colorStages,
+        effectPhase: 0,
+        effectProfile: star.effectProfile,
+        effectSeed: 1,
+        legacyFlicker: star.flicker,
+        lifetimeSeconds: star.burnDuration,
+      }),
+    )
+    .reduce((best, appearance) =>
+      appearance.lightMultiplier * appearance.intensity >
+      best.lightMultiplier * best.intensity
+        ? appearance
+        : best,
+    );
 }
 
 export interface PreviewAnchorRect {
@@ -24,7 +70,7 @@ export interface StarPreviewPosition {
 export function computeStarPreviewPosition(
   anchor: PreviewAnchorRect,
   viewport: { height: number; width: number },
-  preview = { height: 260, width: 240 },
+  preview = { height: 390, width: 260 },
 ): StarPreviewPosition {
   const gap = 10;
   const inset = 8;
@@ -59,20 +105,33 @@ function renderSpreadBalloon(
   const colors = star.colorStages
     .slice(0, 4)
     .map((stage) => colorToCSS(stage.color));
-  const tail = star.emissionKind.includes("Tail");
-  const rays = Array.from({ length: tail ? 12 : 18 }, (_, index) => {
-    const angle = (index / (tail ? 12 : 18)) * Math.PI * 2;
-    const inner = 18;
-    const outer = tail ? 58 : 46;
+  const tags = virtualStarEffectTags(star);
+  const appearance = representativeAppearance(star);
+  const fallbackColor = colorToCSS(appearance.color);
+  const rays = Array.from({ length: 16 }, (_, index) => {
+    const angle = (index / 16) * Math.PI * 2;
+    const inner = 14;
+    const outer = star.trailLifetime > 0.24 ? 53 : 43;
     return `<line x1="${80 + Math.cos(angle) * inner}" y1="${58 + Math.sin(angle) * inner}" x2="${80 + Math.cos(angle) * outer}" y2="${58 + Math.sin(angle) * outer}" style="--ray:${colors[index % colors.length]}" />`;
   }).join("");
   return `<div class="star-preview-overlay" data-preview-placement="${position.placement}" style="--preview-x:${position.x}px;--preview-y:${position.y}px">
     <button class="star-preview-scrim" type="button" data-action="close-star-preview" aria-label="仮想星プレビューを閉じる" tabindex="-1"></button>
-    <aside class="star-spread-balloon" role="dialog" aria-modal="true" aria-label="${escapeHTML(star.displayName)}の抽象プレビュー" tabindex="-1">
+    <aside class="star-spread-balloon" role="dialog" aria-modal="true" aria-label="${escapeHTML(star.displayName)}の挙動サンプル" tabindex="-1">
     <header><strong>${escapeHTML(star.displayName)}</strong><button type="button" data-action="close-star-preview" aria-label="閉じる">×</button></header>
-    <svg viewBox="0 0 160 116" aria-hidden="true"><g>${rays}</g><circle cx="80" cy="58" r="8" style="--star:${colors[0]}" /></svg>
-    <div>${colors.map((color, index) => `<i style="--stage:${color}"><span>${index + 1}</span></i>`).join("")}</div>
-    <p>${emissionLabel(star)} · ${tail ? "尾を引く" : "粒で広がる"}</p>
+    <div class="star-behavior-preview" data-star-behavior-preview role="img" aria-label="${escapeHTML(star.displayName)}。${escapeHTML(tags.join("、"))}の挙動サンプル">
+      <div class="star-behavior-preview-host" data-star-behavior-preview-host></div>
+      <div class="star-behavior-preview-fallback" data-star-behavior-preview-fallback>
+        <svg viewBox="0 0 160 116" aria-hidden="true"><g>${rays}</g><circle cx="80" cy="58" r="8" style="--star:${fallbackColor}" /></svg>
+        <span>簡易表示</span>
+      </div>
+    </div>
+    <div class="star-effect-tags">${tags.map((tag) => `<span>${escapeHTML(tag)}</span>`).join("")}</div>
+    <div class="star-color-stages" aria-label="色段階">${colors.map((color, index) => `<i style="--stage:${color}"><span>${index + 1}</span></i>`).join("")}</div>
+    <p>挙動サンプル。完成形は打上結果プレビューで確認</p>
+    <div class="star-preview-controls" aria-label="プレビュー操作">
+      <button type="button" data-action="toggle-star-behavior-preview">一時停止</button>
+      <button type="button" data-action="restart-star-behavior-preview">最初から</button>
+    </div>
   </aside></div>`;
 }
 
@@ -100,7 +159,7 @@ export function renderStarLibraryPanel(
           ) => `<article class="star-part ${star.id === selectedStarId ? "is-selected" : ""}" data-star-part="${star.id}">
             <button type="button" draggable="true" data-action="assign-star" data-star-id="${star.id}" aria-label="${escapeHTML(star.displayName)}を配置" aria-pressed="${star.id === selectedStarId}">
               <i style="--star:${colorToCSS(star.colorStages[1]?.color ?? star.colorStages[0]?.color ?? 0xffffff)}"></i>
-              <span>${escapeHTML(star.displayName)}</span><small>${emissionLabel(star)}</small>
+              <span>${escapeHTML(star.displayName)}</span><small>${escapeHTML(virtualStarEffectTags(star)[0])}</small>
             </button>
             <button type="button" data-action="preview-star" data-star-id="${star.id}" aria-label="${escapeHTML(star.displayName)}の広がりを見る">広がりを見る</button>
           </article>`,

@@ -21,13 +21,18 @@ import {
 import {
   advanceBurstParticle,
   BURST_PARTICLE_ENVIRONMENT,
-  evaluateColorStages,
+  evaluateVirtualStarAppearance,
   integrateParticle,
   type BallisticParticle,
+  type EvaluatedVirtualStarAppearance,
   type Vector3Value,
 } from "../../core/particle";
-import { createSeededRandom } from "../../core/random";
-import { resolveSizePreset, type FireworkDesign } from "../../data";
+import { createSeededRandom, stableSeed } from "../../core/random";
+import {
+  resolveSizePreset,
+  type FireworkDesign,
+  type VirtualStarEffectProfile,
+} from "../../data";
 import { WATER_LEVEL } from "../scene/createNightSkyScene";
 
 const MAX_STARS = 6_000;
@@ -56,8 +61,13 @@ interface SmokeParticle {
 }
 
 interface Star extends BallisticParticle {
+  appearance?: EvaluatedVirtualStarAppearance;
   brightness: number;
   colorStages: FireworkDesign["colorStages"];
+  drawPosition: Vector3Value;
+  effectPhase: number;
+  effectProfile?: VirtualStarEffectProfile;
+  effectSeed: number;
   history: Vector3Value[];
   pointScale: number;
   sparkle: number;
@@ -383,7 +393,15 @@ export class FireworkSystem {
         ...particle,
         brightness: (0.72 + size.pointScale * 0.28) * compiled.intensityScale,
         colorStages: definition.colorStages,
-        history: [clonePosition(position)],
+        drawPosition: clonePosition(particle.position),
+        effectPhase: compiled.effectPhase ?? 0,
+        effectProfile: definition.effectProfile,
+        effectSeed:
+          compiled.effectSeed ??
+          stableSeed(
+            `${design.assemblySeed}:${compiled.layerID}:${compiled.id}`,
+          ),
+        history: [clonePosition(particle.position)],
         pointScale: size.pointScale * Math.max(definition.trailWidth, 0.72),
         sparkle: definition.flicker,
         trailLength: definition.trailLifetime,
@@ -594,12 +612,29 @@ export class FireworkSystem {
   #updateStars(delta: number): void {
     const active: Star[] = [];
     for (const star of this.#stars) {
+      const previousNormalizedAge =
+        star.lifetime > 0 ? star.age / star.lifetime : 1;
       if (!advanceBurstParticle(star, delta, BURST_PARTICLE_ENVIRONMENT)) {
         active.push(star);
         continue;
       }
+      star.appearance = evaluateVirtualStarAppearance({
+        ageSeconds: star.age,
+        colorStages: star.colorStages,
+        effectPhase: star.effectPhase,
+        effectProfile: star.effectProfile,
+        effectSeed: star.effectSeed,
+        legacyFlicker: star.sparkle,
+        lifetimeSeconds: star.lifetime,
+        previousNormalizedAge,
+      });
+      star.drawPosition = {
+        x: star.position.x + star.appearance.motionOffset.x,
+        y: star.position.y + star.appearance.motionOffset.y,
+        z: star.position.z + star.appearance.motionOffset.z,
+      };
       if (star.trailLength > 0.14 && star.age < star.lifetime * 0.92) {
-        star.history.push(clonePosition(star.position));
+        star.history.push(clonePosition(star.drawPosition));
         const maxHistory = Math.max(Math.round(3 + star.trailLength * 9), 2);
         if (star.history.length > maxHistory) {
           star.history.shift();
@@ -642,15 +677,28 @@ export class FireworkSystem {
     visible.forEach((item, index) => {
       const isShell = "design" in item;
       const evaluated = isShell
-        ? { color: 0xffc66e, intensity: 1.3 }
-        : evaluateColorStages(item.colorStages, item.age / item.lifetime);
-      const flicker =
-        !isShell && item.sparkle > 0
-          ? 1 - item.sparkle * 0.25 + Math.random() * item.sparkle * 0.35
-          : 1;
-      const opacity = Math.max(evaluated.intensity * flicker, 0);
+        ? {
+            color: 0xffc66e,
+            intensity: 1.3,
+            lightMultiplier: 1,
+          }
+        : (item.appearance ??
+          evaluateVirtualStarAppearance({
+            ageSeconds: item.age,
+            colorStages: item.colorStages,
+            effectPhase: item.effectPhase,
+            effectProfile: item.effectProfile,
+            effectSeed: item.effectSeed,
+            legacyFlicker: item.sparkle,
+            lifetimeSeconds: item.lifetime,
+          }));
+      const opacity = Math.max(
+        evaluated.intensity * evaluated.lightMultiplier,
+        0,
+      );
+      const drawPosition = isShell ? item.position : item.drawPosition;
       tempColor.setHex(evaluated.color);
-      position.setXYZ(index, item.position.x, item.position.y, item.position.z);
+      position.setXYZ(index, drawPosition.x, drawPosition.y, drawPosition.z);
       color.setXYZ(index, tempColor.r, tempColor.g, tempColor.b);
       alpha.setX(index, opacity * (isShell ? 1 : item.brightness));
       pointSize.setX(
@@ -662,11 +710,9 @@ export class FireworkSystem {
 
       reflectionPosition.setXYZ(
         index,
-        item.position.x * 1.03,
+        drawPosition.x * 1.03,
         WATER_LEVEL + 0.34,
-        -70 -
-          Math.max(item.position.y, 0) * 1.72 +
-          (item.position.z + 112) * 0.2,
+        -70 - Math.max(drawPosition.y, 0) * 1.72 + (drawPosition.z + 112) * 0.2,
       );
       reflectionColor.setXYZ(
         index,
@@ -755,11 +801,22 @@ export class FireworkSystem {
     }
     for (const star of this.#stars) {
       if (star.history.length < 2) continue;
-      const evaluated = evaluateColorStages(
-        star.colorStages,
-        star.age / star.lifetime,
+      const evaluated =
+        star.appearance ??
+        evaluateVirtualStarAppearance({
+          ageSeconds: star.age,
+          colorStages: star.colorStages,
+          effectPhase: star.effectPhase,
+          effectProfile: star.effectProfile,
+          effectSeed: star.effectSeed,
+          legacyFlicker: star.sparkle,
+          lifetimeSeconds: star.lifetime,
+        });
+      writeHistory(
+        star.history,
+        evaluated.trailColor,
+        evaluated.intensity * evaluated.trailLightMultiplier,
       );
-      writeHistory(star.history, evaluated.trailColor, evaluated.intensity);
     }
 
     position.needsUpdate = true;

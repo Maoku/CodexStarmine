@@ -20,8 +20,8 @@ describe("StarLibraryPanel", () => {
       const position = computeStarPreviewPosition(anchor, viewport);
       expect(position.x).toBeGreaterThanOrEqual(8);
       expect(position.y).toBeGreaterThanOrEqual(8);
-      expect(position.x + 240).toBeLessThanOrEqual(viewport.width - 8);
-      expect(position.y + 260).toBeLessThanOrEqual(viewport.height - 8);
+      expect(position.x + 260).toBeLessThanOrEqual(viewport.width - 8);
+      expect(position.y + 390).toBeLessThanOrEqual(viewport.height - 8);
     });
     expect(computeStarPreviewPosition(anchors[0], viewport).placement).toBe(
       "below",
@@ -44,5 +44,9 @@ describe("StarLibraryPanel", () => {
     expect(overlay).toContain("star-preview-overlay");
     expect(overlay).toContain('role="dialog"');
     expect(overlay).toContain('data-action="close-star-preview"');
+    expect(overlay).toContain("data-star-behavior-preview-host");
+    expect(overlay).toContain("data-star-behavior-preview-fallback");
+    expect(overlay).toContain('data-action="toggle-star-behavior-preview"');
+    expect(overlay).toContain("挙動サンプル");
   });
 });

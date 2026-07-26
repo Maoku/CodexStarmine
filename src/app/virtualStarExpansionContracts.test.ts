@@ -48,7 +48,7 @@ describe("virtual star expansion Phase 0 contracts", () => {
   });
 
   it("freezes the existing eight stars and fourteen firework presets", () => {
-    expect(BUILTIN_STAR_PRESETS.map(({ id }) => id)).toEqual(
+    expect(BUILTIN_STAR_PRESETS.slice(0, 8).map(({ id }) => id)).toEqual(
       VIRTUAL_STAR_EXPANSION_EXISTING_STAR_IDS,
     );
     expect(FIREWORK_PRESETS.map(({ id }) => id)).toEqual(

@@ -611,57 +611,59 @@ export function normalizeVirtualStarEffectProfile(
   value: unknown,
 ): VirtualStarEffectProfile | undefined {
   if (!isRecord(value)) return undefined;
+  const source: Record<string, unknown> = value;
+  if (isVirtualStarEffectProfile(value)) return structuredClone(value);
   const profile: VirtualStarEffectProfile = {};
-  if (isRecord(value.color)) {
+  if (isRecord(source.color)) {
     profile.color = {
-      mode: value.color.mode === "step" ? "step" : "smooth",
-      playback: ["loop", "pingPong"].includes(String(value.color.playback))
-        ? (value.color.playback as "loop" | "pingPong")
+      mode: source.color.mode === "step" ? "step" : "smooth",
+      playback: ["loop", "pingPong"].includes(String(source.color.playback))
+        ? (source.color.playback as "loop" | "pingPong")
         : "once",
-      repeatCount: clampFinite(value.color.repeatCount, 1, 1, 8),
+      repeatCount: clampFinite(source.color.repeatCount, 1, 1, 8),
     };
   }
-  if (isRecord(value.light)) {
+  if (isRecord(source.light)) {
     const light: NonNullable<VirtualStarEffectProfile["light"]> = {
-      dutyCycle: clampFinite(value.light.dutyCycle, 0.5, 0.08, 0.92),
-      edgeSoftness: clampFinite(value.light.edgeSoftness, 0.06, 0, 0.45),
-      frequencyHz: clampFinite(value.light.frequencyHz, 6, 0.5, 18),
-      mode: value.light.mode === "strobe" ? "strobe" : "continuous",
-      phaseOffset: clampFinite(value.light.phaseOffset, 0, -1_000, 1_000),
+      dutyCycle: clampFinite(source.light.dutyCycle, 0.5, 0.08, 0.92),
+      edgeSoftness: clampFinite(source.light.edgeSoftness, 0.06, 0, 0.45),
+      frequencyHz: clampFinite(source.light.frequencyHz, 6, 0.5, 18),
+      mode: source.light.mode === "strobe" ? "strobe" : "continuous",
+      phaseOffset: clampFinite(source.light.phaseOffset, 0, -1_000, 1_000),
     };
-    if (isRecord(value.light.terminal)) {
+    if (isRecord(source.light.terminal)) {
       light.terminal = {
-        duration: clampFinite(value.light.terminal.duration, 0.08, 0.01, 0.2),
-        mode: ["kouro", "teka"].includes(String(value.light.terminal.mode))
-          ? (value.light.terminal.mode as "kouro" | "teka")
+        duration: clampFinite(source.light.terminal.duration, 0.08, 0.01, 0.2),
+        mode: ["kouro", "teka"].includes(String(source.light.terminal.mode))
+          ? (source.light.terminal.mode as "kouro" | "teka")
           : "none",
         sparkleCount: Math.round(
-          clampFinite(value.light.terminal.sparkleCount, 0, 0, 6),
+          clampFinite(source.light.terminal.sparkleCount, 0, 0, 6),
         ),
-        strength: clampFinite(value.light.terminal.strength, 1, 0, 3),
+        strength: clampFinite(source.light.terminal.strength, 1, 0, 3),
       };
     }
     profile.light = light;
   }
-  if (isRecord(value.motion)) {
+  if (isRecord(source.motion)) {
     profile.motion = {
-      amplitude: clampFinite(value.motion.amplitude, 0.35, 0, 1),
-      frequencyHz: clampFinite(value.motion.frequencyHz, 1, 0.1, 8),
+      amplitude: clampFinite(source.motion.amplitude, 0.35, 0, 1),
+      frequencyHz: clampFinite(source.motion.frequencyHz, 1, 0.1, 8),
       mode: ["fallingLeaf", "wander", "spiral"].includes(
-        String(value.motion.mode),
+        String(source.motion.mode),
       )
-        ? (value.motion.mode as "fallingLeaf" | "wander" | "spiral")
+        ? (source.motion.mode as "fallingLeaf" | "wander" | "spiral")
         : "ballistic",
     };
   }
-  if (isRecord(value.secondary)) {
+  if (isRecord(source.secondary)) {
     profile.secondary = {
-      count: Math.round(clampFinite(value.secondary.count, 0, 0, 6)),
-      mode: ["spark", "microBurst"].includes(String(value.secondary.mode))
-        ? (value.secondary.mode as "spark" | "microBurst")
+      count: Math.round(clampFinite(source.secondary.count, 0, 0, 6)),
+      mode: ["spark", "microBurst"].includes(String(source.secondary.mode))
+        ? (source.secondary.mode as "spark" | "microBurst")
         : "none",
-      speedScale: clampFinite(value.secondary.speedScale, 1, 0, 3),
-      triggerTime: clampFinite(value.secondary.triggerTime, 0.9, 0.35, 1),
+      speedScale: clampFinite(source.secondary.speedScale, 1, 0, 3),
+      triggerTime: clampFinite(source.secondary.triggerTime, 0.9, 0.35, 1),
     };
   }
   return Object.keys(profile).length > 0 ? profile : undefined;

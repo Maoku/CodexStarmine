@@ -94,4 +94,22 @@ describe("CompiledBurstPreviewRenderer", () => {
       z: trajectoryPoint.z,
     });
   });
+
+  it("raises temporal sampling only for high-frequency strobe effects", () => {
+    const intent = ensureFireworkDesignV4(CHRYSANTHEMUM_PRESET);
+    const layer = intent.layers[0]!;
+    intent.starDefinitions[layer.defaultStarId].effectProfile = {
+      light: {
+        dutyCycle: 0.3,
+        edgeSoftness: 0,
+        frequencyHz: 12,
+        mode: "strobe",
+      },
+    };
+    const model = buildCompiledBurstPreviewModel(intent);
+    const trajectory = model.sampledStars[0].trajectory;
+    expect(trajectory).toHaveLength(48);
+    expect(trajectory.some((point) => point.lightMultiplier === 0)).toBe(true);
+    expect(trajectory.some((point) => point.lightMultiplier > 0)).toBe(true);
+  });
 });

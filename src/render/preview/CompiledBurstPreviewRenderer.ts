@@ -7,14 +7,16 @@ import {
 import {
   advanceBurstParticle,
   BURST_PARTICLE_ENVIRONMENT,
-  evaluateColorStages,
+  evaluateVirtualStarAppearance,
+  type VirtualStarTerminalState,
   type Vector3Value,
 } from "../../core/particle";
 import type { AnyFireworkDesign } from "../../data";
 import { RENEWAL3_PREVIEW_SEED } from "../../app/renewal3Contracts";
 
 export const MAX_PREVIEW_STARS = 256;
-const TRAJECTORY_FRAME_COUNT = 10;
+const MINIMUM_TRAJECTORY_FRAME_COUNT = 10;
+const MAXIMUM_TRAJECTORY_FRAME_COUNT = 48;
 
 interface PreviewStarSource {
   additionalDelay: number;
@@ -27,6 +29,8 @@ interface PreviewStarSource {
 export interface PreviewTrajectoryPoint extends Vector3Value {
   color: number;
   intensity: number;
+  lightMultiplier: number;
+  terminalState: VirtualStarTerminalState;
   time: number;
   visible: boolean;
 }
@@ -156,23 +160,47 @@ export function buildCompiledStarTrajectory(
   );
   particle.age -= source.additionalDelay;
   const points: PreviewTrajectoryPoint[] = [];
+  const frequency =
+    source.compiled.definition.effectProfile?.light?.mode === "strobe"
+      ? (source.compiled.definition.effectProfile.light.frequencyHz ?? 6)
+      : 0;
+  const frameCount = frequency
+    ? Math.min(
+        Math.max(
+          Math.ceil(duration * frequency * 4),
+          MINIMUM_TRAJECTORY_FRAME_COUNT,
+        ),
+        MAXIMUM_TRAJECTORY_FRAME_COUNT,
+      )
+    : MINIMUM_TRAJECTORY_FRAME_COUNT;
   let elapsed = 0;
-  for (let frame = 0; frame < TRAJECTORY_FRAME_COUNT; frame += 1) {
-    const target = (frame / (TRAJECTORY_FRAME_COUNT - 1)) * duration;
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    const target = (frame / (frameCount - 1)) * duration;
     while (elapsed + 0.000_001 < target) {
       const delta = Math.min(target - elapsed, 0.05);
       advanceBurstParticle(particle, delta, BURST_PARTICLE_ENVIRONMENT);
       elapsed += delta;
     }
     const visible = particle.age >= 0 && particle.age < particle.lifetime;
-    const color = evaluateColorStages(
-      source.compiled.definition.colorStages,
-      particle.lifetime > 0 ? particle.age / particle.lifetime : 1,
-    );
+    const appearance = evaluateVirtualStarAppearance({
+      ageSeconds: particle.age,
+      colorStages: source.compiled.definition.colorStages,
+      effectPhase: source.compiled.effectPhase,
+      effectProfile: source.compiled.definition.effectProfile,
+      effectSeed: source.compiled.effectSeed,
+      legacyFlicker: source.compiled.definition.flicker,
+      lifetimeSeconds: particle.lifetime,
+    });
     points.push({
-      ...particle.position,
-      color: color.color,
-      intensity: visible ? color.intensity : 0,
+      x: particle.position.x + appearance.motionOffset.x,
+      y: particle.position.y + appearance.motionOffset.y,
+      z: particle.position.z + appearance.motionOffset.z,
+      color: appearance.color,
+      intensity: visible
+        ? appearance.intensity * appearance.lightMultiplier
+        : 0,
+      lightMultiplier: visible ? appearance.lightMultiplier : 0,
+      terminalState: appearance.terminalState,
       time: target,
       visible,
     });

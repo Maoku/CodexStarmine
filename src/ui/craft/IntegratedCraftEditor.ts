@@ -12,6 +12,7 @@ import {
   buildCompiledBurstPreviewModel,
   type CompiledBurstPreviewModel,
 } from "../../render/preview/CompiledBurstPreviewRenderer";
+import { StarBehaviorPreviewRenderer } from "../../render/preview/StarBehaviorPreviewRenderer";
 import { renderInlineDiagnosticPreview } from "./InlineDiagnosticPreview";
 import {
   canvasPointOnSection,
@@ -83,6 +84,7 @@ export interface IntegratedCraftEditorCallbacks {
 }
 
 export interface IntegratedCraftEditorDependencies {
+  createStarBehaviorPreviewRenderer: () => StarBehaviorPreviewRenderer;
   openGuidedImagePlacementDialog: typeof openGuidedImagePlacementDialog;
 }
 
@@ -103,6 +105,7 @@ export class IntegratedCraftEditor {
   readonly element = document.createElement("section");
   readonly #callbacks: IntegratedCraftEditorCallbacks;
   readonly #controller: CraftController;
+  readonly #createStarBehaviorPreviewRenderer: () => StarBehaviorPreviewRenderer;
   readonly #openGuidedImagePlacementDialog: typeof openGuidedImagePlacementDialog;
   readonly #mobileQuery: MediaQueryList;
   readonly #starLongPress = new StarLongPressGesture();
@@ -133,6 +136,8 @@ export class IntegratedCraftEditor {
   #sliceAnnouncement = "";
   #snapshot?: CraftDocumentSnapshot;
   #starPressTimer = 0;
+  #starBehaviorPreviewPlaying = true;
+  #starBehaviorPreviewRenderer?: StarBehaviorPreviewRenderer;
   #starPreviewId?: string;
   #starPreviewPosition?: StarPreviewPosition;
   #suppressStarClickId?: string;
@@ -150,6 +155,9 @@ export class IntegratedCraftEditor {
     this.#openGuidedImagePlacementDialog =
       dependencies.openGuidedImagePlacementDialog ??
       openGuidedImagePlacementDialog;
+    this.#createStarBehaviorPreviewRenderer =
+      dependencies.createStarBehaviorPreviewRenderer ??
+      (() => new StarBehaviorPreviewRenderer());
     this.#mobileQuery = window.matchMedia("(max-width: 900px)");
     this.element.className = "craft-workspace integrated-craft-editor";
     this.element.addEventListener("click", this.#handleClick);
@@ -180,6 +188,7 @@ export class IntegratedCraftEditor {
     window.clearTimeout(this.#messageTimer);
     window.clearTimeout(this.#previewTimer);
     this.#cancelStarPress();
+    this.#starBehaviorPreviewRenderer?.destroy();
     this.#unsubscribe();
     this.element.removeEventListener("click", this.#handleClick);
     this.element.removeEventListener("change", this.#handleChange);
@@ -282,6 +291,7 @@ export class IntegratedCraftEditor {
       )}
       <input name="image-placement-file" type="file" accept="image/*" hidden />`;
     this.#syncMobileDrawerAccessibility();
+    this.#syncStarBehaviorPreview();
   }
 
   #transportMessage(
@@ -455,6 +465,22 @@ export class IntegratedCraftEditor {
       this.#openStarPreview(button.dataset.starId, button);
     } else if (action === "close-star-preview") {
       this.#closeStarPreview();
+    } else if (action === "toggle-star-behavior-preview") {
+      const renderer = this.#starBehaviorPreviewRenderer;
+      if (!renderer) return;
+      if (renderer.isRunning) {
+        renderer.pause();
+        this.#starBehaviorPreviewPlaying = false;
+      } else {
+        renderer.play(true);
+        this.#starBehaviorPreviewPlaying = renderer.isRunning;
+      }
+      this.#updateStarBehaviorPreviewControl();
+    } else if (action === "restart-star-behavior-preview") {
+      this.#starBehaviorPreviewRenderer?.restart();
+      this.#starBehaviorPreviewPlaying =
+        this.#starBehaviorPreviewRenderer?.isRunning ?? false;
+      this.#updateStarBehaviorPreviewControl();
     } else if (action === "select-pattern-template" && layerId) {
       const requestedTemplate = button.dataset.template as PatternTemplate;
       const template = PATTERN_TEMPLATES.includes(requestedTemplate)
@@ -861,6 +887,7 @@ export class IntegratedCraftEditor {
     if (!starId || !this.#snapshot?.draft.starDefinitions[starId]) return;
     const bounds = anchor.getBoundingClientRect();
     this.#starPreviewId = starId;
+    this.#starBehaviorPreviewPlaying = true;
     this.#starPreviewPosition = computeStarPreviewPosition(bounds, {
       height: window.innerHeight,
       width: window.innerWidth,
@@ -875,12 +902,47 @@ export class IntegratedCraftEditor {
     const starId = this.#starPreviewId;
     this.#starPreviewId = undefined;
     this.#starPreviewPosition = undefined;
+    this.#starBehaviorPreviewRenderer?.detach();
     this.#render();
     if (starId) {
       this.#focusAfterRender(
         `[data-action="preview-star"][data-star-id="${CSS.escape(starId)}"]`,
       );
     }
+  }
+
+  #syncStarBehaviorPreview(): void {
+    const starId = this.#starPreviewId;
+    const host = this.element.querySelector<HTMLElement>(
+      "[data-star-behavior-preview-host]",
+    );
+    const star = starId
+      ? this.#snapshot?.draft.starDefinitions[starId]
+      : undefined;
+    if (!host || !star) {
+      this.#starBehaviorPreviewRenderer?.detach();
+      return;
+    }
+    this.#starBehaviorPreviewRenderer ??=
+      this.#createStarBehaviorPreviewRenderer();
+    this.#starBehaviorPreviewRenderer.attach(host, star);
+    if (!this.#starBehaviorPreviewPlaying) {
+      this.#starBehaviorPreviewRenderer.pause();
+    } else {
+      this.#starBehaviorPreviewPlaying =
+        this.#starBehaviorPreviewRenderer.isRunning;
+    }
+    this.#updateStarBehaviorPreviewControl();
+  }
+
+  #updateStarBehaviorPreviewControl(): void {
+    const button = this.element.querySelector<HTMLButtonElement>(
+      "[data-action='toggle-star-behavior-preview']",
+    );
+    if (!button) return;
+    const running = this.#starBehaviorPreviewRenderer?.isRunning ?? false;
+    button.textContent = running ? "一時停止" : "再生";
+    button.setAttribute("aria-pressed", String(running));
   }
 
   readonly #handleMobileQueryChange = (): void => {
