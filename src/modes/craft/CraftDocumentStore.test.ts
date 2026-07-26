@@ -134,6 +134,25 @@ describe("CraftDocumentStore", () => {
     expect(store.intentDraft.layers[0].defaultStarId).toBe(copyId);
   });
 
+  it("keeps the next editing guidance in the selection across renders", () => {
+    const store = new CraftDocumentStore(CHRYSANTHEMUM_PRESET);
+    const layer = store.intentDraft.layers[0];
+    let guidanceStage: string | undefined;
+    const unsubscribe = store.subscribe((snapshot) => {
+      guidanceStage = snapshot.selection.guidanceStage;
+    });
+
+    store.selectLayer(layer.id, "choose-star");
+    expect(guidanceStage).toBe("choose-star");
+
+    store.selectStarDefinition(layer.defaultStarId);
+    expect(guidanceStage).toBe("configure-layer");
+
+    store.completeSelectionGuidance();
+    expect(guidanceStage).toBeUndefined();
+    unsubscribe();
+  });
+
   it("treats a manual convenience placement as one undoable operation", () => {
     const store = new CraftDocumentStore(CHRYSANTHEMUM_PRESET);
     store.updateIntent("手動レイヤーを追加", (draft) => {

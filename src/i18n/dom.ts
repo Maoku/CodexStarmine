@@ -299,6 +299,16 @@ const ENGLISH: Record<string, string> = {
   "実行上限を超えています。先に自動簡略化してください":
     "The execution limit is exceeded. Use Auto simplify first.",
   未保存の変更があります: "You have unsaved changes.",
+  "まず、左側の「＋ 既定」「＋ 型物」「＋ 手動」からレイヤーを追加してください":
+    'First, add a layer with "+ Default", "+ Pattern", or "+ Manual" on the left.',
+  "仮想星の部品皿から、このレイヤーで使う仮想星を選択してください":
+    "Choose the virtual star for this layer from the virtual-star tray.",
+  "仮想星を選択しました。配置パラメータを設定し、X・Y・Zから操作面を選んでください":
+    "Virtual star selected. Set its placement parameters, then choose the X, Y, or Z working plane.",
+  "仮想星を選択しました。形状や密度を設定し、X・Y・Zから操作面を選んでください":
+    "Virtual star selected. Set its shape and density, then choose the X, Y, or Z working plane.",
+  "仮想星を選択しました。右側で星数・半径などのパラメータを設定してください":
+    "Virtual star selected. Set parameters such as star count and radius on the right.",
   レイヤーを選ぶと設定を編集できます: "Select a layer to edit its settings.",
   "操作面を押して点を追加し、既存点はドラッグできます":
     "Click the working plane to add points; drag existing points to move them.",

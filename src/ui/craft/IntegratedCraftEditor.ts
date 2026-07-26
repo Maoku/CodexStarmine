@@ -69,6 +69,11 @@ import {
   renderEditorTransport,
   type EditorMessageKind,
 } from "./EditorTransport";
+import {
+  NEW_LAYER_GUIDANCE,
+  NO_LAYER_GUIDANCE,
+  selectedStarGuidance,
+} from "./EditorWorkflowGuidance";
 import { synchronizeEditorSection } from "./EditorSectionState";
 import { renderSelectedLayerInspector } from "./SelectedLayerInspector";
 import {
@@ -124,6 +129,7 @@ export class IntegratedCraftEditor {
     ...DEFAULT_MANUAL_PLACEMENT_SETTINGS,
   };
   #messageTimer = 0;
+  #leftRailScrollTop = 0;
   #templateApplyMode: TemplateApplyMode = "replace";
   #pointDrag?: PointDrag;
   #previewModel?: CompiledBurstPreviewModel;
@@ -136,6 +142,7 @@ export class IntegratedCraftEditor {
   #sliceAnnouncement = "";
   #snapshot?: CraftDocumentSnapshot;
   #starPressTimer = 0;
+  #starTrayScrollTop = 0;
   #starBehaviorPreviewPlaying = true;
   #starBehaviorPreviewRenderer?: StarBehaviorPreviewRenderer;
   #starPreviewId?: string;
@@ -209,6 +216,7 @@ export class IntegratedCraftEditor {
   }
 
   #render(): void {
+    this.#rememberScrollPositions();
     const snapshot = this.#snapshot;
     if (!snapshot) return;
     const design = snapshot.draft;
@@ -294,8 +302,29 @@ export class IntegratedCraftEditor {
         this.#starPreviewPosition,
       )}
       <input name="image-placement-file" type="file" accept="image/*" hidden />`;
+    this.#restoreScrollPositions();
     this.#syncMobileDrawerAccessibility();
     this.#syncStarBehaviorPreview();
+  }
+
+  #rememberScrollPositions(): void {
+    const leftRail =
+      this.element.querySelector<HTMLElement>(".craft-rail--left");
+    const starTray = this.element.querySelector<HTMLElement>(
+      ".integrated-star-library .star-tray",
+    );
+    if (leftRail) this.#leftRailScrollTop = leftRail.scrollTop;
+    if (starTray) this.#starTrayScrollTop = starTray.scrollTop;
+  }
+
+  #restoreScrollPositions(): void {
+    const leftRail =
+      this.element.querySelector<HTMLElement>(".craft-rail--left");
+    const starTray = this.element.querySelector<HTMLElement>(
+      ".integrated-star-library .star-tray",
+    );
+    if (leftRail) leftRail.scrollTop = this.#leftRailScrollTop;
+    if (starTray) starTray.scrollTop = this.#starTrayScrollTop;
   }
 
   #transportMessage(
@@ -309,7 +338,22 @@ export class IntegratedCraftEditor {
         text: "実行上限を超えています。自動簡略化してください",
       };
     }
+    if (snapshot.intentDraft.layers.length === 0) {
+      return { kind: "tip", text: NO_LAYER_GUIDANCE };
+    }
     if (this.#editorMessage) return this.#editorMessage;
+    if (snapshot.selection.guidanceStage === "choose-star") {
+      return { kind: "tip", text: NEW_LAYER_GUIDANCE };
+    }
+    if (
+      snapshot.selection.guidanceStage === "configure-layer" &&
+      selectedLayer
+    ) {
+      return {
+        kind: "tip",
+        text: selectedStarGuidance(selectedLayer.authoringMode),
+      };
+    }
     if (snapshot.dirty) {
       return { kind: "status", text: "未保存の変更があります" };
     }
@@ -384,6 +428,7 @@ export class IntegratedCraftEditor {
       button.closest<HTMLElement>("[data-layer-id]")?.dataset.layerId ??
       snapshot.selection.layerId;
     if (action === "select-section-axis") {
+      this.#controller.document.completeSelectionGuidance();
       const axis = button.dataset.axis as SectionAxis;
       if (!(["x", "y", "z"] as const).includes(axis)) return;
       const plane = sectionPlaneForAxis(axis);
@@ -488,6 +533,7 @@ export class IntegratedCraftEditor {
     } else if (action === "duplicate-selected-star") {
       this.#duplicateSelectedStar();
     } else if (action === "select-pattern-template" && layerId) {
+      this.#controller.document.completeSelectionGuidance();
       const requestedTemplate = button.dataset.template as PatternTemplate;
       const template = PATTERN_TEMPLATES.includes(requestedTemplate)
         ? requestedTemplate
@@ -499,6 +545,7 @@ export class IntegratedCraftEditor {
         }
       });
     } else if (action === "placement-template") {
+      this.#controller.document.completeSelectionGuidance();
       const template = button.dataset.template as PlacementTemplate;
       this.#placementTemplate = template;
       this.#selectedPointIndex = undefined;
@@ -528,9 +575,11 @@ export class IntegratedCraftEditor {
     } else if (action === "delete-point") {
       this.#deleteSelectedPoint();
     } else if (action === "undo") {
+      this.#controller.document.completeSelectionGuidance();
       this.#selectedPointIndex = undefined;
       this.#controller.document.undo();
     } else if (action === "redo") {
+      this.#controller.document.completeSelectionGuidance();
       this.#selectedPointIndex = undefined;
       this.#controller.document.redo();
     } else if (action === "simplify") {
@@ -598,6 +647,7 @@ export class IntegratedCraftEditor {
       return;
     }
     if (input.name === "section-step") {
+      this.#controller.document.completeSelectionGuidance();
       this.#setSection({
         plane: this.#section.plane,
         ratio: sectionRatioAt(Number(input.value)),
@@ -608,6 +658,7 @@ export class IntegratedCraftEditor {
       (input as HTMLInputElement).value = "";
       if (file) void this.#applyImagePlacement(file);
     } else if (input.name === "image-target-count") {
+      this.#controller.document.completeSelectionGuidance();
       const value = Number(input.value);
       if (Number.isFinite(value)) {
         this.#imageTargetCount = Math.round(
@@ -619,9 +670,11 @@ export class IntegratedCraftEditor {
       }
       this.#render();
     } else if (input.name === "template-apply-mode") {
+      this.#controller.document.completeSelectionGuidance();
       this.#templateApplyMode = input.value as TemplateApplyMode;
       this.#render();
     } else if (input.name.startsWith("manual-")) {
+      this.#controller.document.completeSelectionGuidance();
       this.#changeManualPlacementSetting(input.name, input.value);
       this.#render();
     } else if (input.name) {
@@ -1092,7 +1145,7 @@ export class IntegratedCraftEditor {
         visible: true,
       });
     });
-    this.#controller.document.selectLayer(id);
+    this.#controller.document.selectLayer(id, "choose-star");
   }
 
   #addPattern(): void {
@@ -1117,7 +1170,7 @@ export class IntegratedCraftEditor {
         visible: true,
       });
     });
-    this.#controller.document.selectLayer(id);
+    this.#controller.document.selectLayer(id, "choose-star");
   }
 
   #addManual(): void {
@@ -1136,7 +1189,7 @@ export class IntegratedCraftEditor {
         visible: true,
       });
     });
-    this.#controller.document.selectLayer(id);
+    this.#controller.document.selectLayer(id, "choose-star");
   }
 
   #duplicateLayer(layerId: string): void {
@@ -1177,7 +1230,6 @@ export class IntegratedCraftEditor {
     this.#starPreviewId = undefined;
     this.#starPreviewPosition = undefined;
     this.#controller.document.selectStarDefinition(starId);
-    let replacedPoint = false;
     this.#updateIntentLayer(layerId, "仮想星を配置", (layer) => {
       if (
         layer.authoringMode === "manual" &&
@@ -1186,18 +1238,11 @@ export class IntegratedCraftEditor {
         const point = layer.points[this.#selectedPointIndex];
         if (point) {
           point.starId = starId;
-          replacedPoint = true;
         }
         return;
       }
       layer.defaultStarId = starId;
     });
-    this.#showEditorMessage(
-      "status",
-      replacedPoint
-        ? "選択した配置点の仮想星を変更しました"
-        : "選択レイヤーの仮想星を変更しました",
-    );
   }
 
   #applyManualRecipe(): void {
@@ -1415,8 +1460,14 @@ export class IntegratedCraftEditor {
     const layerId = this.#snapshot?.selection.layerId;
     if (!layerId) return;
     if (name.startsWith("star-effect-")) {
+      this.#controller.document.completeSelectionGuidance();
       this.#changeSelectedStarEffect(layerId, name, value, stageValue);
       return;
+    }
+    if (name === "layer-star") {
+      this.#controller.document.selectStarDefinition(value);
+    } else {
+      this.#controller.document.completeSelectionGuidance();
     }
     this.#updateIntentLayer(layerId, "配置属性を変更", (layer) => {
       if (name === "layer-name") layer.name = value;

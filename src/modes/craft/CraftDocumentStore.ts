@@ -15,6 +15,7 @@ import {
 import { deriveVirtualBehavior } from "../../core/burst";
 
 export interface CraftSelection {
+  guidanceStage?: "choose-star" | "configure-layer";
   layerId?: string;
   starDefinitionId?: string;
 }
@@ -264,15 +265,26 @@ export class CraftDocumentStore {
     this.#emit();
   }
 
-  selectLayer(layerId: string): void {
+  selectLayer(
+    layerId: string,
+    guidanceStage?: CraftSelection["guidanceStage"],
+  ): void {
     if (!this.#draft.layers.some((layer) => layer.id === layerId)) return;
     this.#selection.layerId = layerId;
+    this.#selection.guidanceStage = guidanceStage;
     this.#emit();
   }
 
   selectStarDefinition(starDefinitionId: string): void {
     if (!this.#draft.starDefinitions[starDefinitionId]) return;
     this.#selection.starDefinitionId = starDefinitionId;
+    this.#selection.guidanceStage = "configure-layer";
+    this.#emit();
+  }
+
+  completeSelectionGuidance(): void {
+    if (!this.#selection.guidanceStage) return;
+    delete this.#selection.guidanceStage;
     this.#emit();
   }
 
@@ -300,6 +312,7 @@ export class CraftDocumentStore {
       !this.#draft.layers.some((layer) => layer.id === this.#selection.layerId)
     ) {
       this.#selection.layerId = this.#draft.layers[0]?.id;
+      delete this.#selection.guidanceStage;
     }
   }
 
