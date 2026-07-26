@@ -4,6 +4,7 @@ import { BUILTIN_STAR_PRESETS, type VirtualStarPreset } from "../../data";
 import {
   buildStarBehaviorPreviewScenario,
   evaluatePreviewParticlePosition,
+  evaluatePreviewSecondaryParticles,
 } from "./buildStarBehaviorPreviewScenario";
 
 describe("buildStarBehaviorPreviewScenario", () => {
@@ -85,5 +86,35 @@ describe("buildStarBehaviorPreviewScenario", () => {
     expect(evaluatePreviewParticlePosition(particle, star, 1.25)).toEqual(
       evaluatePreviewParticlePosition(particle, star, 1.25),
     );
+  });
+
+  it("keeps deterministic micro-burst particles visible after the parent ends", () => {
+    const star = BUILTIN_STAR_PRESETS.find(
+      (candidate) => candidate.id === "star-popping",
+    );
+    if (!star) throw new Error("missing popping star");
+    const scenario = buildStarBehaviorPreviewScenario(star, 42);
+    const particle = scenario.particles[0];
+    const trigger =
+      (star.effectProfile?.secondary?.triggerTime ?? 0.9) * particle.lifetime;
+    expect(
+      evaluatePreviewSecondaryParticles(particle, star, trigger - 0.01),
+    ).toHaveLength(0);
+    const burst = evaluatePreviewSecondaryParticles(
+      particle,
+      star,
+      trigger + 0.12,
+    );
+    expect(burst).toHaveLength(5);
+    expect(
+      evaluatePreviewSecondaryParticles(particle, star, trigger + 0.12),
+    ).toEqual(burst);
+    expect(
+      evaluatePreviewSecondaryParticles(
+        particle,
+        star,
+        particle.lifetime + 0.25,
+      ),
+    ).toHaveLength(5);
   });
 });

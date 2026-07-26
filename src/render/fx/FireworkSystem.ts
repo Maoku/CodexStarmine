@@ -21,10 +21,12 @@ import {
 import {
   advanceBurstParticle,
   BURST_PARTICLE_ENVIRONMENT,
+  evaluateSecondaryEvent,
   evaluateVirtualStarAppearance,
   integrateParticle,
   type BallisticParticle,
   type EvaluatedVirtualStarAppearance,
+  type SecondaryEvent,
   type Vector3Value,
 } from "../../core/particle";
 import { createSeededRandom, stableSeed } from "../../core/random";
@@ -70,7 +72,9 @@ interface Star extends BallisticParticle {
   effectSeed: number;
   history: Vector3Value[];
   pointScale: number;
+  secondarySpawned: boolean;
   sparkle: number;
+  terminalSparkSpawned: boolean;
   trailLength: number;
   trailWidth: number;
 }
@@ -403,7 +407,9 @@ export class FireworkSystem {
           ),
         history: [clonePosition(particle.position)],
         pointScale: size.pointScale * Math.max(definition.trailWidth, 0.72),
+        secondarySpawned: false,
         sparkle: definition.flicker,
+        terminalSparkSpawned: false,
         trailLength: definition.trailLifetime,
         trailWidth: definition.trailWidth,
       });
@@ -611,6 +617,7 @@ export class FireworkSystem {
 
   #updateStars(delta: number): void {
     const active: Star[] = [];
+    const spawned: Star[] = [];
     for (const star of this.#stars) {
       const previousNormalizedAge =
         star.lifetime > 0 ? star.age / star.lifetime : 1;
@@ -633,6 +640,37 @@ export class FireworkSystem {
         y: star.position.y + star.appearance.motionOffset.y,
         z: star.position.z + star.appearance.motionOffset.z,
       };
+      if (star.appearance.secondaryEvent && !star.secondarySpawned) {
+        star.secondarySpawned = true;
+        spawned.push(
+          ...this.#createSecondaryStars(star, star.appearance.secondaryEvent),
+        );
+      }
+      const terminal = star.effectProfile?.light?.terminal;
+      if (
+        star.appearance.terminalState !== "none" &&
+        !star.terminalSparkSpawned &&
+        terminal &&
+        terminal.mode !== "none" &&
+        (terminal.sparkleCount ?? 0) > 0
+      ) {
+        star.terminalSparkSpawned = true;
+        const triggerTime = Math.max(1 - terminal.duration, 0.35);
+        const event = evaluateSecondaryEvent(
+          {
+            secondary: {
+              count: terminal.sparkleCount,
+              mode: "spark",
+              speedScale: terminal.mode === "teka" ? 0.72 : 0.46,
+              triggerTime,
+            },
+          },
+          triggerTime - 0.000_001,
+          triggerTime,
+          star.effectSeed ^ 0x71c3_9a5d,
+        );
+        if (event) spawned.push(...this.#createSecondaryStars(star, event));
+      }
       if (star.trailLength > 0.14 && star.age < star.lifetime * 0.92) {
         star.history.push(clonePosition(star.drawPosition));
         const maxHistory = Math.max(Math.round(3 + star.trailLength * 9), 2);
@@ -644,7 +682,50 @@ export class FireworkSystem {
         active.push(star);
       }
     }
-    this.#stars = active;
+    this.#stars = [...active, ...spawned].slice(-MAX_STARS);
+  }
+
+  #createSecondaryStars(parent: Star, event: SecondaryEvent): Star[] {
+    const lifetime = event.mode === "microBurst" ? 0.72 : 0.42;
+    const speed = event.mode === "microBurst" ? 7.2 : 4.8;
+    return event.particles.map((particle, index) => {
+      const position = clonePosition(parent.drawPosition);
+      return {
+        age: 0,
+        brightness:
+          parent.brightness * (event.mode === "microBurst" ? 0.88 : 0.7),
+        colorStages: parent.colorStages,
+        drag: Math.max(parent.drag * 0.48, 0.12),
+        drawPosition: clonePosition(position),
+        effectPhase: 0,
+        effectSeed: stableSeed(
+          `${parent.effectSeed}:${event.mode}:${index}:secondary`,
+        ),
+        gravityScale: parent.gravityScale * 0.72,
+        history: [clonePosition(position)],
+        lifetime,
+        pointScale:
+          parent.pointScale * (event.mode === "microBurst" ? 0.72 : 0.54),
+        position,
+        secondarySpawned: true,
+        sparkle: 0.08,
+        terminalSparkSpawned: true,
+        trailLength: event.mode === "microBurst" ? 0.12 : 0,
+        trailWidth: Math.max(parent.trailWidth * 0.55, 0.42),
+        velocity: {
+          x:
+            parent.velocity.x * 0.12 +
+            particle.direction.x * particle.speedScale * speed,
+          y:
+            parent.velocity.y * 0.12 +
+            particle.direction.y * particle.speedScale * speed,
+          z:
+            parent.velocity.z * 0.12 +
+            particle.direction.z * particle.speedScale * speed,
+        },
+        windResponse: parent.windResponse * 0.72,
+      };
+    });
   }
 
   #writePointBuffers(): void {

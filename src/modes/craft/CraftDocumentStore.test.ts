@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { CHRYSANTHEMUM_PRESET, type SphericalStarLayer } from "../../data";
+import {
+  CHRYSANTHEMUM_PRESET,
+  POPPING_SHOWER_PRESET,
+  type SphericalStarLayer,
+} from "../../data";
 import { buildEditorDiagnostic } from "./CraftDiagnosticController";
 import { CraftDocumentStore } from "./CraftDocumentStore";
 import {
@@ -49,6 +53,14 @@ describe("CraftDocumentStore", () => {
     expect(diagnostic.directions.length).toBe(5);
     expect(JSON.stringify(diagnostic)).not.toContain("initialPosition");
     expect(JSON.stringify(diagnostic)).not.toContain("initialVelocity");
+  });
+
+  it("counts terminal child particles in the editor load diagnostic", () => {
+    const diagnostic = buildEditorDiagnostic(POPPING_SHOWER_PRESET);
+    expect(diagnostic.estimatedCost).toMatchObject({
+      maximumParticles: 720,
+      secondaryParticleCount: 600,
+    });
   });
 
   it("keeps spatial and temporal color settings independent", () => {

@@ -389,6 +389,8 @@ const BUILTIN_STAR_NAMES: Readonly<Record<string, [string, string]>> = {
   "star-repeat-change": ["紅青反復変化星", "Red-blue repeating star"],
   "star-relay-light": ["時差リレー星", "Relay light star"],
   "star-gradient-fade": ["流光グラデーション星", "Flowing gradient star"],
+  "star-strobe-leaf": ["点滅葉落星", "Strobing falling-leaf star"],
+  "star-popping": ["はじけ子花星", "Popping child-spark star"],
 };
 
 export function translateText(value: string): string {

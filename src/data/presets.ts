@@ -1,6 +1,7 @@
 import type {
   FireworkDesignV1,
   FireworkDesignV2,
+  PatternStarLayer,
   SphericalStarLayer,
   StarPointOverride,
 } from "./firework";
@@ -353,6 +354,19 @@ function outerLayer(design: FireworkDesignV2): SphericalStarLayer {
   return layer;
 }
 
+function leafPoints(count: number): PatternStarLayer["points"] {
+  return Array.from({ length: count }, (_, index) => {
+    const angle = (index / count) * Math.PI * 2;
+    const vertical = Math.cos(angle);
+    const width = Math.sin(angle) * (0.5 + (1 - Math.abs(vertical)) * 0.12);
+    return {
+      groupId: "leaf",
+      x: width,
+      y: vertical * 0.94 + width * 0.08,
+    };
+  });
+}
+
 export const ILLUMINATION_PRESET: FireworkDesignV2 =
   structuredClone(PEONY_PRESET);
 ILLUMINATION_PRESET.id = "preset-illumination";
@@ -438,6 +452,75 @@ KOURO_CHANGE_CHRYSANTHEMUM_PRESET.description =
   layer.name = "光露の変化菊";
 }
 
+export const COLORED_AUTUMN_LEAVES_PRESET: FireworkDesignV2 =
+  structuredClone(HEART_PRESET);
+COLORED_AUTUMN_LEAVES_PRESET.id = "preset-colored-autumn-leaves";
+COLORED_AUTUMN_LEAVES_PRESET.name = "色づく黄葉";
+COLORED_AUTUMN_LEAVES_PRESET.description =
+  "葉の輪郭に置いた彩色星が段階変色しながら横へ揺れ、ゆっくり舞い落ちる作品。";
+{
+  const layer = COLORED_AUTUMN_LEAVES_PRESET.layers.find(
+    (candidate): candidate is PatternStarLayer => candidate.kind === "pattern",
+  );
+  if (!layer) throw new Error("Autumn leaf pattern layer is required");
+  layer.defaultStarId = "star-strobe-leaf";
+  layer.effectTiming = {
+    cycles: 1,
+    direction: "forward",
+    mapping: "latitude",
+    offset: 0,
+    spread: 0.42,
+  };
+  layer.groups = [
+    { id: "leaf", name: "黄葉の輪郭", starId: "star-strobe-leaf" },
+  ];
+  layer.name = "舞い落ちる黄葉";
+  layer.points = leafPoints(112);
+  layer.template = "custom";
+}
+
+export const SPRING_SUMMER_SNOW_PRESET: FireworkDesignV2 =
+  structuredClone(CROWN_PRESET);
+SPRING_SUMMER_SNOW_PRESET.id = "preset-spring-summer-snow";
+SPRING_SUMMER_SNOW_PRESET.name = "春雪・夏雪";
+SPRING_SUMMER_SNOW_PRESET.description =
+  "淡い芯を囲む点滅葉落星が短く浮遊し、細かな雪のように明るく降る作品。";
+{
+  const layer = outerLayer(SPRING_SUMMER_SNOW_PRESET);
+  layer.count = 132;
+  layer.defaultStarId = "star-strobe-leaf";
+  layer.effectTiming = {
+    cycles: 2,
+    direction: "forward",
+    mapping: "random",
+    offset: 0,
+    spread: 0.7,
+  };
+  layer.name = "点滅する細雪";
+  SPRING_SUMMER_SNOW_PRESET.layers
+    .filter(
+      (candidate): candidate is SphericalStarLayer =>
+        candidate.kind === "spherical" && candidate.id !== layer.id,
+    )
+    .forEach((core) => {
+      core.defaultStarId = "star-gradient-fade";
+      core.name = "淡い雪の芯";
+    });
+}
+
+export const POPPING_SHOWER_PRESET: FireworkDesignV2 =
+  structuredClone(PEONY_PRESET);
+POPPING_SHOWER_PRESET.id = "preset-popping-shower";
+POPPING_SHOWER_PRESET.name = "ポッピングシャワー";
+POPPING_SHOWER_PRESET.description =
+  "球面へ広がった親星が終端で少数の小粒に分かれ、細かな光のシャワーを作る作品。";
+{
+  const layer = outerLayer(POPPING_SHOWER_PRESET);
+  layer.count = 120;
+  layer.defaultStarId = "star-popping";
+  layer.name = "はじける親星";
+}
+
 export const FIREWORK_PRESETS: FireworkDesignV2[] = [
   CHRYSANTHEMUM_PRESET,
   PEONY_PRESET,
@@ -457,4 +540,7 @@ export const FIREWORK_PRESETS: FireworkDesignV2[] = [
   ROTATING_LIGHT_RING_PRESET,
   LIGHT_RIPPLE_PRESET,
   KOURO_CHANGE_CHRYSANTHEMUM_PRESET,
+  COLORED_AUTUMN_LEAVES_PRESET,
+  SPRING_SUMMER_SNOW_PRESET,
+  POPPING_SHOWER_PRESET,
 ];

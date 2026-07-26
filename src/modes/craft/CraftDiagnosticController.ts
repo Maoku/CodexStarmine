@@ -28,8 +28,12 @@ export interface EditorDiagnostic {
   directions: DiagnosticDirection[];
   estimatedCost: {
     childBurstCount: number;
+    effectTrailVertexEstimate?: number;
     maximumParticles: number;
+    secondaryParticleCount?: number;
+    smokeEmitterEstimate?: number;
     starCount: number;
+    terminalSparkCount?: number;
     trailCount: number;
   };
   timings: DiagnosticTiming[];
@@ -106,7 +110,11 @@ export function buildEditorDiagnostic(
   let starCount = 0;
   let childBurstCount = 0;
   let childStars = 0;
+  let effectTrailVertexEstimate = 0;
+  let secondaryParticleCount = 0;
+  let smokeEmitterEstimate = 0;
   let trailCount = 0;
+  let terminalSparkCount = 0;
 
   visibleLayers.forEach((layer) => {
     const count = layerCount(layer);
@@ -117,6 +125,7 @@ export function buildEditorDiagnostic(
     }
     const definitions = uniqueDefinitions(design, layer);
     definitions.forEach((definition) => {
+      const effectStarCount = layer.kind === "child" ? layer.count * 24 : count;
       const behavior = derivedBehavior(design, layer, definition);
       definition.colorStages.forEach((stage) => {
         colors.push({
@@ -128,6 +137,27 @@ export function buildEditorDiagnostic(
         });
       });
       if (definition.trailLifetime > 0.24) trailCount += count;
+      if (definition.effectProfile) {
+        const secondary = definition.effectProfile.secondary;
+        if (secondary && secondary.mode !== "none") {
+          secondaryParticleCount +=
+            effectStarCount * Math.round(secondary.count ?? 0);
+        }
+        const terminal = definition.effectProfile.light?.terminal;
+        if (terminal && terminal.mode !== "none") {
+          terminalSparkCount +=
+            effectStarCount * Math.round(terminal.sparkleCount ?? 0);
+        }
+        if (definition.trailLifetime > 0.14) {
+          effectTrailVertexEstimate +=
+            effectStarCount *
+            Math.max(Math.round(3 + definition.trailLifetime * 9) - 1, 1) *
+            2;
+        }
+        if (definition.smokeAmount > 0) {
+          smokeEmitterEstimate += effectStarCount;
+        }
+      }
       timings.push({
         color:
           definition.colorStages[1]?.color ??
@@ -142,7 +172,8 @@ export function buildEditorDiagnostic(
     });
   });
 
-  const maximumParticles = starCount + childStars;
+  const maximumParticles =
+    starCount + childStars + secondaryParticleCount + terminalSparkCount;
   if (maximumParticles > 6_000) {
     warnings.push(
       "実行上限6,000星を超えます。星数または子花数を減らしてください。",
@@ -219,6 +250,16 @@ export function buildEditorDiagnostic(
     ],
     estimatedCost: {
       childBurstCount,
+      ...(secondaryParticleCount > 0 ||
+      terminalSparkCount > 0 ||
+      effectTrailVertexEstimate > 0
+        ? {
+            effectTrailVertexEstimate,
+            secondaryParticleCount,
+            smokeEmitterEstimate,
+            terminalSparkCount,
+          }
+        : undefined),
       maximumParticles,
       starCount,
       trailCount,

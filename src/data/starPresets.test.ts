@@ -46,7 +46,11 @@ describe("virtual star presets", () => {
   });
 
   it("adds relay and gradient stars for Phase 3 timing layouts", () => {
-    expect(BUILTIN_STAR_PRESETS.slice(-2)).toMatchObject([
+    expect(
+      BUILTIN_STAR_PRESETS.filter(({ id }) =>
+        ["star-relay-light", "star-gradient-fade"].includes(id),
+      ),
+    ).toMatchObject([
       {
         effectProfile: {
           color: { playback: "loop" },
@@ -60,6 +64,24 @@ describe("virtual star presets", () => {
           light: { mode: "continuous" },
         },
         id: "star-gradient-fade",
+      },
+    ]);
+  });
+
+  it("adds leaf motion and terminal popping stars for Phase 4", () => {
+    expect(BUILTIN_STAR_PRESETS.slice(-2)).toMatchObject([
+      {
+        effectProfile: {
+          light: { mode: "strobe" },
+          motion: { mode: "fallingLeaf" },
+        },
+        id: "star-strobe-leaf",
+      },
+      {
+        effectProfile: {
+          secondary: { count: 5, mode: "microBurst" },
+        },
+        id: "star-popping",
       },
     ]);
   });

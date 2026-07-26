@@ -18,10 +18,13 @@ import type { VirtualStarPreset } from "../../data";
 import {
   buildStarBehaviorPreviewScenario,
   evaluatePreviewParticlePosition,
+  evaluatePreviewSecondaryParticles,
   type StarBehaviorPreviewScenario,
 } from "./buildStarBehaviorPreviewScenario";
 
 const MAX_PARENT_STARS = 48;
+const MAX_SECONDARY_PARTICLES = 192;
+const MAX_PREVIEW_POINTS = MAX_PARENT_STARS + MAX_SECONDARY_PARTICLES;
 const MAX_TRAIL_VERTICES = 4_096;
 const FRAME_INTERVAL_MS = 1_000 / 30;
 
@@ -114,10 +117,10 @@ function createPointMaterial(): ShaderMaterial {
 function createPointGeometry(): BufferGeometry {
   const geometry = new BufferGeometry();
   const attributes = {
-    alpha: new BufferAttribute(new Float32Array(MAX_PARENT_STARS), 1),
-    color: new BufferAttribute(new Float32Array(MAX_PARENT_STARS * 3), 3),
-    pointSize: new BufferAttribute(new Float32Array(MAX_PARENT_STARS), 1),
-    position: new BufferAttribute(new Float32Array(MAX_PARENT_STARS * 3), 3),
+    alpha: new BufferAttribute(new Float32Array(MAX_PREVIEW_POINTS), 1),
+    color: new BufferAttribute(new Float32Array(MAX_PREVIEW_POINTS * 3), 3),
+    pointSize: new BufferAttribute(new Float32Array(MAX_PREVIEW_POINTS), 1),
+    position: new BufferAttribute(new Float32Array(MAX_PREVIEW_POINTS * 3), 3),
   };
   Object.entries(attributes).forEach(([name, attribute]) => {
     attribute.setUsage(DynamicDrawUsage);
@@ -478,6 +481,42 @@ export class StarBehaviorPreviewRenderer {
           this.#tempColor.b * fade,
         );
         trailVertex += 1;
+      }
+    }
+    if (age >= 0) {
+      for (const particle of this.#scenario.particles) {
+        const appearance = evaluateVirtualStarAppearance({
+          ageSeconds: Math.min(age, particle.lifetime),
+          colorStages: this.#star.colorStages,
+          effectPhase: particle.effectPhase,
+          effectProfile: this.#star.effectProfile,
+          effectSeed: particle.effectSeed,
+          legacyFlicker: this.#star.flicker,
+          lifetimeSeconds: particle.lifetime,
+        });
+        this.#tempColor.setHex(appearance.color);
+        for (const secondary of evaluatePreviewSecondaryParticles(
+          particle,
+          this.#star,
+          age,
+        )) {
+          if (visible >= MAX_PREVIEW_POINTS) break;
+          position.setXYZ(
+            visible,
+            secondary.position.x,
+            secondary.position.y,
+            secondary.position.z,
+          );
+          color.setXYZ(
+            visible,
+            this.#tempColor.r,
+            this.#tempColor.g,
+            this.#tempColor.b,
+          );
+          alpha.setX(visible, secondary.opacity * this.#star.brightness * 1.18);
+          pointSize.setX(visible, secondary.mode === "microBurst" ? 3.6 : 2.7);
+          visible += 1;
+        }
       }
     }
     for (const attribute of [position, color, alpha, pointSize]) {

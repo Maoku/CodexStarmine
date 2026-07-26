@@ -4,6 +4,7 @@ import { compileFireworkDesign } from "../core/burst";
 import {
   BEE_PRESET,
   BUTTERFLY_PRESET,
+  COLORED_AUTUMN_LEAVES_PRESET,
   FIREWORK_PRESETS,
   HANARAI_PRESET,
   HIYUSEI_PRESET,
@@ -12,8 +13,10 @@ import {
   KOWARI_PRESET,
   KOURO_CHANGE_CHRYSANTHEMUM_PRESET,
   LIGHT_RIPPLE_PRESET,
+  POPPING_SHOWER_PRESET,
   ROTATING_LIGHT_RING_PRESET,
   SATURN_PRESET,
+  SPRING_SUMMER_SNOW_PRESET,
   WILLOW_PRESET,
 } from "./presets";
 
@@ -35,6 +38,12 @@ const PHASE_3_PRESETS = [
   KOURO_CHANGE_CHRYSANTHEMUM_PRESET,
 ];
 
+const PHASE_4_PRESETS = [
+  COLORED_AUTUMN_LEAVES_PRESET,
+  SPRING_SUMMER_SNOW_PRESET,
+  POPPING_SHOWER_PRESET,
+];
+
 describe("researched real-firework presets", () => {
   it("adds eight uniquely identified designs to the six original samples", () => {
     const existing = FIREWORK_PRESETS.slice(0, 14);
@@ -49,9 +58,7 @@ describe("researched real-firework presets", () => {
   });
 
   it("adds four Phase 3 works with stable spatial phase mappings", () => {
-    expect(FIREWORK_PRESETS).toHaveLength(18);
-    expect(new Set(FIREWORK_PRESETS.map((preset) => preset.id)).size).toBe(18);
-    expect(FIREWORK_PRESETS.slice(-4)).toEqual(PHASE_3_PRESETS);
+    expect(FIREWORK_PRESETS.slice(14, 18)).toEqual(PHASE_3_PRESETS);
     expect(outerLayer(ILLUMINATION_PRESET).effectTiming?.mapping).toBe(
       "random",
     );
@@ -71,6 +78,20 @@ describe("researched real-firework presets", () => {
         first.stars.some(({ effectPhase }) => effectPhase !== undefined),
       ).toBe(true);
     });
+  });
+
+  it("adds falling leaves, snow, and a bounded popping shower in Phase 4", () => {
+    expect(FIREWORK_PRESETS).toHaveLength(21);
+    expect(new Set(FIREWORK_PRESETS.map((preset) => preset.id)).size).toBe(21);
+    expect(FIREWORK_PRESETS.slice(-3)).toEqual(PHASE_4_PRESETS);
+    expect(
+      Object.values(COLORED_AUTUMN_LEAVES_PRESET.starDefinitions).some(
+        (star) => star.id === "star-strobe-leaf",
+      ),
+    ).toBe(true);
+    const popping = compileFireworkDesign(POPPING_SHOWER_PRESET, 7_019);
+    expect(popping.estimatedCost.secondaryParticleCount).toBe(600);
+    expect(popping.estimatedCost.maximumParticles).toBe(720);
   });
 
   it("models willow, bees, and flying stars with distinct trails", () => {

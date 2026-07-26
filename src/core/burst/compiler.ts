@@ -40,8 +40,12 @@ export interface CompiledChildBurst {
 
 export interface EstimatedBurstCost {
   childBurstCount: number;
+  effectTrailVertexEstimate?: number;
   maximumParticles: number;
+  secondaryParticleCount?: number;
+  smokeEmitterEstimate?: number;
   starCount: number;
+  terminalSparkCount?: number;
   trailCount: number;
 }
 
@@ -556,9 +560,47 @@ export function estimateBurstCost(
     0,
   );
   const allStars = [...stars, ...children.flatMap((child) => child.stars)];
+  const effectStars = allStars.filter(
+    (star) => star.definition.effectProfile !== undefined,
+  );
+  const secondaryParticleCount = effectStars.reduce((sum, star) => {
+    const secondary = star.definition.effectProfile?.secondary;
+    return secondary && secondary.mode !== "none"
+      ? sum + Math.round(secondary.count ?? 0)
+      : sum;
+  }, 0);
+  const terminalSparkCount = effectStars.reduce((sum, star) => {
+    const terminal = star.definition.effectProfile?.light?.terminal;
+    return terminal && terminal.mode !== "none"
+      ? sum + Math.round(terminal.sparkleCount ?? 0)
+      : sum;
+  }, 0);
+  const effectTrailVertexEstimate = effectStars.reduce(
+    (sum, star) =>
+      sum +
+      (star.definition.trailLifetime > 0.14
+        ? Math.max(Math.round(3 + star.definition.trailLifetime * 9) - 1, 1) * 2
+        : 0),
+    0,
+  );
+  const smokeEmitterEstimate = effectStars.filter(
+    (star) => star.definition.smokeAmount > 0,
+  ).length;
   return {
     childBurstCount: children.length,
-    maximumParticles: stars.length + childStarCount,
+    ...(effectStars.length > 0
+      ? {
+          effectTrailVertexEstimate,
+          secondaryParticleCount,
+          smokeEmitterEstimate,
+          terminalSparkCount,
+        }
+      : undefined),
+    maximumParticles:
+      stars.length +
+      childStarCount +
+      secondaryParticleCount +
+      terminalSparkCount,
     starCount: stars.length,
     trailCount: allStars.filter((star) => star.definition.trailLifetime > 0.24)
       .length,

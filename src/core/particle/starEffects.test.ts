@@ -141,6 +141,28 @@ describe("virtual star effect evaluation", () => {
     expect(evaluateMotionOffset(profile, 1.25, 0.2, 9)).toEqual(
       evaluateMotionOffset(profile, 1.25, 0.2, 9),
     );
+    const wander = evaluateMotionOffset(
+      { motion: { amplitude: 0.5, frequencyHz: 1.1, mode: "wander" } },
+      1.25,
+      0.2,
+      9,
+    );
+    const spiral = evaluateMotionOffset(
+      { motion: { amplitude: 0.5, frequencyHz: 1.1, mode: "spiral" } },
+      1.25,
+      0.2,
+      9,
+    );
+    expect(wander).not.toEqual({ x: 0, y: 0, z: 0 });
+    expect(spiral).not.toEqual(wander);
+    expect(
+      evaluateMotionOffset(
+        { motion: { amplitude: 0.5, frequencyHz: 1.1, mode: "spiral" } },
+        1.25,
+        0.2,
+        9,
+      ),
+    ).toEqual(spiral);
   });
 
   it("emits one deterministic secondary event only when crossing its boundary", () => {

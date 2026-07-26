@@ -1,4 +1,8 @@
-import { evaluateMotionOffset, type Vector3Value } from "../../core/particle";
+import {
+  evaluateMotionOffset,
+  evaluateSecondaryEvent,
+  type Vector3Value,
+} from "../../core/particle";
 import { stableSeed } from "../../core/random";
 import type { VirtualStarPreset } from "../../data";
 
@@ -19,6 +23,12 @@ export interface StarBehaviorPreviewScenario {
   layout: StarBehaviorPreviewLayout;
   particles: StarBehaviorPreviewParticle[];
   seed: number;
+}
+
+export interface StarBehaviorPreviewSecondaryParticle {
+  mode: "spark" | "microBurst";
+  opacity: number;
+  position: Vector3Value;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -112,6 +122,100 @@ export function evaluatePreviewParticlePosition(
       particle.initialVelocity.z * dragIntegral +
       motion.z,
   };
+}
+
+export function evaluatePreviewSecondaryParticles(
+  particle: StarBehaviorPreviewParticle,
+  star: VirtualStarPreset,
+  ageSeconds: number,
+): StarBehaviorPreviewSecondaryParticle[] {
+  const normalizedAge = ageSeconds / Math.max(particle.lifetime, 0.0001);
+  const samples: StarBehaviorPreviewSecondaryParticle[] = [];
+  const append = (
+    mode: "spark" | "microBurst",
+    count: number,
+    speedScale: number,
+    triggerTime: number,
+    seed: number,
+  ) => {
+    const event = evaluateSecondaryEvent(
+      {
+        secondary: {
+          count,
+          mode,
+          speedScale,
+          triggerTime,
+        },
+      },
+      triggerTime - 0.000_001,
+      normalizedAge,
+      seed,
+    );
+    if (!event) return;
+    const childAge = ageSeconds - triggerTime * particle.lifetime;
+    const childLifetime = mode === "microBurst" ? 0.72 : 0.42;
+    if (childAge < 0 || childAge > childLifetime) return;
+    const origin = evaluatePreviewParticlePosition(
+      particle,
+      star,
+      triggerTime * particle.lifetime,
+    );
+    const inheritedDrag = Math.exp(
+      -star.drag * triggerTime * particle.lifetime,
+    );
+    const progress = childAge / childLifetime;
+    event.particles.forEach((secondary) => {
+      const speed = secondary.speedScale * (mode === "microBurst" ? 7.2 : 4.8);
+      samples.push({
+        mode,
+        opacity: Math.pow(1 - progress, 1.4),
+        position: {
+          x:
+            origin.x +
+            (particle.initialVelocity.x * inheritedDrag * 0.12 +
+              secondary.direction.x * speed) *
+              childAge,
+          y:
+            origin.y +
+            (particle.initialVelocity.y * inheritedDrag * 0.12 +
+              secondary.direction.y * speed) *
+              childAge -
+            4.2 * childAge * childAge,
+          z:
+            origin.z +
+            (particle.initialVelocity.z * inheritedDrag * 0.12 +
+              secondary.direction.z * speed) *
+              childAge,
+        },
+      });
+    });
+  };
+
+  const secondary = star.effectProfile?.secondary;
+  if (secondary && secondary.mode !== "none") {
+    append(
+      secondary.mode,
+      Math.round(secondary.count ?? 0),
+      secondary.speedScale ?? 1,
+      secondary.triggerTime ?? 0.9,
+      particle.effectSeed,
+    );
+  }
+  const terminal = star.effectProfile?.light?.terminal;
+  if (
+    terminal &&
+    terminal.mode !== "none" &&
+    (terminal.sparkleCount ?? 0) > 0
+  ) {
+    append(
+      "spark",
+      Math.round(terminal.sparkleCount ?? 0),
+      terminal.mode === "teka" ? 0.72 : 0.46,
+      1 - terminal.duration,
+      particle.effectSeed ^ 0x71c3_9a5d,
+    );
+  }
+  return samples;
 }
 
 export function buildStarBehaviorPreviewScenario(

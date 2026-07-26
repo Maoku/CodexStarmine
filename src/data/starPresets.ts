@@ -194,6 +194,49 @@ export const BUILTIN_STAR_PRESETS: VirtualStarPreset[] = [
       trailLifetime: 0.2,
     },
   ),
+  star(
+    "star-strobe-leaf",
+    "点滅葉落星",
+    [0xffffff, 0xff9fcf, 0xffec84, 0x86e8ff],
+    {
+      brightness: 1.24,
+      burnDuration: 4.8,
+      drag: 0.82,
+      effectProfile: {
+        color: { mode: "step", playback: "pingPong", repeatCount: 2 },
+        light: {
+          dutyCycle: 0.38,
+          edgeSoftness: 0.055,
+          frequencyHz: 4.8,
+          mode: "strobe",
+        },
+        motion: {
+          amplitude: 0.78,
+          frequencyHz: 0.9,
+          mode: "fallingLeaf",
+        },
+      },
+      flicker: 0,
+      gravityScale: 0.9,
+      trailLifetime: 0.22,
+    },
+  ),
+  star("star-popping", "はじけ子花星", [0xffffff, 0xffd0e5, 0x8ddfff], {
+    brightness: 1.34,
+    burnDuration: 2.25,
+    effectProfile: {
+      light: { mode: "continuous" },
+      secondary: {
+        count: 5,
+        mode: "microBurst",
+        speedScale: 0.82,
+        triggerTime: 0.82,
+      },
+    },
+    flicker: 0.08,
+    soundTag: "crackle",
+    trailLifetime: 0.08,
+  }),
 ];
 
 export function snapshotStarLibrary(): Record<string, VirtualStarPreset> {

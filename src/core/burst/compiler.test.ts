@@ -6,6 +6,7 @@ import {
   ensureFireworkDesignV4,
   FIREWORK_PRESETS,
   HEART_PRESET,
+  POPPING_SHOWER_PRESET,
   SENRIN_PRESET,
   type FireworkDesignV4,
   type PatternLayerIntent,
@@ -206,5 +207,18 @@ describe("Phase 6.5 burst compiler", () => {
       effectSeed: expect.any(Number),
     });
     expect(second.stars[0].effectSeed).toBe(first.stars[0].effectSeed);
+  });
+
+  it("includes bounded secondary and terminal particles in effect cost", () => {
+    const plan = compileFireworkDesign(POPPING_SHOWER_PRESET, 81_503);
+    expect(plan.estimatedCost).toMatchObject({
+      maximumParticles: 720,
+      secondaryParticleCount: 600,
+      smokeEmitterEstimate: 120,
+      terminalSparkCount: 0,
+    });
+    expect(plan.warnings).not.toContain(
+      "実行上限6,000星を超えます。星数または子花数を減らしてください。",
+    );
   });
 });
