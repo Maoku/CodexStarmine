@@ -22,6 +22,10 @@
 - [被写体・背景分離の精度向上計画](FOREGROUND_BACKGROUND_SEGMENTATION_ACCURACY_IMPLEMENTATION_PLAN.md)
 - [配置生成の改良計画](IMAGE_TO_STARMINE_REFINEMENT_PLAN.md)
 
+## 仮想星と花火表現
+
+- [仮想星の時間表現拡張・WebGL挙動プレビュー実装計画](VIRTUAL_STAR_EXPANSION_IMPLEMENTATION_PLAN.md)
+
 ## 多言語対応
 
 - [英語・多言語対応計画](ENGLISH_LOCALIZATION_PLAN.md)

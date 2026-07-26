@@ -13,6 +13,7 @@
 ## 調査資料
 
 - [打ち上げ花火シミュレーション調査](RESEARCH.md)
+- [新作花火調査に基づく仮想星拡張](VIRTUAL_STAR_EXPANSION_RESEARCH.md)
 - [画像から仮想星を生成するブラウザローカル手法](IMAGE_TO_VIRTUAL_STARS_BROWSER_RESEARCH.md)
 - [被写体・背景分離の精度向上](FOREGROUND_BACKGROUND_SEGMENTATION_ACCURACY_RESEARCH.md)
 
