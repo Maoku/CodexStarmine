@@ -135,6 +135,9 @@ function migrateLayer(layer: FireworkLayer, index: number): LayerIntentV4 {
         const resolvedPosition = override?.position ?? position;
         return [
           {
+            ...(override?.effectPhase === undefined
+              ? undefined
+              : { effectPhase: override.effectPhase }),
             id: `${layer.id}-point-${pointIndex}`,
             position: clone(resolvedPosition),
             section: inferSection(resolvedPosition),

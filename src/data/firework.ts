@@ -131,6 +131,12 @@ export interface VirtualStarEffectProfile {
     speedScale?: number;
     triggerTime?: number;
   };
+  trail?: {
+    dutyCycle?: number;
+    frequencyHz?: number;
+    grainSpacing?: number;
+    mode: "continuous" | "strobe" | "granular";
+  };
 }
 
 export interface VirtualStarPreset {
@@ -593,6 +599,22 @@ export function isVirtualStarEffectProfile(
       return false;
     }
   }
+  if (value.trail !== undefined) {
+    if (
+      !isRecord(value.trail) ||
+      !["continuous", "strobe", "granular"].includes(
+        String(value.trail.mode),
+      ) ||
+      (value.trail.dutyCycle !== undefined &&
+        !isFiniteInRange(value.trail.dutyCycle, 0.08, 0.92)) ||
+      (value.trail.frequencyHz !== undefined &&
+        !isFiniteInRange(value.trail.frequencyHz, 0.5, 18)) ||
+      (value.trail.grainSpacing !== undefined &&
+        !isFiniteInRange(value.trail.grainSpacing, 1, 4))
+    ) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -664,6 +686,16 @@ export function normalizeVirtualStarEffectProfile(
         : "none",
       speedScale: clampFinite(source.secondary.speedScale, 1, 0, 3),
       triggerTime: clampFinite(source.secondary.triggerTime, 0.9, 0.35, 1),
+    };
+  }
+  if (isRecord(source.trail)) {
+    profile.trail = {
+      dutyCycle: clampFinite(source.trail.dutyCycle, 0.5, 0.08, 0.92),
+      frequencyHz: clampFinite(source.trail.frequencyHz, 6, 0.5, 18),
+      grainSpacing: Math.round(clampFinite(source.trail.grainSpacing, 2, 1, 4)),
+      mode: ["strobe", "granular"].includes(String(source.trail.mode))
+        ? (source.trail.mode as "strobe" | "granular")
+        : "continuous",
     };
   }
   return Object.keys(profile).length > 0 ? profile : undefined;

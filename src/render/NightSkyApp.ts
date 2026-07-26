@@ -330,6 +330,16 @@ export class NightSkyApp {
     this.#check.update(delta);
     this.#advertiseDemo.update(delta);
     this.#freeShow.update(delta);
+    this.#fireworks.setRenderContext({
+      cameraPosition: {
+        x: this.#camera.position.x,
+        y: this.#camera.position.y,
+        z: this.#camera.position.z,
+      },
+      hardwareConcurrency: navigator.hardwareConcurrency || 8,
+      pixelRatio: clampPixelRatio(window.devicePixelRatio),
+      viewportHeight: Math.max(this.#host.clientHeight, 1),
+    });
     this.#fireworks.update(delta);
     this.#updateScene(elapsed);
     this.#freeView.update(delta);

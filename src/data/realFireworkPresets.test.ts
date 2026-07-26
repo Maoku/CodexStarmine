@@ -17,6 +17,7 @@ import {
   ROTATING_LIGHT_RING_PRESET,
   SATURN_PRESET,
   SPRING_SUMMER_SNOW_PRESET,
+  STOP_MOTION_PRESET,
   WILLOW_PRESET,
 } from "./presets";
 
@@ -81,9 +82,7 @@ describe("researched real-firework presets", () => {
   });
 
   it("adds falling leaves, snow, and a bounded popping shower in Phase 4", () => {
-    expect(FIREWORK_PRESETS).toHaveLength(21);
-    expect(new Set(FIREWORK_PRESETS.map((preset) => preset.id)).size).toBe(21);
-    expect(FIREWORK_PRESETS.slice(-3)).toEqual(PHASE_4_PRESETS);
+    expect(FIREWORK_PRESETS.slice(18, 21)).toEqual(PHASE_4_PRESETS);
     expect(
       Object.values(COLORED_AUTUMN_LEAVES_PRESET.starDefinitions).some(
         (star) => star.id === "star-strobe-leaf",
@@ -92,6 +91,26 @@ describe("researched real-firework presets", () => {
     const popping = compileFireworkDesign(POPPING_SHOWER_PRESET, 7_019);
     expect(popping.estimatedCost.secondaryParticleCount).toBe(600);
     expect(popping.estimatedCost.maximumParticles).toBe(720);
+  });
+
+  it("adds a four-step manual-phase stop-motion work in Phase 5", () => {
+    expect(FIREWORK_PRESETS).toHaveLength(22);
+    expect(new Set(FIREWORK_PRESETS.map((preset) => preset.id)).size).toBe(22);
+    expect(FIREWORK_PRESETS.at(-1)).toBe(STOP_MOTION_PRESET);
+    const plan = compileFireworkDesign(STOP_MOTION_PRESET, 7_019);
+    expect(new Set(plan.stars.map(({ effectPhase }) => effectPhase))).toEqual(
+      new Set([0, 0.25, 0.5, 0.75]),
+    );
+    expect(
+      STOP_MOTION_PRESET.layers.some(
+        (layer) =>
+          layer.effectTiming?.mapping === "manual" &&
+          layer.kind === "spherical" &&
+          layer.overrides.every(
+            (override) => override.effectPhase !== undefined,
+          ),
+      ),
+    ).toBe(true);
   });
 
   it("models willow, bees, and flying stars with distinct trails", () => {

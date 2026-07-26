@@ -190,6 +190,12 @@ describe("DesignRepository", () => {
         frequencyHz: 400,
         mode: "strobe",
       },
+      trail: {
+        dutyCycle: 4,
+        frequencyHz: -2,
+        grainSpacing: 99,
+        mode: "granular",
+      },
     };
     (layer as unknown as Record<string, unknown>).effectTiming = {
       cycles: 99,
@@ -216,6 +222,12 @@ describe("DesignRepository", () => {
           mode: "strobe",
           phaseOffset: 0,
         },
+        trail: {
+          dutyCycle: 0.92,
+          frequencyHz: 0.5,
+          grainSpacing: 4,
+          mode: "granular",
+        },
       },
     );
     expect(restored.layers[0].effectTiming).toEqual({
@@ -224,6 +236,50 @@ describe("DesignRepository", () => {
       mapping: "none",
       offset: 0,
       spread: 0,
+    });
+  });
+
+  it("round trips a duplicated star with detailed effects through storage", () => {
+    const values = new Map<string, string>();
+    const storage = memoryStorage(values);
+    const design = ensureFireworkDesignV4(CHRYSANTHEMUM_PRESET);
+    const layer = design.layers[0]!;
+    const source = design.starDefinitions[layer.defaultStarId];
+    const copyId = `${source.id}-copy`;
+    design.starDefinitions[copyId] = {
+      ...structuredClone(source),
+      displayName: `${source.displayName} 複製`,
+      effectProfile: {
+        ...structuredClone(source.effectProfile ?? {}),
+        trail: {
+          dutyCycle: 0.34,
+          frequencyHz: 7,
+          grainSpacing: 3,
+          mode: "strobe",
+        },
+      },
+      id: copyId,
+      smokeAmount: 0.72,
+      trailWidth: 1.6,
+    };
+    layer.defaultStarId = copyId;
+
+    new DesignRepository(storage, () => "detailed-effects").saveIntent(design);
+    const restored = new DesignRepository(storage).listIntents()[0];
+
+    expect(restored.layers[0]?.defaultStarId).toBe(copyId);
+    expect(restored.starDefinitions[copyId]).toMatchObject({
+      displayName: `${source.displayName} 複製`,
+      effectProfile: {
+        trail: {
+          dutyCycle: 0.34,
+          frequencyHz: 7,
+          grainSpacing: 3,
+          mode: "strobe",
+        },
+      },
+      smokeAmount: 0.72,
+      trailWidth: 1.6,
     });
   });
 

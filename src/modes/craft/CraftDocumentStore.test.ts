@@ -99,6 +99,41 @@ describe("CraftDocumentStore", () => {
     expect(store.intentDraft.layers[0].name).toBe("外周の設計意図");
   });
 
+  it("undoes and redoes an in-document star copy with detailed effects", () => {
+    const store = new CraftDocumentStore(CHRYSANTHEMUM_PRESET);
+    const sourceId = store.intentDraft.layers[0].defaultStarId;
+    const copyId = `${sourceId}-copy-test`;
+    store.updateIntent("仮想星を複製して編集", (draft) => {
+      const source = draft.starDefinitions[sourceId];
+      draft.starDefinitions[copyId] = {
+        ...structuredClone(source),
+        displayName: `${source.displayName} 複製`,
+        effectProfile: {
+          ...structuredClone(source.effectProfile ?? {}),
+          trail: {
+            frequencyHz: 7,
+            grainSpacing: 3,
+            mode: "granular",
+          },
+        },
+        id: copyId,
+        smokeAmount: 0.72,
+        trailWidth: 1.6,
+      };
+      draft.layers[0].defaultStarId = copyId;
+    });
+    expect(store.intentDraft.layers[0].defaultStarId).toBe(copyId);
+    expect(store.draft.starDefinitions[copyId]).toMatchObject({
+      effectProfile: { trail: { grainSpacing: 3, mode: "granular" } },
+      smokeAmount: 0.72,
+      trailWidth: 1.6,
+    });
+    store.undo();
+    expect(store.intentDraft.starDefinitions[copyId]).toBeUndefined();
+    store.redo();
+    expect(store.intentDraft.layers[0].defaultStarId).toBe(copyId);
+  });
+
   it("treats a manual convenience placement as one undoable operation", () => {
     const store = new CraftDocumentStore(CHRYSANTHEMUM_PRESET);
     store.updateIntent("手動レイヤーを追加", (draft) => {

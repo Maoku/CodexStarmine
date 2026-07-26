@@ -4,6 +4,7 @@ import type {
   LayerIntentV4,
 } from "../../data";
 import { effectivePatternScale, patternScaleLimit } from "./PatternRecipe";
+import { renderStarEffectEditor } from "./StarEffectEditor";
 import { escapeHTML, layerAuthoringLabel } from "./viewUtils";
 
 function selectedAttribute(selected: boolean): string {
@@ -102,11 +103,15 @@ export function renderSelectedLayerInspector(
       selectedLayer.defaultStarId === "star-gradient-fade"
         ? `<p class="inspector-note">この仮想星は光る順番をずらすと、リレーやグラデーションの流れが明瞭になります。</p>`
         : "";
+    const selectedStar =
+      design.starDefinitions[selectedLayer.defaultStarId] ??
+      Object.values(design.starDefinitions)[0];
     fields = `<div class="inspector-fields">
       <label><span>既定の仮想星</span><select name="layer-star" ${disabled}>${starOptions}</select></label>
       ${phaseControls}
       ${specific}
       ${recommendation}
+      ${selectedStar ? renderStarEffectEditor(selectedStar, locked) : ""}
     </div>`;
   }
   return `<section class="craft-card inspector-card" data-selected-layer-inspector>

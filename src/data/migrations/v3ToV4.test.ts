@@ -119,4 +119,21 @@ describe("v3ToV4", () => {
       resolved.kind === "spherical" ? resolved.overrides[0] : undefined,
     ).toMatchObject({ effectPhase: 0.42 });
   });
+
+  it("preserves legacy manual override phases while migrating to v4 points", () => {
+    const source = structuredClone(RENEWAL2_MANUAL_OVERRIDE_FIXTURE);
+    const layer = source.layers[0];
+    if (!layer || layer.kind !== "spherical" || !layer.overrides[0]) {
+      throw new Error("expected a spherical layer with a manual override");
+    }
+    layer.overrides[0].effectPhase = 0.37;
+
+    const migrated = migrateV3ToV4(source);
+    const migratedLayer = migrated.layers[0];
+    expect(
+      migratedLayer?.authoringMode === "manual"
+        ? migratedLayer.points[0]
+        : undefined,
+    ).toMatchObject({ effectPhase: 0.37 });
+  });
 });

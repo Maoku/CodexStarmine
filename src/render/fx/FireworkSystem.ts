@@ -73,6 +73,8 @@ interface Star extends BallisticParticle {
   history: Vector3Value[];
   pointScale: number;
   secondarySpawned: boolean;
+  smokeAmount: number;
+  smokeTimer: number;
   sparkle: number;
   terminalSparkSpawned: boolean;
   trailLength: number;
@@ -101,6 +103,42 @@ export interface LaunchKinematics {
   seed: number;
   targetHeight: number;
   velocity: Vector3Value;
+}
+
+export interface EffectRenderContext {
+  cameraPosition: Vector3Value;
+  hardwareConcurrency: number;
+  pixelRatio: number;
+  viewportHeight: number;
+}
+
+export interface EffectLOD {
+  secondaryScale: number;
+  smokeScale: number;
+  trailSampleStride: number;
+}
+
+export function deriveEffectLOD(context: EffectRenderContext): EffectLOD {
+  const distance = Math.hypot(
+    context.cameraPosition.x,
+    context.cameraPosition.y - 95,
+    context.cameraPosition.z + 112,
+  );
+  const distanceScale = distance > 240 ? 0.52 : distance > 160 ? 0.72 : 1;
+  const deviceScale =
+    context.hardwareConcurrency <= 4
+      ? 0.58
+      : context.hardwareConcurrency <= 8
+        ? 0.82
+        : 1;
+  const resolutionScale =
+    context.viewportHeight * context.pixelRatio > 1_600 ? 0.78 : 1;
+  const quality = Math.min(distanceScale, deviceScale, resolutionScale);
+  return {
+    secondaryScale: Math.max(quality, 0.35),
+    smokeScale: Math.max(quality * 0.82, 0.24),
+    trailSampleStride: quality < 0.62 ? 3 : quality < 0.86 ? 2 : 1,
+  };
 }
 
 export interface FireworkSystemCallbacks {
@@ -275,6 +313,11 @@ export class FireworkSystem {
   #shells: Shell[] = [];
   #smoke: SmokeParticle[] = [];
   #stars: Star[] = [];
+  #effectLOD: EffectLOD = {
+    secondaryScale: 1,
+    smokeScale: 1,
+    trailSampleStride: 1,
+  };
 
   constructor(scene: Scene, callbacks: FireworkSystemCallbacks = {}) {
     this.#callbacks = callbacks;
@@ -356,6 +399,10 @@ export class FireworkSystem {
     this.#writeSmokeBuffers();
   }
 
+  setRenderContext(context: EffectRenderContext): void {
+    this.#effectLOD = deriveEffectLOD(context);
+  }
+
   update(deltaSeconds: number): void {
     const delta = Math.min(Math.max(deltaSeconds, 0), 0.05);
     this.#updateShells(delta);
@@ -408,6 +455,8 @@ export class FireworkSystem {
         history: [clonePosition(particle.position)],
         pointScale: size.pointScale * Math.max(definition.trailWidth, 0.72),
         secondarySpawned: false,
+        smokeAmount: definition.smokeAmount,
+        smokeTimer: 0,
         sparkle: definition.flicker,
         terminalSparkSpawned: false,
         trailLength: definition.trailLifetime,
@@ -646,6 +695,18 @@ export class FireworkSystem {
           ...this.#createSecondaryStars(star, star.appearance.secondaryEvent),
         );
       }
+      star.smokeTimer += delta;
+      const smokeInterval =
+        0.52 / Math.max(star.smokeAmount * this.#effectLOD.smokeScale, 0.000_1);
+      if (
+        star.smokeAmount > 0.04 &&
+        star.smokeTimer >= smokeInterval &&
+        star.age > star.lifetime * 0.12 &&
+        star.age < star.lifetime * 0.88
+      ) {
+        star.smokeTimer = 0;
+        this.#spawnStarSmoke(star);
+      }
       const terminal = star.effectProfile?.light?.terminal;
       if (
         star.appearance.terminalState !== "none" &&
@@ -688,7 +749,14 @@ export class FireworkSystem {
   #createSecondaryStars(parent: Star, event: SecondaryEvent): Star[] {
     const lifetime = event.mode === "microBurst" ? 0.72 : 0.42;
     const speed = event.mode === "microBurst" ? 7.2 : 4.8;
-    return event.particles.map((particle, index) => {
+    const particleCount = Math.max(
+      Math.min(
+        Math.ceil(event.particles.length * this.#effectLOD.secondaryScale),
+        event.particles.length,
+      ),
+      event.particles.length > 0 ? 1 : 0,
+    );
+    return event.particles.slice(0, particleCount).map((particle, index) => {
       const position = clonePosition(parent.drawPosition);
       return {
         age: 0,
@@ -708,6 +776,8 @@ export class FireworkSystem {
           parent.pointScale * (event.mode === "microBurst" ? 0.72 : 0.54),
         position,
         secondarySpawned: true,
+        smokeAmount: 0,
+        smokeTimer: 0,
         sparkle: 0.08,
         terminalSparkSpawned: true,
         trailLength: event.mode === "microBurst" ? 0.12 : 0,
@@ -726,6 +796,30 @@ export class FireworkSystem {
         windResponse: parent.windResponse * 0.72,
       };
     });
+  }
+
+  #spawnStarSmoke(star: Star): void {
+    const random = createSeededRandom(
+      star.effectSeed ^ Math.round(star.age * 1_000),
+    );
+    const color = star.appearance?.color ?? 0xffffff;
+    this.#smoke.push({
+      age: 0,
+      baseColor: 0x4a5260,
+      illumination: 0.18,
+      illuminationColor: color,
+      lifetime: 1.6 + star.smokeAmount * 2.4,
+      position: clonePosition(star.drawPosition),
+      size: 0.72 + star.smokeAmount * 1.4,
+      velocity: {
+        x: BURST_PARTICLE_ENVIRONMENT.wind.x * 0.12 + random.signed() * 0.18,
+        y: 0.08 + random.next() * 0.22,
+        z: BURST_PARTICLE_ENVIRONMENT.wind.z * 0.12 + random.signed() * 0.18,
+      },
+    });
+    if (this.#smoke.length > MAX_SMOKE) {
+      this.#smoke.splice(0, this.#smoke.length - MAX_SMOKE);
+    }
   }
 
   #writePointBuffers(): void {
@@ -838,32 +932,55 @@ export class FireworkSystem {
       history: Vector3Value[],
       colorHex: number,
       intensity = 1,
+      width = 1,
+      grainSpacing = 1,
     ): void => {
       tempColor.setHex(colorHex);
+      const stride =
+        Math.max(Math.round(grainSpacing), 1) *
+        this.#effectLOD.trailSampleStride;
+      const passes = Math.min(Math.max(Math.round(width * 1.35), 1), 3);
       for (
         let index = 1;
-        index < history.length && vertex + 2 <= MAX_TRAIL_VERTICES;
+        index < history.length && vertex + passes * 2 <= MAX_TRAIL_VERTICES;
         index += 1
       ) {
+        if ((index - 1) % stride !== 0) continue;
         const previous = history[index - 1];
         const current = history[index];
         const fade = (index / history.length) * intensity;
-        position.setXYZ(vertex, previous.x, previous.y, previous.z);
-        color.setXYZ(
-          vertex,
-          tempColor.r * fade * 0.35,
-          tempColor.g * fade * 0.35,
-          tempColor.b * fade * 0.35,
-        );
-        vertex += 1;
-        position.setXYZ(vertex, current.x, current.y, current.z);
-        color.setXYZ(
-          vertex,
-          tempColor.r * fade,
-          tempColor.g * fade,
-          tempColor.b * fade,
-        );
-        vertex += 1;
+        for (let pass = 0; pass < passes; pass += 1) {
+          const offset =
+            passes === 1
+              ? 0
+              : (pass - (passes - 1) / 2) * Math.max(width - 0.6, 0.2) * 0.035;
+          position.setXYZ(
+            vertex,
+            previous.x + offset,
+            previous.y - offset * 0.4,
+            previous.z,
+          );
+          color.setXYZ(
+            vertex,
+            tempColor.r * fade * 0.35,
+            tempColor.g * fade * 0.35,
+            tempColor.b * fade * 0.35,
+          );
+          vertex += 1;
+          position.setXYZ(
+            vertex,
+            current.x + offset,
+            current.y - offset * 0.4,
+            current.z,
+          );
+          color.setXYZ(
+            vertex,
+            tempColor.r * fade,
+            tempColor.g * fade,
+            tempColor.b * fade,
+          );
+          vertex += 1;
+        }
       }
     };
 
@@ -897,6 +1014,10 @@ export class FireworkSystem {
         star.history,
         evaluated.trailColor,
         evaluated.intensity * evaluated.trailLightMultiplier,
+        star.trailWidth,
+        star.effectProfile?.trail?.mode === "granular"
+          ? (star.effectProfile.trail.grainSpacing ?? 2)
+          : 1,
       );
     }
 

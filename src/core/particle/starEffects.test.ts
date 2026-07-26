@@ -7,6 +7,7 @@ import {
   evaluateLightEnvelope,
   evaluateMotionOffset,
   evaluateSecondaryEvent,
+  evaluateTrailEnvelope,
   evaluateVirtualStarAppearance,
 } from "./starEffects";
 
@@ -89,6 +90,20 @@ describe("virtual star effect evaluation", () => {
     expect(evaluateLightEnvelope(profile, 0.1, 0, 1, 0.1)).toBe(1);
     expect(evaluateLightEnvelope(profile, 0.2, 0, 1, 0.2)).toBe(0);
     expect(evaluateLightEnvelope(profile, 0.1, 0.5, 1, 0.1)).toBe(0);
+  });
+
+  it("supports trail-only strobe without dimming the parent point", () => {
+    const profile: VirtualStarEffectProfile = {
+      light: { mode: "continuous" },
+      trail: {
+        dutyCycle: 0.25,
+        frequencyHz: 2,
+        mode: "strobe",
+      },
+    };
+    expect(evaluateLightEnvelope(profile, 0.2, 0, 1, 0.2)).toBe(1);
+    expect(evaluateTrailEnvelope(profile, 0.2, 0)).toBe(0);
+    expect(evaluateTrailEnvelope(profile, 0.05, 0)).toBe(1);
   });
 
   it("distinguishes kouro afterglow from a stronger teka terminal flash", () => {

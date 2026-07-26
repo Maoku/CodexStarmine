@@ -3814,6 +3814,68 @@ input[type="range"] {
   background: rgb(197 142 78 / 22%);
 }
 
+.star-effect-editor {
+  border: 1px solid rgb(198 164 119 / 24%);
+  border-radius: 0.36rem;
+  background: rgb(2 6 12 / 42%);
+}
+
+.star-effect-editor > summary {
+  padding: 0.62rem 0.7rem;
+  color: #c6a477;
+  font-size: 0.58rem;
+  cursor: pointer;
+}
+
+.star-effect-editor__body {
+  display: grid;
+  gap: 0.58rem;
+  padding: 0 0.62rem 0.65rem;
+}
+
+.star-effect-editor__body > button {
+  min-height: 1.9rem;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 0.28rem;
+  background: rgb(255 255 255 / 4%);
+  color: #b8b1a7;
+}
+
+.star-effect-editor fieldset,
+.inspector-effect-timing {
+  display: grid;
+  gap: 0.48rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.58rem;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0.3rem;
+}
+
+.star-effect-editor legend,
+.inspector-effect-timing legend {
+  padding: 0 0.28rem;
+  color: #a99b88;
+  font-size: 0.54rem;
+}
+
+.star-effect-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+.star-effect-stage-grid label {
+  justify-items: center;
+}
+
+.star-effect-stage-grid input[type="color"] {
+  width: 100%;
+  min-height: 1.8rem;
+  border: 0;
+  background: transparent;
+}
+
 .inspector-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

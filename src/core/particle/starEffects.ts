@@ -222,6 +222,29 @@ export function evaluateLightEnvelope(
   );
 }
 
+export function evaluateTrailEnvelope(
+  profile: VirtualStarEffectProfile | undefined,
+  ageSeconds: number,
+  effectPhase = 0,
+  fallbackLightMultiplier = 1,
+): number {
+  const trail = profile?.trail;
+  if (!trail) return fallbackLightMultiplier;
+  if (trail.mode !== "strobe") return 1;
+  return strobeEnvelope(
+    {
+      light: {
+        dutyCycle: trail.dutyCycle ?? 0.5,
+        edgeSoftness: 0.035,
+        frequencyHz: trail.frequencyHz ?? 6,
+        mode: "strobe",
+      },
+    },
+    ageSeconds,
+    effectPhase,
+  );
+}
+
 export function evaluateDeterministicFlicker(
   amount: number,
   ageSeconds: number,
@@ -346,6 +369,12 @@ export function evaluateVirtualStarAppearance(
     effectSeed,
   );
   const terminal = terminalEnvelope(input.effectProfile, normalizedAge);
+  const trailEnvelope = evaluateTrailEnvelope(
+    input.effectProfile,
+    input.ageSeconds,
+    input.effectPhase,
+    envelope,
+  );
   return {
     ...color,
     lightMultiplier: envelope * flicker,
@@ -365,6 +394,6 @@ export function evaluateVirtualStarAppearance(
             effectSeed,
           ),
     terminalState: terminal.state,
-    trailLightMultiplier: envelope * (0.72 + flicker * 0.28),
+    trailLightMultiplier: trailEnvelope * (0.72 + flicker * 0.28),
   };
 }

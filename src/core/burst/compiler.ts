@@ -579,7 +579,25 @@ export function estimateBurstCost(
     (sum, star) =>
       sum +
       (star.definition.trailLifetime > 0.14
-        ? Math.max(Math.round(3 + star.definition.trailLifetime * 9) - 1, 1) * 2
+        ? Math.ceil(
+            (Math.max(
+              Math.round(3 + star.definition.trailLifetime * 9) - 1,
+              1,
+            ) *
+              2 *
+              Math.min(
+                Math.max(Math.round(star.definition.trailWidth * 1.35), 1),
+                3,
+              )) /
+              (star.definition.effectProfile?.trail?.mode === "granular"
+                ? Math.max(
+                    Math.round(
+                      star.definition.effectProfile.trail.grainSpacing ?? 2,
+                    ),
+                    1,
+                  )
+                : 1),
+          )
         : 0),
     0,
   );

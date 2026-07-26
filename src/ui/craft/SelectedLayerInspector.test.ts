@@ -29,6 +29,7 @@ describe("SelectedLayerInspector", () => {
     expect(markup).toContain('name="effect-direction"');
     expect(markup).toContain('name="effect-spread"');
     expect(markup).toContain('name="effect-cycles"');
+    expect(markup).toContain("仮想星の効果を編集");
   });
 
   it("renders pattern and manual settings without losing their restrictions", () => {

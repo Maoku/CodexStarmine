@@ -345,6 +345,30 @@ function rippleOverrides(
   });
 }
 
+function stopMotionOverrides(): StarPointOverride[] {
+  const centers = [
+    { x: -0.42, y: 0 },
+    { x: 0, y: 0.42 },
+    { x: 0.42, y: 0 },
+    { x: 0, y: -0.42 },
+  ];
+  return centers.flatMap((center, frame) =>
+    Array.from({ length: 24 }, (_, localIndex) => {
+      const angle = (localIndex / 24) * Math.PI * 2;
+      const index = frame * 24 + localIndex;
+      return {
+        effectPhase: frame / centers.length,
+        index,
+        position: {
+          x: center.x + Math.cos(angle) * 0.18,
+          y: center.y + Math.sin(angle) * 0.18,
+          z: (frame - 1.5) * 0.04,
+        },
+      };
+    }),
+  );
+}
+
 function outerLayer(design: FireworkDesignV2): SphericalStarLayer {
   const layer = design.layers.find(
     (candidate): candidate is SphericalStarLayer =>
@@ -521,6 +545,30 @@ POPPING_SHOWER_PRESET.description =
   layer.name = "はじける親星";
 }
 
+export const STOP_MOTION_PRESET: FireworkDesignV2 =
+  structuredClone(CHRYSANTHEMUM_PRESET);
+STOP_MOTION_PRESET.id = "preset-stop-motion";
+STOP_MOTION_PRESET.name = "ストップモーション";
+STOP_MOTION_PRESET.description =
+  "四つの小環を手動の光る位置で順番に切り替え、夜空にコマ送りの動きを描く作品。";
+{
+  const layer = outerLayer(STOP_MOTION_PRESET);
+  const overrides = stopMotionOverrides();
+  layer.count = overrides.length;
+  layer.defaultStarId = "star-relay-light";
+  layer.effectTiming = {
+    cycles: 1,
+    direction: "forward",
+    mapping: "manual",
+    offset: 0,
+    spread: 1,
+  };
+  layer.jitter = 0;
+  layer.name = "四コマ光環";
+  layer.overrides = overrides;
+  layer.placement = "manual";
+}
+
 export const FIREWORK_PRESETS: FireworkDesignV2[] = [
   CHRYSANTHEMUM_PRESET,
   PEONY_PRESET,
@@ -543,4 +591,5 @@ export const FIREWORK_PRESETS: FireworkDesignV2[] = [
   COLORED_AUTUMN_LEAVES_PRESET,
   SPRING_SUMMER_SNOW_PRESET,
   POPPING_SHOWER_PRESET,
+  STOP_MOTION_PRESET,
 ];

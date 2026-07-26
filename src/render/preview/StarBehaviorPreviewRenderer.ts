@@ -439,12 +439,20 @@ export class StarBehaviorPreviewRenderer {
 
       if (this.#star.trailLifetime <= 0.14) continue;
       const samples = 5;
+      const grainSpacing =
+        this.#star.effectProfile?.trail?.mode === "granular"
+          ? Math.max(
+              Math.round(this.#star.effectProfile.trail.grainSpacing ?? 2),
+              1,
+            )
+          : 1;
       this.#tempColor.setHex(appearance.trailColor);
       for (
         let sample = 1;
         sample < samples && trailVertex + 2 <= MAX_TRAIL_VERTICES;
         sample += 1
       ) {
+        if ((sample - 1) % grainSpacing !== 0) continue;
         const currentAge = Math.max(
           age - (sample / samples) * Math.min(this.#star.trailLifetime, age),
           0,
@@ -464,7 +472,10 @@ export class StarBehaviorPreviewRenderer {
           this.#star,
           previousAge,
         );
-        const fade = (1 - sample / samples) * appearance.trailLightMultiplier;
+        const fade =
+          (1 - sample / samples) *
+          appearance.trailLightMultiplier *
+          Math.min(Math.max(this.#star.trailWidth, 0.4), 1.8);
         trailPosition.setXYZ(trailVertex, previous.x, previous.y, previous.z);
         trailColor.setXYZ(
           trailVertex,

@@ -30,6 +30,7 @@ export interface PreviewTrajectoryPoint extends Vector3Value {
   color: number;
   intensity: number;
   lightMultiplier: number;
+  secondaryScale: number;
   terminalState: VirtualStarTerminalState;
   time: number;
   visible: boolean;
@@ -181,7 +182,20 @@ export function buildCompiledStarTrajectory(
       advanceBurstParticle(particle, delta, BURST_PARTICLE_ENVIRONMENT);
       elapsed += delta;
     }
-    const visible = particle.age >= 0 && particle.age < particle.lifetime;
+    const parentVisible = particle.age >= 0 && particle.age < particle.lifetime;
+    const secondary = source.compiled.definition.effectProfile?.secondary;
+    const secondaryTrigger =
+      particle.lifetime * (secondary?.triggerTime ?? 0.9);
+    const secondaryAge = particle.age - secondaryTrigger;
+    const secondaryScale =
+      secondary &&
+      secondary.mode !== "none" &&
+      secondaryAge >= 0 &&
+      secondaryAge <= 0.72
+        ? Math.pow(1 - secondaryAge / 0.72, 1.2) *
+          Math.min((secondary.count ?? 0) / 4, 1.4)
+        : 0;
+    const visible = parentVisible || secondaryScale > 0;
     const appearance = evaluateVirtualStarAppearance({
       ageSeconds: particle.age,
       colorStages: source.compiled.definition.colorStages,
@@ -196,10 +210,11 @@ export function buildCompiledStarTrajectory(
       y: particle.position.y + appearance.motionOffset.y,
       z: particle.position.z + appearance.motionOffset.z,
       color: appearance.color,
-      intensity: visible
+      intensity: parentVisible
         ? appearance.intensity * appearance.lightMultiplier
-        : 0,
-      lightMultiplier: visible ? appearance.lightMultiplier : 0,
+        : secondaryScale * 0.86,
+      lightMultiplier: parentVisible ? appearance.lightMultiplier : 0,
+      secondaryScale,
       terminalState: appearance.terminalState,
       time: target,
       visible,
@@ -221,7 +236,11 @@ export function buildCompiledBurstPreviewModel(
           source.additionalDelay +
           source.compiled.timingOffset +
           source.compiled.definition.burnDuration *
-            source.compiled.lifetimeScale,
+            source.compiled.lifetimeScale +
+          (source.compiled.definition.effectProfile?.secondary?.mode &&
+          source.compiled.definition.effectProfile.secondary.mode !== "none"
+            ? 0.72
+            : 0),
       ),
       1.8,
     ),
@@ -252,6 +271,7 @@ function projectedTrajectories(model: CompiledBurstPreviewModel): Array<{
   colors: string[];
   id: string;
   opacity: string[];
+  radius: string[];
   x: string[];
   y: string[];
 }> {
@@ -266,6 +286,9 @@ function projectedTrajectories(model: CompiledBurstPreviewModel): Array<{
     id: star.compiledId,
     opacity: star.trajectory.map((point) =>
       Math.min(Math.max(point.intensity, 0), 1).toFixed(2),
+    ),
+    radius: star.trajectory.map((point) =>
+      (1.35 + point.secondaryScale * 3.2).toFixed(2),
     ),
     x: star.trajectory.map((point) => (100 + point.x * scale).toFixed(2)),
     y: star.trajectory.map((point) => (82 - point.y * scale).toFixed(2)),
@@ -285,9 +308,10 @@ export function renderCompiledBurstPreview(
         ? `<animate attributeName="cx" values="${trajectory.x.join(";")}" dur="${model.duration}s" repeatCount="indefinite" />
           <animate attributeName="cy" values="${trajectory.y.join(";")}" dur="${model.duration}s" repeatCount="indefinite" />
           <animate attributeName="fill" values="${trajectory.colors.join(";")}" dur="${model.duration}s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="${trajectory.opacity.join(";")}" dur="${model.duration}s" repeatCount="indefinite" />`
+          <animate attributeName="opacity" values="${trajectory.opacity.join(";")}" dur="${model.duration}s" repeatCount="indefinite" />
+          <animate attributeName="r" values="${trajectory.radius.join(";")}" dur="${model.duration}s" repeatCount="indefinite" />`
         : "";
-      return `<circle class="compiled-preview-star" data-compiled-star="${trajectory.id}" cx="${trajectory.x[index]}" cy="${trajectory.y[index]}" r="1.35" fill="${trajectory.colors[index]}" opacity="${trajectory.opacity[index]}">${animations}</circle>`;
+      return `<circle class="compiled-preview-star" data-compiled-star="${trajectory.id}" cx="${trajectory.x[index]}" cy="${trajectory.y[index]}" r="${trajectory.radius[index]}" fill="${trajectory.colors[index]}" opacity="${trajectory.opacity[index]}">${animations}</circle>`;
     })
     .join("");
   return `<svg viewBox="0 0 200 164" class="compiled-burst-preview ${running ? "is-running" : "is-paused"}" data-preview-revision="${revision}" role="img" aria-label="${model.totalStarCount}星の打上結果プレビュー"><circle cx="100" cy="82" r="68" class="compiled-preview-guide" />${stars}</svg>`;

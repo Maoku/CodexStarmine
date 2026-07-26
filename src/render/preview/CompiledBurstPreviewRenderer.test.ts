@@ -10,6 +10,7 @@ import {
   CHRYSANTHEMUM_PRESET,
   ensureFireworkDesignV4,
   PEONY_PRESET,
+  POPPING_SHOWER_PRESET,
 } from "../../data";
 import { SingleLoopCheckController } from "../../modes/check";
 import {
@@ -111,5 +112,17 @@ describe("CompiledBurstPreviewRenderer", () => {
     expect(trajectory).toHaveLength(48);
     expect(trajectory.some((point) => point.lightMultiplier === 0)).toBe(true);
     expect(trajectory.some((point) => point.lightMultiplier > 0)).toBe(true);
+  });
+
+  it("shows a bounded point expansion for compiled micro-bursts", () => {
+    const model = buildCompiledBurstPreviewModel(POPPING_SHOWER_PRESET);
+    expect(
+      model.sampledStars.some((star) =>
+        star.trajectory.some((point) => point.secondaryScale > 0),
+      ),
+    ).toBe(true);
+    expect(renderCompiledBurstPreview(model, true, 0)).toContain(
+      'attributeName="r"',
+    );
   });
 });

@@ -485,6 +485,8 @@ export class IntegratedCraftEditor {
       this.#starBehaviorPreviewPlaying =
         this.#starBehaviorPreviewRenderer?.isRunning ?? false;
       this.#updateStarBehaviorPreviewControl();
+    } else if (action === "duplicate-selected-star") {
+      this.#duplicateSelectedStar();
     } else if (action === "select-pattern-template" && layerId) {
       const requestedTemplate = button.dataset.template as PatternTemplate;
       const template = PATTERN_TEMPLATES.includes(requestedTemplate)
@@ -623,7 +625,7 @@ export class IntegratedCraftEditor {
       this.#changeManualPlacementSetting(input.name, input.value);
       this.#render();
     } else if (input.name) {
-      this.#changeSelectedLayer(input.name, input.value);
+      this.#changeSelectedLayer(input.name, input.value, input.dataset.stage);
     }
   };
 
@@ -1409,9 +1411,13 @@ export class IntegratedCraftEditor {
     this.#selectedPointIndex = undefined;
   }
 
-  #changeSelectedLayer(name: string, value: string): void {
+  #changeSelectedLayer(name: string, value: string, stageValue?: string): void {
     const layerId = this.#snapshot?.selection.layerId;
     if (!layerId) return;
+    if (name.startsWith("star-effect-")) {
+      this.#changeSelectedStarEffect(layerId, name, value, stageValue);
+      return;
+    }
     this.#updateIntentLayer(layerId, "配置属性を変更", (layer) => {
       if (name === "layer-name") layer.name = value;
       else if (name === "layer-star") layer.defaultStarId = value;
@@ -1468,6 +1474,159 @@ export class IntegratedCraftEditor {
         } else if (name === "pattern-rotation") {
           layer.pattern.rotationDegrees = Number(value);
         }
+      }
+    });
+  }
+
+  #duplicateSelectedStar(): void {
+    const layerId = this.#snapshot?.selection.layerId;
+    const intent = this.#snapshot?.intentDraft;
+    const layer = intent?.layers.find((candidate) => candidate.id === layerId);
+    const sourceId = layer?.defaultStarId;
+    if (!layerId || !sourceId || !intent?.starDefinitions[sourceId]) return;
+    const id = `${sourceId}-copy-${Object.keys(intent.starDefinitions).length}`;
+    this.#controller.document.updateIntent("仮想星を作品内へ複製", (draft) => {
+      const targetLayer = draft.layers.find(
+        (candidate) => candidate.id === layerId,
+      );
+      const source = draft.starDefinitions[sourceId];
+      if (!targetLayer || !source) return;
+      draft.starDefinitions[id] = {
+        ...structuredClone(source),
+        displayName: `${source.displayName} 複製`,
+        id,
+      };
+      targetLayer.defaultStarId = id;
+    });
+    this.#showEditorMessage("status", "仮想星を作品内へ複製しました");
+  }
+
+  #changeSelectedStarEffect(
+    layerId: string,
+    name: string,
+    value: string,
+    stageValue?: string,
+  ): void {
+    this.#controller.document.updateIntent("仮想星の効果を変更", (draft) => {
+      const layer = draft.layers.find((candidate) => candidate.id === layerId);
+      const star = layer
+        ? draft.starDefinitions[layer.defaultStarId]
+        : undefined;
+      if (!star) return;
+      if (name === "star-effect-name") {
+        star.displayName = value;
+        return;
+      }
+      if (name === "star-effect-stage-color" && stageValue !== undefined) {
+        const stage = star.colorStages[Number(stageValue)];
+        const color = Number.parseInt(value.replace("#", ""), 16);
+        if (stage && Number.isFinite(color)) {
+          stage.color = color;
+          stage.trailColor = color;
+        }
+        return;
+      }
+      const profile = (star.effectProfile ??= {});
+      if (
+        name === "star-effect-color-mode" ||
+        name === "star-effect-color-playback" ||
+        name === "star-effect-color-repeat"
+      ) {
+        const color = (profile.color ??= {
+          mode: "smooth",
+          playback: "once",
+          repeatCount: 1,
+        });
+        if (name === "star-effect-color-mode") {
+          color.mode = value === "step" ? "step" : "smooth";
+        } else if (name === "star-effect-color-playback") {
+          color.playback =
+            value === "loop" || value === "pingPong" ? value : "once";
+        } else {
+          color.repeatCount = Number(value);
+        }
+      } else if (
+        name === "star-effect-light-mode" ||
+        name === "star-effect-light-frequency" ||
+        name === "star-effect-light-duty" ||
+        name === "star-effect-terminal-mode"
+      ) {
+        const light = (profile.light ??= {
+          dutyCycle: 0.5,
+          edgeSoftness: 0.06,
+          frequencyHz: 6,
+          mode: "continuous",
+        });
+        if (name === "star-effect-light-mode") {
+          light.mode = value === "strobe" ? "strobe" : "continuous";
+        } else if (name === "star-effect-light-frequency") {
+          light.frequencyHz = Number(value) / 10;
+        } else if (name === "star-effect-light-duty") {
+          light.dutyCycle = Number(value) / 100;
+        } else {
+          const mode = value === "kouro" || value === "teka" ? value : "none";
+          light.terminal = {
+            duration: mode === "teka" ? 0.07 : 0.14,
+            mode,
+            sparkleCount: mode === "none" ? 0 : mode === "teka" ? 5 : 3,
+            strength: mode === "teka" ? 2.4 : 1.2,
+          };
+        }
+      } else if (
+        name === "star-effect-motion-mode" ||
+        name === "star-effect-motion-amplitude"
+      ) {
+        const motion = (profile.motion ??= {
+          amplitude: 0.35,
+          frequencyHz: 1,
+          mode: "ballistic",
+        });
+        if (name === "star-effect-motion-mode") {
+          motion.mode = ["fallingLeaf", "wander", "spiral"].includes(value)
+            ? (value as "fallingLeaf" | "wander" | "spiral")
+            : "ballistic";
+        } else {
+          motion.amplitude = Number(value) / 100;
+        }
+      } else if (
+        name === "star-effect-secondary-mode" ||
+        name === "star-effect-secondary-count"
+      ) {
+        const secondary = (profile.secondary ??= {
+          count: 0,
+          mode: "none",
+          speedScale: 1,
+          triggerTime: 0.88,
+        });
+        if (name === "star-effect-secondary-mode") {
+          secondary.mode =
+            value === "spark" || value === "microBurst" ? value : "none";
+        } else {
+          secondary.count = Number(value);
+        }
+      } else if (
+        name === "star-effect-trail-mode" ||
+        name === "star-effect-trail-frequency" ||
+        name === "star-effect-trail-grain"
+      ) {
+        const trail = (profile.trail ??= {
+          dutyCycle: 0.5,
+          frequencyHz: 6,
+          grainSpacing: 2,
+          mode: "continuous",
+        });
+        if (name === "star-effect-trail-mode") {
+          trail.mode =
+            value === "strobe" || value === "granular" ? value : "continuous";
+        } else if (name === "star-effect-trail-frequency") {
+          trail.frequencyHz = Number(value) / 10;
+        } else {
+          trail.grainSpacing = Number(value);
+        }
+      } else if (name === "star-effect-trail-width") {
+        star.trailWidth = Number(value) / 100;
+      } else if (name === "star-effect-smoke") {
+        star.smokeAmount = Number(value) / 100;
       }
     });
   }

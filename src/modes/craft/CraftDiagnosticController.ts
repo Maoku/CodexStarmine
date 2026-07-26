@@ -151,8 +151,22 @@ export function buildEditorDiagnostic(
         if (definition.trailLifetime > 0.14) {
           effectTrailVertexEstimate +=
             effectStarCount *
-            Math.max(Math.round(3 + definition.trailLifetime * 9) - 1, 1) *
-            2;
+            Math.ceil(
+              (Math.max(Math.round(3 + definition.trailLifetime * 9) - 1, 1) *
+                2 *
+                Math.min(
+                  Math.max(Math.round(definition.trailWidth * 1.35), 1),
+                  3,
+                )) /
+                (definition.effectProfile.trail?.mode === "granular"
+                  ? Math.max(
+                      Math.round(
+                        definition.effectProfile.trail.grainSpacing ?? 2,
+                      ),
+                      1,
+                    )
+                  : 1),
+            );
         }
         if (definition.smokeAmount > 0) {
           smokeEmitterEstimate += effectStarCount;
