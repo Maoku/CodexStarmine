@@ -94,9 +94,10 @@ describe("researched real-firework presets", () => {
   });
 
   it("adds a four-step manual-phase stop-motion work in Phase 5", () => {
-    expect(FIREWORK_PRESETS).toHaveLength(22);
-    expect(new Set(FIREWORK_PRESETS.map((preset) => preset.id)).size).toBe(22);
-    expect(FIREWORK_PRESETS.at(-1)).toBe(STOP_MOTION_PRESET);
+    const throughPhase5 = FIREWORK_PRESETS.slice(0, 22);
+    expect(throughPhase5).toHaveLength(22);
+    expect(new Set(throughPhase5.map((preset) => preset.id)).size).toBe(22);
+    expect(throughPhase5.at(-1)).toBe(STOP_MOTION_PRESET);
     const plan = compileFireworkDesign(STOP_MOTION_PRESET, 7_019);
     expect(new Set(plan.stars.map(({ effectPhase }) => effectPhase))).toEqual(
       new Set([0, 0.25, 0.5, 0.75]),
