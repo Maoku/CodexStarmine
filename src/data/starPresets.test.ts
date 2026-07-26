@@ -4,14 +4,23 @@ import { BUILTIN_STAR_PRESETS, snapshotStarLibrary } from "./starPresets";
 
 describe("virtual star presets", () => {
   it("adds five Phase 2 effects without changing the existing prefix", () => {
-    expect(BUILTIN_STAR_PRESETS.slice(-5).map(({ id }) => id)).toEqual([
+    const phase2 = BUILTIN_STAR_PRESETS.filter(({ id }) =>
+      [
+        "star-strobe-white-hard",
+        "star-strobe-pastel",
+        "star-kouro",
+        "star-teka",
+        "star-repeat-change",
+      ].includes(id),
+    );
+    expect(phase2.map(({ id }) => id)).toEqual([
       "star-strobe-white-hard",
       "star-strobe-pastel",
       "star-kouro",
       "star-teka",
       "star-repeat-change",
     ]);
-    expect(BUILTIN_STAR_PRESETS.slice(-5)).toEqual(
+    expect(phase2).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           effectProfile: {
@@ -34,6 +43,25 @@ describe("virtual star presets", () => {
         }),
       ]),
     );
+  });
+
+  it("adds relay and gradient stars for Phase 3 timing layouts", () => {
+    expect(BUILTIN_STAR_PRESETS.slice(-2)).toMatchObject([
+      {
+        effectProfile: {
+          color: { playback: "loop" },
+          light: { mode: "strobe" },
+        },
+        id: "star-relay-light",
+      },
+      {
+        effectProfile: {
+          color: { mode: "smooth", playback: "loop" },
+          light: { mode: "continuous" },
+        },
+        id: "star-gradient-fade",
+      },
+    ]);
   });
 
   it("returns independent effect profiles from the library snapshot", () => {

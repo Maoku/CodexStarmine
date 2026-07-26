@@ -48,6 +48,21 @@ const ENGLISH: Record<string, string> = {
   "左の一覧からレイヤーを選んでください。":
     "Select a layer from the list on the left.",
   既定の仮想星: "Default virtual star",
+  発光タイミング: "Light timing",
+  光る順番: "Light order",
+  同時: "Simultaneous",
+  配置順: "Placement order",
+  横方向: "Horizontal",
+  縦方向: "Vertical",
+  中心から外: "Center outward",
+  ランダム: "Random",
+  グループ: "Group",
+  向き: "Direction",
+  順方向: "Forward",
+  逆方向: "Reverse",
+  広がり: "Spread",
+  周回数: "Cycles",
+  選択点の光る位置: "Selected point timing",
   既定配置: "Preset layout",
   外周: "Outer ring",
   芯: "Core",
@@ -372,6 +387,8 @@ const BUILTIN_STAR_NAMES: Readonly<Record<string, [string, string]>> = {
   "star-kouro": ["銀光露星", "Silver afterglow star"],
   "star-teka": ["白銀輝星", "Silver terminal-flash star"],
   "star-repeat-change": ["紅青反復変化星", "Red-blue repeating star"],
+  "star-relay-light": ["時差リレー星", "Relay light star"],
+  "star-gradient-fade": ["流光グラデーション星", "Flowing gradient star"],
 };
 
 export function translateText(value: string): string {

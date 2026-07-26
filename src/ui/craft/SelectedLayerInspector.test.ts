@@ -25,6 +25,10 @@ describe("SelectedLayerInspector", () => {
     expect(markup.indexOf('name="layer-name"')).toBeLessThan(headerEnd);
     expect(markup).toContain('maxlength="24"');
     expect(markup).toContain('name="preset-kind"');
+    expect(markup).toContain('name="effect-mapping"');
+    expect(markup).toContain('name="effect-direction"');
+    expect(markup).toContain('name="effect-spread"');
+    expect(markup).toContain('name="effect-cycles"');
   });
 
   it("renders pattern and manual settings without losing their restrictions", () => {
@@ -60,15 +64,33 @@ describe("SelectedLayerInspector", () => {
       ignitionOffset: 0,
       locked: false,
       name: "手動",
-      points: [],
+      effectTiming: {
+        cycles: 1,
+        direction: "forward",
+        mapping: "manual",
+        offset: 0,
+        spread: 1,
+      },
+      points: [
+        {
+          effectPhase: 0.42,
+          id: "point-1",
+          position: { x: 1, y: 0, z: 0 },
+          section: { plane: "xy", ratio: 0.5 },
+          starId: "star-solid-red",
+        },
+      ],
       radialSpeedScale: 1,
       visible: true,
     };
     const manualMarkup = renderSelectedLayerInspector(
       designWith(manual),
       manual,
+      0,
     );
     expect(manualMarkup).toContain("1点ずつ編集できます");
+    expect(manualMarkup).toContain('name="point-effect-phase"');
+    expect(manualMarkup).toContain('value="42"');
   });
 
   it("disables the title and fields when no editable layer is available", () => {

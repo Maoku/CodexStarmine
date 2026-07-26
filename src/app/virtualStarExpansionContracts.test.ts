@@ -51,7 +51,7 @@ describe("virtual star expansion Phase 0 contracts", () => {
     expect(BUILTIN_STAR_PRESETS.slice(0, 8).map(({ id }) => id)).toEqual(
       VIRTUAL_STAR_EXPANSION_EXISTING_STAR_IDS,
     );
-    expect(FIREWORK_PRESETS.map(({ id }) => id)).toEqual(
+    expect(FIREWORK_PRESETS.slice(0, 14).map(({ id }) => id)).toEqual(
       VIRTUAL_STAR_EXPANSION_EXISTING_PRESET_IDS,
     );
   });
@@ -78,7 +78,7 @@ describe("virtual star expansion Phase 0 contracts", () => {
   });
 
   it("pins compact compile fingerprints for v2, v3, and v4 fixtures", () => {
-    const signatures = FIREWORK_PRESETS.map((design) => {
+    const signatures = FIREWORK_PRESETS.slice(0, 14).map((design) => {
       const v3 = migrateV2ToV3(design);
       const v4 = migrateV3ToV4(v3);
       return {

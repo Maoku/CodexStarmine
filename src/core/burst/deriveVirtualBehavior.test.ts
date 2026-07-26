@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { CHRYSANTHEMUM_PRESET } from "../../data";
-import { deriveVirtualBehavior } from "./deriveVirtualBehavior";
+import {
+  deriveEffectPhase,
+  deriveVirtualBehavior,
+} from "./deriveVirtualBehavior";
 
 function input() {
   const layer = CHRYSANTHEMUM_PRESET.layers[0];
@@ -65,5 +68,69 @@ describe("deriveVirtualBehavior", () => {
     expect(() =>
       deriveVirtualBehavior({ ...input(), derivationVersion: 99 }),
     ).toThrow("Unsupported derivation version");
+  });
+});
+
+describe("deriveEffectPhase", () => {
+  const timing = (
+    mapping:
+      | "index"
+      | "longitude"
+      | "latitude"
+      | "radius"
+      | "random"
+      | "group"
+      | "manual",
+    direction: "forward" | "reverse" = "forward",
+  ) => ({
+    cycles: 1,
+    direction,
+    mapping,
+    offset: 0,
+    spread: 1,
+  });
+  const phase = (
+    mapping: Parameters<typeof timing>[0],
+    overrides: Partial<Parameters<typeof deriveEffectPhase>[0]> = {},
+  ) =>
+    deriveEffectPhase({
+      assemblySeed: 37,
+      layerID: "layer-phase",
+      placementCount: 5,
+      placementIndex: 2,
+      position: { x: 1, y: 0, z: 0 },
+      timing: timing(mapping),
+      ...overrides,
+    });
+
+  it("maps index, longitude, latitude, radius, group, and manual inputs", () => {
+    expect(phase("index")).toBe(0.5);
+    expect(phase("longitude", { position: { x: 0, y: 0, z: 1 } })).toBe(0.25);
+    expect(phase("latitude", { position: { x: 0, y: 1, z: 0 } })).toBe(0);
+    expect(
+      phase("radius", {
+        position: { x: 0.5, y: 0, z: 0 },
+        radiusMaximum: 0.8,
+        radiusMinimum: 0.2,
+      }),
+    ).toBeCloseTo(0.5);
+    expect(phase("group", { groupCount: 4, groupIndex: 1 })).toBeCloseTo(1 / 3);
+    expect(phase("manual", { manualPhase: 0.73 })).toBe(0.73);
+    expect(phase("manual")).toBe(0.5);
+  });
+
+  it("keeps random mapping stable and applies reverse direction", () => {
+    expect(phase("random")).toBe(phase("random"));
+    expect(phase("random", { placementIndex: 3 })).not.toBe(phase("random"));
+    expect(
+      deriveEffectPhase({
+        assemblySeed: 37,
+        layerID: "layer-phase",
+        placementCount: 5,
+        placementIndex: 1,
+        position: { x: 1, y: 0, z: 0 },
+        timing: timing("index", "reverse"),
+      }),
+    ).toBe(0.75);
   });
 });

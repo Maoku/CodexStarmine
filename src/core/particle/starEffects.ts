@@ -83,12 +83,12 @@ function colorPlaybackAge(
   normalizedAge: number,
   profile?: VirtualStarEffectProfile,
 ): number {
-  const age = clamp(normalizedAge, 0, 1);
   const playback = profile?.color?.playback ?? "once";
   const repeatCount = clamp(Math.round(profile?.color?.repeatCount ?? 1), 1, 8);
-  if (playback === "once") return age;
+  if (playback === "once") return clamp(normalizedAge, 0, 1);
+  const age = Math.max(normalizedAge, 0);
   if (playback === "loop") {
-    return age >= 1 ? 1 : fract(age * repeatCount);
+    return fract(age * repeatCount);
   }
   const progress = age * repeatCount;
   const whole = Math.floor(progress);
@@ -322,9 +322,14 @@ export function evaluateVirtualStarAppearance(
 ): EvaluatedVirtualStarAppearance {
   const lifetime = Math.max(input.lifetimeSeconds, 0.0001);
   const normalizedAge = clamp(input.ageSeconds / lifetime, 0, 1);
+  const playback = input.effectProfile?.color?.playback ?? "once";
+  const colorAge =
+    playback === "once"
+      ? normalizedAge
+      : normalizedAge + (input.effectPhase ?? 0);
   const color = evaluateColorStages(
     input.colorStages,
-    normalizedAge,
+    colorAge,
     input.effectProfile,
   );
   const effectSeed = input.effectSeed ?? 0;

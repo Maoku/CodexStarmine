@@ -7,8 +7,12 @@ import {
   FIREWORK_PRESETS,
   HANARAI_PRESET,
   HIYUSEI_PRESET,
+  ILLUMINATION_PRESET,
   KALEIDOSCOPE_PRESET,
   KOWARI_PRESET,
+  KOURO_CHANGE_CHRYSANTHEMUM_PRESET,
+  LIGHT_RIPPLE_PRESET,
+  ROTATING_LIGHT_RING_PRESET,
   SATURN_PRESET,
   WILLOW_PRESET,
 } from "./presets";
@@ -24,17 +28,48 @@ const RESEARCHED_PRESETS = [
   KOWARI_PRESET,
 ];
 
+const PHASE_3_PRESETS = [
+  ILLUMINATION_PRESET,
+  ROTATING_LIGHT_RING_PRESET,
+  LIGHT_RIPPLE_PRESET,
+  KOURO_CHANGE_CHRYSANTHEMUM_PRESET,
+];
+
 describe("researched real-firework presets", () => {
   it("adds eight uniquely identified designs to the six original samples", () => {
-    expect(FIREWORK_PRESETS).toHaveLength(14);
-    expect(new Set(FIREWORK_PRESETS.map((preset) => preset.id)).size).toBe(14);
-    expect(new Set(FIREWORK_PRESETS.map((preset) => preset.pattern)).size).toBe(
-      14,
-    );
-    expect(FIREWORK_PRESETS.slice(-8)).toEqual(RESEARCHED_PRESETS);
+    const existing = FIREWORK_PRESETS.slice(0, 14);
+    expect(existing).toHaveLength(14);
+    expect(new Set(existing.map((preset) => preset.id)).size).toBe(14);
+    expect(new Set(existing.map((preset) => preset.pattern)).size).toBe(14);
+    expect(existing.slice(-8)).toEqual(RESEARCHED_PRESETS);
     RESEARCHED_PRESETS.forEach((preset) => {
       expect(preset.id).toMatch(/^preset-/);
       expect(preset.description.length).toBeGreaterThan(20);
+    });
+  });
+
+  it("adds four Phase 3 works with stable spatial phase mappings", () => {
+    expect(FIREWORK_PRESETS).toHaveLength(18);
+    expect(new Set(FIREWORK_PRESETS.map((preset) => preset.id)).size).toBe(18);
+    expect(FIREWORK_PRESETS.slice(-4)).toEqual(PHASE_3_PRESETS);
+    expect(outerLayer(ILLUMINATION_PRESET).effectTiming?.mapping).toBe(
+      "random",
+    );
+    expect(outerLayer(ROTATING_LIGHT_RING_PRESET).effectTiming?.mapping).toBe(
+      "longitude",
+    );
+    expect(outerLayer(LIGHT_RIPPLE_PRESET).effectTiming?.mapping).toBe(
+      "radius",
+    );
+    PHASE_3_PRESETS.forEach((preset) => {
+      const first = compileFireworkDesign(preset, 7_019);
+      const second = compileFireworkDesign(preset, 7_019);
+      expect(second.stars.map(({ effectPhase }) => effectPhase)).toEqual(
+        first.stars.map(({ effectPhase }) => effectPhase),
+      );
+      expect(
+        first.stars.some(({ effectPhase }) => effectPhase !== undefined),
+      ).toBe(true);
     });
   });
 
@@ -101,4 +136,14 @@ describe("researched real-firework presets", () => {
 
 function outerDefinition(preset: (typeof RESEARCHED_PRESETS)[number]) {
   return preset.starDefinitions[`${preset.id}-outer-star`];
+}
+
+function outerLayer(preset: (typeof PHASE_3_PRESETS)[number]) {
+  const layer = preset.layers.find(
+    (candidate) => candidate.kind === "spherical",
+  );
+  if (!layer || layer.kind !== "spherical") {
+    throw new Error("expected spherical layer");
+  }
+  return layer;
 }

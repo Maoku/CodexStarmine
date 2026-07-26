@@ -55,6 +55,28 @@ describe("virtual star effect evaluation", () => {
     expect(evaluateColorStages(STAGES, 0.75, pingPong).color).toBe(0x00ff00);
   });
 
+  it("offsets looping color playback by the authored effect phase", () => {
+    const profile: VirtualStarEffectProfile = {
+      color: { mode: "step", playback: "loop", repeatCount: 1 },
+    };
+    const first = evaluateVirtualStarAppearance({
+      ageSeconds: 0.1,
+      colorStages: STAGES,
+      effectPhase: 0,
+      effectProfile: profile,
+      lifetimeSeconds: 2,
+    });
+    const shifted = evaluateVirtualStarAppearance({
+      ageSeconds: 0.1,
+      colorStages: STAGES,
+      effectPhase: 0.55,
+      effectProfile: profile,
+      lifetimeSeconds: 2,
+    });
+    expect(first.color).toBe(0xff0000);
+    expect(shifted.color).toBe(0x00ff00);
+  });
+
   it("evaluates strobe frequency, duty cycle, and phase from absolute time", () => {
     const profile: VirtualStarEffectProfile = {
       light: {

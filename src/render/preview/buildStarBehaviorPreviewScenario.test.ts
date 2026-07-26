@@ -60,6 +60,21 @@ describe("buildStarBehaviorPreviewScenario", () => {
     );
   });
 
+  it("uses a phased ring for relay and gradient stars", () => {
+    for (const id of ["star-relay-light", "star-gradient-fade"]) {
+      const star = BUILTIN_STAR_PRESETS.find(
+        (candidate) => candidate.id === id,
+      );
+      if (!star) throw new Error(`missing ${id}`);
+      const scenario = buildStarBehaviorPreviewScenario(star);
+      expect(scenario.layout).toBe("ring");
+      expect(scenario.particles).toHaveLength(32);
+      expect(scenario.particles.map(({ effectPhase }) => effectPhase)).toEqual(
+        Array.from({ length: 32 }, (_, index) => index / 32),
+      );
+    }
+  });
+
   it("evaluates preview ballistics and motion from absolute age", () => {
     const star = structuredClone(BUILTIN_STAR_PRESETS[0]);
     const scenario = buildStarBehaviorPreviewScenario(star, 42);

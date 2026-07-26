@@ -12,7 +12,10 @@ import type {
   VirtualStarPreset,
 } from "../../data/firework";
 import { resolveCurrentIntent } from "../../data/migrations/v3ToV4";
-import { deriveVirtualBehavior } from "./deriveVirtualBehavior";
+import {
+  deriveEffectPhase,
+  deriveVirtualBehavior,
+} from "./deriveVirtualBehavior";
 
 export interface CompiledStar {
   definition: VirtualStarPreset;
@@ -129,7 +132,15 @@ function compileLayerStar(
   index: number,
   random: ReturnType<typeof createSeededRandom>,
   preserveMagnitude = false,
-  manualEffectPhase?: number,
+  phaseContext: {
+    groupCount?: number;
+    groupIndex?: number;
+    manualPhase?: number;
+    placementCount?: number;
+    position?: Vector3Value;
+    radiusMaximum?: number;
+    radiusMinimum?: number;
+  } = {},
 ): CompiledStar {
   const sourceDefinition = resolveDefinition(design, definitionId);
   const behavior =
@@ -179,7 +190,19 @@ function compileLayerStar(
     definition,
     ...(hasEffect
       ? {
-          effectPhase: manualEffectPhase ?? 0,
+          effectPhase: deriveEffectPhase({
+            assemblySeed: design.assemblySeed,
+            groupCount: phaseContext.groupCount,
+            groupIndex: phaseContext.groupIndex,
+            layerID: layer.id,
+            manualPhase: phaseContext.manualPhase,
+            placementCount: phaseContext.placementCount ?? 1,
+            placementIndex: index,
+            position: phaseContext.position ?? direction,
+            radiusMaximum: phaseContext.radiusMaximum,
+            radiusMinimum: phaseContext.radiusMinimum,
+            timing: layer.effectTiming,
+          }),
           effectSeed: stableSeed(
             [design.assemblySeed, layer.id, sourceDefinition.id, index].join(
               ":",
@@ -231,6 +254,22 @@ export function compileAuthoredPoints(
   layer: SphericalStarLayer,
   launchRandom: ReturnType<typeof createSeededRandom>,
 ): CompiledStar[] {
+  const radii = layer.overrides
+    .filter(
+      (override) =>
+        !override.removed &&
+        override.position &&
+        isValidAuthoredPoint(override.position),
+    )
+    .map((override) =>
+      Math.hypot(
+        override.position!.x,
+        override.position!.y,
+        override.position!.z,
+      ),
+    );
+  const radiusMinimum = radii.length > 0 ? Math.min(...radii) : 0;
+  const radiusMaximum = radii.length > 0 ? Math.max(...radii) : 1;
   return layer.overrides.flatMap((override, index) => {
     if (override.removed || !override.position) return [];
     if (!isValidAuthoredPoint(override.position)) return [];
@@ -243,7 +282,13 @@ export function compileAuthoredPoints(
         override.index ?? index,
         launchRandom,
         true,
-        override.effectPhase,
+        {
+          manualPhase: override.effectPhase,
+          placementCount: layer.overrides.length,
+          position: override.position,
+          radiusMaximum,
+          radiusMinimum,
+        },
       ),
     ];
   });
@@ -259,6 +304,14 @@ function compileSpherical(
   if (authored) return compileAuthoredPoints(design, layer, launchRandom);
   const overrides = new Map(layer.overrides.map((item) => [item.index, item]));
   const points = fibonacciSphere(layer.count);
+  const radii = points.flatMap((point, index) => {
+    const override = overrides.get(index);
+    if (override?.removed) return [];
+    const source = override?.position ?? point;
+    return [Math.hypot(source.x, source.y, source.z)];
+  });
+  const radiusMinimum = radii.length > 0 ? Math.min(...radii) : 0;
+  const radiusMaximum = radii.length > 0 ? Math.max(...radii) : 1;
   const stars: CompiledStar[] = [];
   points.forEach((point, index) => {
     const override = overrides.get(index);
@@ -318,6 +371,14 @@ function compileSpherical(
             : layer.defaultStarId),
         index,
         launchRandom,
+        false,
+        {
+          manualPhase: override?.effectPhase,
+          placementCount: points.length,
+          position: source,
+          radiusMaximum,
+          radiusMinimum,
+        },
       ),
     );
   });
@@ -361,6 +422,14 @@ function compilePattern(
       index,
       launchRandom,
       true,
+      {
+        groupCount: layer.groups.length,
+        groupIndex: Math.max(
+          layer.groups.findIndex((candidate) => candidate.id === point.groupId),
+          0,
+        ),
+        placementCount: layer.points.length,
+      },
     );
   });
 }
@@ -396,6 +465,12 @@ function compileBranch(
           layer.defaultStarId,
           branch * layer.starsPerBranch + index,
           launchRandom,
+          false,
+          {
+            groupCount: layer.branchCount,
+            groupIndex: branch,
+            placementCount: layer.branchCount * layer.starsPerBranch,
+          },
         ),
       );
     }
@@ -428,6 +503,9 @@ function compileChildren(
       coloring: { mode: "layer" },
       count: 24,
       defaultStarId: layer.defaultStarId,
+      ...(layer.effectTiming
+        ? { effectTiming: structuredClone(layer.effectTiming) }
+        : undefined),
       id: `${layer.id}-burst-${index}`,
       ignitionOffset: 0,
       jitter: 0.04,

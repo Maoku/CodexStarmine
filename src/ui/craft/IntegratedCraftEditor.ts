@@ -261,7 +261,11 @@ export class IntegratedCraftEditor {
 
       <aside class="craft-rail craft-rail--right" aria-label="作品と配置の設定">
         <button class="drawer-close" type="button" data-action="close-drawer">閉じる</button>
-        ${renderSelectedLayerInspector(intentDesign, selectedIntent)}
+        ${renderSelectedLayerInspector(
+          intentDesign,
+          selectedIntent,
+          this.#selectedPointIndex,
+        )}
         ${renderInlineDiagnosticPreview(
           preview,
           this.#previewRunning,
@@ -1411,7 +1415,36 @@ export class IntegratedCraftEditor {
     this.#updateIntentLayer(layerId, "配置属性を変更", (layer) => {
       if (name === "layer-name") layer.name = value;
       else if (name === "layer-star") layer.defaultStarId = value;
-      else if (layer.authoringMode === "preset") {
+      else if (
+        name === "effect-mapping" ||
+        name === "effect-direction" ||
+        name === "effect-spread" ||
+        name === "effect-cycles"
+      ) {
+        const timing = (layer.effectTiming ??= {
+          cycles: 1,
+          direction: "forward",
+          mapping: "none",
+          offset: 0,
+          spread: 1,
+        });
+        if (name === "effect-mapping") {
+          timing.mapping = value as typeof timing.mapping;
+        } else if (name === "effect-direction") {
+          timing.direction = value === "reverse" ? "reverse" : "forward";
+        } else if (name === "effect-spread") {
+          timing.spread = Number(value) / 100;
+        } else {
+          timing.cycles = Number(value);
+        }
+      } else if (
+        name === "point-effect-phase" &&
+        layer.authoringMode === "manual" &&
+        this.#selectedPointIndex !== undefined
+      ) {
+        const point = layer.points[this.#selectedPointIndex];
+        if (point) point.effectPhase = Number(value) / 100;
+      } else if (layer.authoringMode === "preset") {
         if (name === "layer-count") {
           layer.parameters.count = Number(value);
         } else if (name === "layer-radius") {

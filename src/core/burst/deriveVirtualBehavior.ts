@@ -1,6 +1,7 @@
 import {
   CURRENT_DERIVATION_VERSION,
   type FireworkLayer,
+  type LayerEffectTiming,
   type SizeClass,
   type VirtualStarPreset,
 } from "../../data/firework";
@@ -41,6 +42,20 @@ export interface DerivedVirtualBehavior {
   velocityJitter: number;
 }
 
+export interface DeriveEffectPhaseInput {
+  assemblySeed: number;
+  groupCount?: number;
+  groupIndex?: number;
+  layerID: string;
+  manualPhase?: number;
+  placementCount: number;
+  placementIndex: number;
+  position: Vector3Value;
+  radiusMaximum?: number;
+  radiusMinimum?: number;
+  timing?: LayerEffectTiming;
+}
+
 const SIZE_SPEED: Record<SizeClass, number> = {
   large: 1.08,
   medium: 1,
@@ -70,6 +85,59 @@ function hashUnit(text: string): number {
     hash = Math.imul(hash, 16_777_619);
   }
   return (hash >>> 0) / 4_294_967_295;
+}
+
+function fract(value: number): number {
+  return ((value % 1) + 1) % 1;
+}
+
+/**
+ * Resolves authored layer timing without consuming a launch PRNG. The same
+ * saved position, group, and index therefore keep the same phase in preview
+ * and production compilation.
+ */
+export function deriveEffectPhase(input: DeriveEffectPhaseInput): number {
+  const timing = input.timing;
+  if (!timing || timing.mapping === "none") return 0;
+  const count = Math.max(Math.round(input.placementCount), 1);
+  const indexPhase = input.placementIndex / Math.max(count - 1, 1);
+  const radius = Math.hypot(
+    input.position.x,
+    input.position.y,
+    input.position.z,
+  );
+  let mapped = 0;
+  if (timing.mapping === "random") {
+    mapped = hashUnit(
+      `${input.assemblySeed}:${input.layerID}:${input.placementIndex}:phase`,
+    );
+  } else if (timing.mapping === "index") {
+    mapped = indexPhase;
+  } else if (timing.mapping === "longitude") {
+    mapped = fract(
+      Math.atan2(input.position.z, input.position.x) / (Math.PI * 2),
+    );
+  } else if (timing.mapping === "latitude") {
+    mapped = radius > 0 ? input.position.y / radius / 2 + 0.5 : 0.5;
+  } else if (timing.mapping === "radius") {
+    const minimum = input.radiusMinimum ?? 0;
+    const maximum = input.radiusMaximum ?? 1;
+    mapped =
+      maximum - minimum > 0.000_001
+        ? (radius - minimum) / (maximum - minimum)
+        : 0;
+  } else if (timing.mapping === "group") {
+    mapped =
+      (input.groupIndex ?? input.placementIndex) /
+      Math.max((input.groupCount ?? count) - 1, 1);
+  } else {
+    mapped = input.manualPhase ?? indexPhase;
+  }
+  const directed = timing.direction === "reverse" ? 1 - mapped : mapped;
+  return fract(
+    timing.offset +
+      directed * clamp(timing.spread, 0, 1) * clamp(timing.cycles, 1, 4),
+  );
 }
 
 function layerRadius(layer: FireworkLayer, positionRadius: number): number {

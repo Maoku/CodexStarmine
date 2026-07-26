@@ -1,4 +1,8 @@
-import type { FireworkDesignV4, LayerIntentV4 } from "../../data";
+import type {
+  EffectPhaseMapping,
+  FireworkDesignV4,
+  LayerIntentV4,
+} from "../../data";
 import { effectivePatternScale, patternScaleLimit } from "./PatternRecipe";
 import { escapeHTML, layerAuthoringLabel } from "./viewUtils";
 
@@ -9,6 +13,7 @@ function selectedAttribute(selected: boolean): string {
 export function renderSelectedLayerInspector(
   design: FireworkDesignV4,
   selectedLayer: LayerIntentV4 | undefined,
+  selectedPointIndex?: number,
 ): string {
   const locked = selectedLayer?.locked ?? true;
   const disabled = locked ? "disabled" : "";
@@ -19,6 +24,35 @@ export function renderSelectedLayerInspector(
     : "未選択";
   let fields = `<p class="inspector-empty">左の一覧からレイヤーを選んでください。</p>`;
   if (selectedLayer) {
+    const timing = selectedLayer.effectTiming ?? {
+      cycles: 1,
+      direction: "forward",
+      mapping: "none",
+      offset: 0,
+      spread: 1,
+    };
+    const mappingOptions: [EffectPhaseMapping, string][] = [
+      ["none", "同時"],
+      ["index", "配置順"],
+      ["longitude", "横方向"],
+      ["latitude", "縦方向"],
+      ["radius", "中心から外"],
+      ["random", "ランダム"],
+      ["group", "グループ"],
+      ["manual", "手動"],
+    ];
+    const phaseControls = `<fieldset class="inspector-effect-timing">
+      <legend>発光タイミング</legend>
+      <label><span>光る順番</span><select name="effect-mapping" ${disabled}>${mappingOptions
+        .map(
+          ([value, label]) =>
+            `<option value="${value}" ${selectedAttribute(timing.mapping === value)}>${label}</option>`,
+        )
+        .join("")}</select></label>
+      <label><span>向き</span><select name="effect-direction" ${disabled}><option value="forward" ${selectedAttribute(timing.direction === "forward")}>順方向</option><option value="reverse" ${selectedAttribute(timing.direction === "reverse")}>逆方向</option></select></label>
+      <label><span>広がり <output>${Math.round(timing.spread * 100)}%</output></span><input name="effect-spread" type="range" min="0" max="100" value="${Math.round(timing.spread * 100)}" aria-label="広がり" ${disabled} /></label>
+      <label><span>周回数 <output>${timing.cycles}</output></span><input name="effect-cycles" type="range" min="1" max="4" step="1" value="${timing.cycles}" aria-label="周回数" ${disabled} /></label>
+    </fieldset>`;
     const starOptions = Object.values(design.starDefinitions)
       .map(
         (star) =>
@@ -48,11 +82,31 @@ export function renderSelectedLayerInspector(
         <label><span>回転 <output>${selectedLayer.pattern.rotationDegrees}°</output></span><input name="pattern-rotation" type="range" min="0" max="345" step="15" value="${selectedLayer.pattern.rotationDegrees}" aria-label="型物の回転" aria-valuetext="${selectedLayer.pattern.rotationDegrees}度" ${disabled} /></label>
         <p class="inspector-note">型物の生成点は個別編集できません。断面は中央のワークベンチで選びます。</p>`;
     } else {
-      specific = `<p class="inspector-note">手動レイヤーでは、表示中の断面上にある仮想星を1点ずつ編集できます。</p>`;
+      const selectedPoint =
+        selectedPointIndex === undefined
+          ? undefined
+          : selectedLayer.points[selectedPointIndex];
+      const pointPhase =
+        selectedPoint?.effectPhase ??
+        (selectedPointIndex ?? 0) /
+          Math.max(selectedLayer.points.length - 1, 1);
+      specific = `<p class="inspector-note">手動レイヤーでは、表示中の断面上にある仮想星を1点ずつ編集できます。</p>
+        ${
+          timing.mapping === "manual" && selectedPoint
+            ? `<label><span>選択点の光る位置 <output>${Math.round(pointPhase * 100)}%</output></span><input name="point-effect-phase" type="range" min="0" max="100" value="${Math.round(pointPhase * 100)}" aria-label="選択点の光る位置" ${disabled} /></label>`
+            : ""
+        }`;
     }
+    const recommendation =
+      selectedLayer.defaultStarId === "star-relay-light" ||
+      selectedLayer.defaultStarId === "star-gradient-fade"
+        ? `<p class="inspector-note">この仮想星は光る順番をずらすと、リレーやグラデーションの流れが明瞭になります。</p>`
+        : "";
     fields = `<div class="inspector-fields">
       <label><span>既定の仮想星</span><select name="layer-star" ${disabled}>${starOptions}</select></label>
+      ${phaseControls}
       ${specific}
+      ${recommendation}
     </div>`;
   }
   return `<section class="craft-card inspector-card" data-selected-layer-inspector>

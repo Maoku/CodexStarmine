@@ -43,6 +43,9 @@ function scenarioLayout(star: VirtualStarPreset): {
   count: number;
   layout: StarBehaviorPreviewLayout;
 } {
+  if (star.id === "star-relay-light" || star.id === "star-gradient-fade") {
+    return { count: 32, layout: "ring" };
+  }
   const motion = star.effectProfile?.motion?.mode;
   const secondary = star.effectProfile?.secondary?.mode;
   if (secondary && secondary !== "none") {
@@ -136,7 +139,11 @@ export function buildStarBehaviorPreviewScenario(
     layout,
     particles: points.map((direction, index) => ({
       effectPhase:
-        layout === "fan" ? (index / Math.max(count - 1, 1)) * 0.12 : 0,
+        layout === "fan"
+          ? (index / Math.max(count - 1, 1)) * 0.12
+          : layout === "ring"
+            ? index / count
+            : 0,
       effectSeed: stableSeed(`${seed}:${star.id}:${index}`),
       initialPosition: { x: 0, y: 0, z: 0 },
       initialVelocity: {

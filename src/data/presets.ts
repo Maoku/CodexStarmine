@@ -1,4 +1,9 @@
-import type { FireworkDesignV1, FireworkDesignV2 } from "./firework";
+import type {
+  FireworkDesignV1,
+  FireworkDesignV2,
+  SphericalStarLayer,
+  StarPointOverride,
+} from "./firework";
 import { migrateV1ToV2 } from "./migrations/v1ToV2";
 import {
   BEE_PRESET,
@@ -301,6 +306,138 @@ export const HEART_PRESET: FireworkDesignV2 = migrateV1ToV2({
   smokeProfile: { amount: 0.46, lifetime: 7 },
 } satisfies FireworkDesignV1);
 
+function ringOverrides(count: number): StarPointOverride[] {
+  return Array.from({ length: count }, (_, index) => {
+    const angle = (index / count) * Math.PI * 2;
+    return {
+      index,
+      position: {
+        x: Math.cos(angle),
+        y: 0,
+        z: Math.sin(angle),
+      },
+    };
+  });
+}
+
+function rippleOverrides(
+  rings: number,
+  pointsPerRing: number,
+): StarPointOverride[] {
+  const count = rings * pointsPerRing;
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  return Array.from({ length: count }, (_, index) => {
+    const shell = Math.floor(index / pointsPerRing);
+    const localIndex = index % pointsPerRing;
+    const radius = 0.24 + (shell / Math.max(rings - 1, 1)) * 0.76;
+    const y = 1 - ((localIndex + 0.5) / pointsPerRing) * 2;
+    const horizontal = Math.sqrt(Math.max(1 - y * y, 0));
+    const angle = localIndex * goldenAngle + shell * 0.19;
+    return {
+      index,
+      position: {
+        x: Math.cos(angle) * horizontal * radius,
+        y: y * radius,
+        z: Math.sin(angle) * horizontal * radius,
+      },
+    };
+  });
+}
+
+function outerLayer(design: FireworkDesignV2): SphericalStarLayer {
+  const layer = design.layers.find(
+    (candidate): candidate is SphericalStarLayer =>
+      candidate.kind === "spherical",
+  );
+  if (!layer) throw new Error(`Spherical layer is required: ${design.id}`);
+  return layer;
+}
+
+export const ILLUMINATION_PRESET: FireworkDesignV2 =
+  structuredClone(PEONY_PRESET);
+ILLUMINATION_PRESET.id = "preset-illumination";
+ILLUMINATION_PRESET.name = "彩色イルミネーション";
+ILLUMINATION_PRESET.description =
+  "彩色点滅星が決定的なランダム順で明滅し、球面に光の連鎖を描く作品。";
+{
+  const layer = outerLayer(ILLUMINATION_PRESET);
+  layer.defaultStarId = "star-strobe-pastel";
+  layer.effectTiming = {
+    cycles: 1,
+    direction: "forward",
+    mapping: "random",
+    offset: 0,
+    spread: 1,
+  };
+  layer.name = "彩色リレー球";
+}
+
+export const ROTATING_LIGHT_RING_PRESET: FireworkDesignV2 =
+  structuredClone(CHRYSANTHEMUM_PRESET);
+ROTATING_LIGHT_RING_PRESET.id = "preset-rotating-light-ring";
+ROTATING_LIGHT_RING_PRESET.name = "回転光環";
+ROTATING_LIGHT_RING_PRESET.description =
+  "固定された環の星を経度順に点灯し、粒子を旋回させずに光だけが巡る作品。";
+{
+  const layer = outerLayer(ROTATING_LIGHT_RING_PRESET);
+  layer.count = 96;
+  layer.defaultStarId = "star-relay-light";
+  layer.effectTiming = {
+    cycles: 1,
+    direction: "forward",
+    mapping: "longitude",
+    offset: 0,
+    spread: 1,
+  };
+  layer.jitter = 0;
+  layer.name = "経度リレー環";
+  layer.overrides = ringOverrides(layer.count);
+  layer.placement = "manual";
+}
+
+export const LIGHT_RIPPLE_PRESET: FireworkDesignV2 =
+  structuredClone(CHRYSANTHEMUM_PRESET);
+LIGHT_RIPPLE_PRESET.id = "preset-light-ripple";
+LIGHT_RIPPLE_PRESET.name = "光の波紋";
+LIGHT_RIPPLE_PRESET.description =
+  "同心状に置いた星が中心から外へ順に灯り、球面を波紋のように伝わる作品。";
+{
+  const layer = outerLayer(LIGHT_RIPPLE_PRESET);
+  const overrides = rippleOverrides(5, 36);
+  layer.count = overrides.length;
+  layer.defaultStarId = "star-relay-light";
+  layer.effectTiming = {
+    cycles: 1,
+    direction: "forward",
+    mapping: "radius",
+    offset: 0,
+    spread: 0.8,
+  };
+  layer.jitter = 0;
+  layer.name = "同心リレー球";
+  layer.overrides = overrides;
+  layer.placement = "manual";
+}
+
+export const KOURO_CHANGE_CHRYSANTHEMUM_PRESET: FireworkDesignV2 =
+  structuredClone(CHRYSANTHEMUM_PRESET);
+KOURO_CHANGE_CHRYSANTHEMUM_PRESET.id = "preset-kouro-change-chrysanthemum";
+KOURO_CHANGE_CHRYSANTHEMUM_PRESET.name = "光露変化菊";
+KOURO_CHANGE_CHRYSANTHEMUM_PRESET.description =
+  "変化菊の外周を銀光露星で仕立て、消え際にやわらかな余韻を残す作品。";
+{
+  const layer = outerLayer(KOURO_CHANGE_CHRYSANTHEMUM_PRESET);
+  layer.defaultStarId = "star-kouro";
+  layer.effectTiming = {
+    cycles: 1,
+    direction: "forward",
+    mapping: "index",
+    offset: 0,
+    spread: 0.18,
+  };
+  layer.name = "光露の変化菊";
+}
+
 export const FIREWORK_PRESETS: FireworkDesignV2[] = [
   CHRYSANTHEMUM_PRESET,
   PEONY_PRESET,
@@ -316,4 +453,8 @@ export const FIREWORK_PRESETS: FireworkDesignV2[] = [
   SATURN_PRESET,
   BUTTERFLY_PRESET,
   KOWARI_PRESET,
+  ILLUMINATION_PRESET,
+  ROTATING_LIGHT_RING_PRESET,
+  LIGHT_RIPPLE_PRESET,
+  KOURO_CHANGE_CHRYSANTHEMUM_PRESET,
 ];

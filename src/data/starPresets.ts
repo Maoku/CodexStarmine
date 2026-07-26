@@ -159,6 +159,41 @@ export const BUILTIN_STAR_PRESETS: VirtualStarPreset[] = [
     flicker: 0,
     trailLifetime: 0.16,
   }),
+  star(
+    "star-relay-light",
+    "時差リレー星",
+    [0xffffff, 0xff9fcf, 0xffed8f, 0x8feaff],
+    {
+      brightness: 1.3,
+      burnDuration: 3.2,
+      effectProfile: {
+        color: { mode: "step", playback: "loop", repeatCount: 1 },
+        light: {
+          dutyCycle: 0.24,
+          edgeSoftness: 0.035,
+          frequencyHz: 1.55,
+          mode: "strobe",
+        },
+      },
+      flicker: 0,
+      trailLifetime: 0.1,
+    },
+  ),
+  star(
+    "star-gradient-fade",
+    "流光グラデーション星",
+    [0xfff7fb, 0xff9fcf, 0xffef91, 0x8feaff, 0xb99aff],
+    {
+      brightness: 1.22,
+      burnDuration: 3.8,
+      effectProfile: {
+        color: { mode: "smooth", playback: "loop", repeatCount: 1 },
+        light: { mode: "continuous" },
+      },
+      flicker: 0,
+      trailLifetime: 0.2,
+    },
+  ),
 ];
 
 export function snapshotStarLibrary(): Record<string, VirtualStarPreset> {
