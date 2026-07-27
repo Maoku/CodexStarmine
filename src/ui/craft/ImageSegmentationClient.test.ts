@@ -138,10 +138,7 @@ describe("ImageSegmentationClient", () => {
       type: "initialized",
     });
 
-    expect(profiles).toEqual([
-      "model:pending:pending",
-      "model:slimsam:wasm",
-    ]);
+    expect(profiles).toEqual(["model:pending:pending", "model:slimsam:wasm"]);
     client.dispose();
   });
 

@@ -38,14 +38,8 @@ describe("generateFreeShow", () => {
       id: `custom-many-${index}`,
       name: `棚の花火 ${index}`,
     }));
-    const plan = generateFreeShow(
-      [CHRYSANTHEMUM_PRESET, ...customs],
-      0,
-      17,
-    );
-    const launchedIds = new Set(
-      plan.cues.map((cue) => cue.fireworkDesignID),
-    );
+    const plan = generateFreeShow([CHRYSANTHEMUM_PRESET, ...customs], 0, 17);
+    const launchedIds = new Set(plan.cues.map((cue) => cue.fireworkDesignID));
 
     expect(customs.every((custom) => launchedIds.has(custom.id))).toBe(true);
     expect(plan.duration).toBeGreaterThan(29);

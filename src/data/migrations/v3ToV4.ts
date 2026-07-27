@@ -150,7 +150,7 @@ function migrateLayer(layer: FireworkLayer, index: number): LayerIntentV4 {
   }
 
   const parameters = defaultPresetParameters();
-  let presetKind: PresetLayerIntent["presetKind"] = "outer";
+  let presetKind: PresetLayerIntent["presetKind"];
   if (layer.kind === "spherical") {
     presetKind = index === 0 && !layer.name.includes("芯") ? "outer" : "core";
     Object.assign(parameters, {

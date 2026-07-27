@@ -6,12 +6,14 @@ import { ensureFireworkDesignV4 } from "./migrations/v3ToV4";
 import {
   FIREWORK_PRESETS,
   MAO_TANABATA_AFTERGLOW_PRESET,
+  MAO_TANABATA_EDGE_PRESET,
   MAO_TANABATA_PRESET,
 } from "./presets";
 
 const CHECK_SEED = 7_070_707;
 const PORTRAIT_POINT_COUNT = 1_257;
 const FRAME_POINT_COUNT = 96;
+const EDGE_POINT_COUNT = 548;
 
 describe("Mao Tanabata static mosaic preset", () => {
   it("registers a valid built-in shell without runtime image stars", () => {
@@ -108,5 +110,47 @@ describe("Mao Tanabata static mosaic preset", () => {
     expect(plan.estimatedCost.terminalSparkCount).toBe(FRAME_POINT_COUNT);
     expect(plan.estimatedCost.trailCount).toBe(FRAME_POINT_COUNT);
     expect(plan.warnings).toEqual([]);
+  });
+
+  it("offers a sparse edge-only version without filling the portrait", () => {
+    expect(FIREWORK_PRESETS).toContain(MAO_TANABATA_EDGE_PRESET);
+    expect(MAO_TANABATA_EDGE_PRESET.name).toBe("七夕のまお・光輪郭");
+
+    const first = compileFireworkDesign(MAO_TANABATA_EDGE_PRESET, CHECK_SEED);
+    const second = compileFireworkDesign(MAO_TANABATA_EDGE_PRESET, CHECK_SEED);
+    const portrait = first.stars.filter(
+      ({ layerID }) => layerID === "layer-mao-tanabata-edge-portrait",
+    );
+    const frame = first.stars.filter(
+      ({ layerID }) => layerID === "layer-mao-tanabata-edge-frame",
+    );
+
+    expect(second).toEqual(first);
+    expect(portrait).toHaveLength(EDGE_POINT_COUNT);
+    expect(portrait.length).toBeLessThan(PORTRAIT_POINT_COUNT / 2);
+    expect(frame).toHaveLength(FRAME_POINT_COUNT);
+    expect(first.estimatedCost.maximumParticles).toBe(
+      EDGE_POINT_COUNT + FRAME_POINT_COUNT,
+    );
+    expect(first.estimatedCost.trailCount).toBe(0);
+    expect(first.warnings).toEqual([]);
+
+    const edgeLayer = MAO_TANABATA_EDGE_PRESET.layers.find(
+      ({ id }) => id === "layer-mao-tanabata-edge-portrait",
+    );
+    expect(edgeLayer?.kind).toBe("pattern");
+    if (edgeLayer?.kind !== "pattern") {
+      throw new Error("Expected the edge portrait to remain a pattern layer.");
+    }
+    const bangStroke = edgeLayer.points.filter(
+      ({ groupId, x, y }) =>
+        groupId === "3" && Math.abs(x - 0.123) < 0.001 && y > 0.44 && y < 0.5,
+    );
+    expect(bangStroke).toHaveLength(2);
+
+    const editable = ensureFireworkDesignV4(MAO_TANABATA_EDGE_PRESET);
+    expect(compileFireworkDesign(editable, CHECK_SEED).stars).toHaveLength(
+      EDGE_POINT_COUNT + FRAME_POINT_COUNT,
+    );
   });
 });

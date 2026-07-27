@@ -338,7 +338,7 @@ export class CraftWorkspace {
         )
         .join("");
     const starOptions = optionsFor(layer.defaultStarId);
-    let specific = "";
+    let specific: string;
     if (layer.kind === "spherical") {
       specific = `
         <label><span>仮想星数 <output>${layer.count}</output></span><input name="layer-count" type="range" min="12" max="900" step="1" value="${layer.count}" /></label>

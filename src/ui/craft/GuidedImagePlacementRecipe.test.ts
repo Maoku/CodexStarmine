@@ -355,9 +355,11 @@ describe("GuidedImagePlacementRecipe", () => {
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
         const stripe =
-          x < width / 3 ? [200, 60, 60] : x < (2 * width) / 3
-            ? [232, 92, 92]
-            : [40, 80, 200];
+          x < width / 3
+            ? [200, 60, 60]
+            : x < (2 * width) / 3
+              ? [232, 92, 92]
+              : [40, 80, 200];
         data.set([...stripe, 255], (y * width + x) * 4);
       }
     }

@@ -28,7 +28,7 @@ function referencedStarIds(
 
 describe("Japanese summer firework presets", () => {
   it("appends four uniquely identified works without disturbing the prefix", () => {
-    expect(FIREWORK_PRESETS).toHaveLength(28);
+    expect(FIREWORK_PRESETS).toHaveLength(29);
     expect(FIREWORK_PRESETS.slice(-4)).toEqual(JAPANESE_SUMMER_PRESETS);
     expect(JAPANESE_SUMMER_PRESETS).toEqual([
       MORNING_GLORY_PRESET,
@@ -36,7 +36,7 @@ describe("Japanese summer firework presets", () => {
       BLUE_RIPPLE_PRESET,
       SUMMER_SHOWER_WILLOW_PRESET,
     ]);
-    expect(new Set(FIREWORK_PRESETS.map((preset) => preset.id)).size).toBe(28);
+    expect(new Set(FIREWORK_PRESETS.map((preset) => preset.id)).size).toBe(29);
   });
 
   it("composes every layer exclusively from the built-in virtual stars", () => {

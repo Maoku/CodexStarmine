@@ -97,7 +97,7 @@ function renderManualRecipeControls(
   }
   const count = `<label><span>個数</span><input name="manual-count" type="number" min="2" max="240" value="${settings.count}" /></label>`;
   const rotation = `<label><span>回転</span><input name="manual-rotation" type="number" min="-360" max="360" value="${settings.rotationDegrees}" /></label>`;
-  let parameters = "";
+  let parameters: string;
   if (kind === "circle") {
     parameters = `${count}<label><span>半径</span><input name="manual-radius" type="number" min="5" max="94" value="${Math.round(settings.radius * 100)}" /></label>${rotation}`;
   } else if (kind === "line") {

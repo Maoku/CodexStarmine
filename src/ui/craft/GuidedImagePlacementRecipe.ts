@@ -941,7 +941,10 @@ export function sampleInternalBoundary(
 ): GridPoint[] {
   if (count <= 0 || boundary.points.length < 2) return [];
   const subEdges = internalBoundarySubEdges(boundary.points, image);
-  const totalWeight = subEdges.reduce((sum, subEdge) => sum + subEdge.weight, 0);
+  const totalWeight = subEdges.reduce(
+    (sum, subEdge) => sum + subEdge.weight,
+    0,
+  );
   if (subEdges.length === 0 || totalWeight <= 0) return [];
   const result: GridPoint[] = [];
   let cursor = 0;

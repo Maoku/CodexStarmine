@@ -1,7 +1,4 @@
-import {
-  compileFireworkDesign,
-  type CompiledBurstPlan,
-} from "../core/burst";
+import { compileFireworkDesign, type CompiledBurstPlan } from "../core/burst";
 import {
   resolveCurrentIntent,
   type AnyFireworkDesign,

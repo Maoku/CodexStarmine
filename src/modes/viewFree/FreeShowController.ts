@@ -75,9 +75,7 @@ export class FreeShowController {
     if (!this.#plan) return;
     const due = this.#timeline.update(deltaSeconds);
     for (const cue of due) {
-      this.#currentFireworkName = this.#designNames.get(
-        cue.fireworkDesignID,
-      );
+      this.#currentFireworkName = this.#designNames.get(cue.fireworkDesignID);
       this.#options.onCue(cue);
     }
     if (this.#timeline.isComplete) {

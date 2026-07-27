@@ -60,7 +60,7 @@ export function renderSelectedLayerInspector(
           `<option value="${star.id}" ${selectedAttribute(star.id === selectedLayer.defaultStarId)}>${escapeHTML(star.displayName)}</option>`,
       )
       .join("");
-    let specific = "";
+    let specific: string;
     if (selectedLayer.authoringMode === "preset") {
       const parameters = selectedLayer.parameters;
       if (selectedLayer.presetKind === "branch") {

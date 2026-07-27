@@ -106,7 +106,7 @@ export function deriveEffectPhase(input: DeriveEffectPhaseInput): number {
     input.position.y,
     input.position.z,
   );
-  let mapped = 0;
+  let mapped: number;
   if (timing.mapping === "random") {
     mapped = hashUnit(
       `${input.assemblySeed}:${input.layerID}:${input.placementIndex}:phase`,

@@ -121,9 +121,7 @@ export class ImageSegmentationClient {
     this.#wasmBaseUrl = options.wasmBaseUrl ?? localAssetUrl("wasm/");
     this.#wasmNumThreads =
       options.wasmNumThreads ??
-      (isIOSPlatform(
-        typeof navigator === "undefined" ? undefined : navigator,
-      )
+      (isIOSPlatform(typeof navigator === "undefined" ? undefined : navigator)
         ? 1
         : undefined);
     this.#workerSupported =
