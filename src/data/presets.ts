@@ -7,7 +7,6 @@ import type {
 } from "./firework";
 import {
   buildMaoTanabataAfterglowPreset,
-  buildMaoTanabataEdgePreset,
   buildMaoTanabataPreset,
 } from "./maoTanabataPreset";
 import { migrateV1ToV2 } from "./migrations/v1ToV2";
@@ -578,8 +577,6 @@ STOP_MOTION_PRESET.description =
 export const MAO_TANABATA_PRESET = buildMaoTanabataPreset(PEONY_PRESET);
 export const MAO_TANABATA_AFTERGLOW_PRESET =
   buildMaoTanabataAfterglowPreset(PEONY_PRESET);
-export const MAO_TANABATA_EDGE_PRESET =
-  buildMaoTanabataEdgePreset(PEONY_PRESET);
 
 const summerFireworkPresets = buildSummerFireworkPresets({
   crown: CROWN_PRESET,
@@ -626,6 +623,5 @@ export const FIREWORK_PRESETS: FireworkDesignV2[] = [
   STOP_MOTION_PRESET,
   MAO_TANABATA_PRESET,
   MAO_TANABATA_AFTERGLOW_PRESET,
-  MAO_TANABATA_EDGE_PRESET,
   ...JAPANESE_SUMMER_PRESETS,
 ];

@@ -80,19 +80,6 @@ const FRAME_RADIUS = 0.93;
 const FRAME_POINT_COUNT = 96;
 const PALETTE_KEYS = "0123456789ABCDEF";
 const AFTERGLOW_FRAME_KEYS = new Set(["7", "8", "A", "E"]);
-const EDGE_COLOR_DISTANCE = 100;
-const HAIR_EDGE_COLOR_DISTANCE = 30;
-const HAIR_PALETTE_KEYS = new Set(["2", "3", "4", "5", "6", "F"]);
-const EDGE_NEIGHBORS = [
-  [-1, -1],
-  [0, -1],
-  [1, -1],
-  [-1, 0],
-  [1, 0],
-  [-1, 1],
-  [0, 1],
-  [1, 1],
-] as const;
 
 function paletteStarId(index: number): string {
   return `star-mao-tanabata-${PALETTE_KEYS[index].toLowerCase()}`;
@@ -147,91 +134,6 @@ function portraitPoints(): PatternPoint[] {
   return MAO_TANABATA_GRID.flatMap((row, rowIndex) =>
     [...row].flatMap((paletteKey, columnIndex) => {
       if (paletteKey === ".") return [];
-      return [
-        {
-          groupId: paletteKey,
-          x: ((columnIndex - GRID_CENTER) / GRID_CENTER) * PORTRAIT_RADIUS,
-          y: ((GRID_CENTER - rowIndex) / GRID_CENTER) * PORTRAIT_RADIUS,
-        },
-      ];
-    }),
-  );
-}
-
-function paletteColor(paletteKey: string): number {
-  return MAO_TANABATA_PALETTE[PALETTE_KEYS.indexOf(paletteKey)]?.color ?? 0;
-}
-
-function perceptualColorDistance(left: number, right: number): number {
-  const red = ((left >> 16) & 0xff) - ((right >> 16) & 0xff);
-  const green = ((left >> 8) & 0xff) - ((right >> 8) & 0xff);
-  const blue = (left & 0xff) - (right & 0xff);
-  return Math.sqrt(red * red * 0.3 + green * green * 0.59 + blue * blue * 0.11);
-}
-
-function paletteLuminance(color: number): number {
-  const red = (color >> 16) & 0xff;
-  const green = (color >> 8) & 0xff;
-  const blue = color & 0xff;
-  return red * 0.2126 + green * 0.7152 + blue * 0.0722;
-}
-
-function isHairCoordinate(rowIndex: number, columnIndex: number): boolean {
-  return rowIndex <= 31 && (rowIndex <= 16 || columnIndex <= 24);
-}
-
-function isHairInteriorEdge(
-  paletteKey: string,
-  neighbor: string,
-  rowIndex: number,
-  columnIndex: number,
-  neighborRowIndex: number,
-  neighborColumnIndex: number,
-): boolean {
-  if (
-    paletteKey === neighbor ||
-    !HAIR_PALETTE_KEYS.has(paletteKey) ||
-    !HAIR_PALETTE_KEYS.has(neighbor) ||
-    !isHairCoordinate(rowIndex, columnIndex) ||
-    !isHairCoordinate(neighborRowIndex, neighborColumnIndex)
-  ) {
-    return false;
-  }
-
-  const color = paletteColor(paletteKey);
-  const neighborColor = paletteColor(neighbor);
-  return (
-    perceptualColorDistance(color, neighborColor) >= HAIR_EDGE_COLOR_DISTANCE &&
-    paletteLuminance(color) < paletteLuminance(neighborColor)
-  );
-}
-
-function edgePoints(): PatternPoint[] {
-  return MAO_TANABATA_GRID.flatMap((row, rowIndex) =>
-    [...row].flatMap((paletteKey, columnIndex) => {
-      if (paletteKey === ".") return [];
-      const isEdge = EDGE_NEIGHBORS.some(([columnOffset, rowOffset]) => {
-        const neighborRowIndex = rowIndex + rowOffset;
-        const neighborColumnIndex = columnIndex + columnOffset;
-        const neighbor =
-          MAO_TANABATA_GRID[neighborRowIndex]?.[neighborColumnIndex] ?? ".";
-        return (
-          neighbor === "." ||
-          perceptualColorDistance(
-            paletteColor(paletteKey),
-            paletteColor(neighbor),
-          ) >= EDGE_COLOR_DISTANCE ||
-          isHairInteriorEdge(
-            paletteKey,
-            neighbor,
-            rowIndex,
-            columnIndex,
-            neighborRowIndex,
-            neighborColumnIndex,
-          )
-        );
-      });
-      if (!isEdge) return [];
       return [
         {
           groupId: paletteKey,
@@ -454,63 +356,5 @@ export function buildMaoTanabataAfterglowPreset(
   design.burnDuration = 4.45;
   design.trailStyle = { length: 0.18, sparkle: 0.08, width: 0.82 };
   design.smokeProfile = { amount: 0.16, lifetime: 6.2 };
-  return design;
-}
-
-function tuneEdgeStar(definition: VirtualStarPreset): void {
-  const color = definition.colorStages[0].color;
-  definition.brightness *= 0.92;
-  definition.burnDuration = 3.85;
-  definition.drag = 0.64;
-  definition.flicker = 0.05;
-  definition.gravityScale = 0.14;
-  definition.trailLifetime = 0.22;
-  definition.trailWidth = 0.68;
-  definition.colorStages = [
-    {
-      color: 0xfff8ee,
-      intensity: 1.18,
-      normalizedTime: 0,
-      trailColor: color,
-    },
-    { color, intensity: 1.02, normalizedTime: 0.14, trailColor: color },
-    { color, intensity: 0.58, normalizedTime: 0.72, trailColor: color },
-    { color, intensity: 0, normalizedTime: 1, trailColor: color },
-  ];
-}
-
-export function buildMaoTanabataEdgePreset(
-  base: FireworkDesignV2,
-): FireworkDesignV2 {
-  const design = buildMaoTanabataPreset(base);
-  const edges = edgePoints();
-
-  MAO_TANABATA_PALETTE.forEach((_, index) => {
-    tuneEdgeStar(design.starDefinitions[paletteStarId(index)]);
-  });
-
-  design.id = "preset-mao-tanabata-edge";
-  design.name = "七夕のまお・光輪郭";
-  design.description =
-    "塗りつぶしを除き、髪、瞳、浴衣、外形の色境界だけを細い光跡で描く線画仕立ての七夕花火。";
-  design.layers.forEach((layer) => {
-    if (layer.kind !== "pattern") return;
-    if (layer.id === "layer-mao-tanabata-portrait") {
-      layer.id = "layer-mao-tanabata-edge-portrait";
-      layer.name = "まおの光輪郭";
-      layer.points = edges;
-      layer.radialSpeedScale = 1.04;
-      return;
-    }
-
-    layer.id = "layer-mao-tanabata-edge-frame";
-    layer.name = "七夕の細光環";
-    layer.ignitionOffset = 0.08;
-    layer.radialSpeedScale = 0.86;
-  });
-  design.particleDensity = edges.length + FRAME_POINT_COUNT;
-  design.burnDuration = 3.85;
-  design.trailStyle = { length: 0.22, sparkle: 0.06, width: 0.68 };
-  design.smokeProfile = { amount: 0.08, lifetime: 4.8 };
   return design;
 }
