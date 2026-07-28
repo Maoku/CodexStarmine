@@ -2465,11 +2465,56 @@ input[type="range"] {
   letter-spacing: 0.11em;
 }
 
+.viewer-camera-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.28rem;
+  margin-bottom: 0.65rem;
+  padding: 0.22rem;
+  border: 1px solid rgb(214 223 234 / 10%);
+  border-radius: 0.58rem;
+  background: rgb(0 3 9 / 42%);
+}
+
+.viewer-camera-mode button {
+  min-height: 2.2rem;
+  border: 1px solid transparent;
+  border-radius: 0.42rem;
+  background: transparent;
+  color: #7f8792;
+  font-size: 0.62rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.viewer-camera-mode button:hover,
+.viewer-camera-mode button:focus-visible {
+  color: #e3ddd4;
+}
+
+.viewer-camera-mode button[aria-pressed="true"] {
+  border-color: rgb(233 164 95 / 34%);
+  background:
+    linear-gradient(135deg, rgb(233 164 95 / 14%), rgb(233 164 95 / 5%)),
+    rgb(255 255 255 / 4%);
+  color: #e8d9c7;
+  box-shadow: 0 0.25rem 0.8rem rgb(0 0 0 / 18%);
+}
+
 .free-view-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 0.5rem;
+  transition: opacity 180ms ease;
+}
+
+.free-view-row[aria-disabled="true"] {
+  opacity: 0.42;
 }
 
 .free-view-select {
@@ -2521,6 +2566,24 @@ input[type="range"] {
   color: #b8bec7;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.5rem;
+}
+
+.viewing-stage.is-drone-camera .free-view-control {
+  border-color: rgb(112 174 205 / 28%);
+  background:
+    linear-gradient(135deg, rgb(80 155 193 / 8%), transparent 62%),
+    rgb(233 164 95 / 3%);
+}
+
+.viewing-stage.is-drone-camera .free-view-heading b {
+  color: #76a9c2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-camera-mode button,
+  .free-view-row {
+    transition: none;
+  }
 }
 
 .show-now {

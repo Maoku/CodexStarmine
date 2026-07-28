@@ -106,6 +106,10 @@ export class FreeViewCameraController {
     this.applyPreset(HOME_FREE_VIEW_PRESET_ID);
   }
 
+  get target(): Vector3 {
+    return this.#controls.target.clone();
+  }
+
   applyPreset(presetId: FreeViewPresetId): FreeViewPreset {
     const preset = applyFreeViewPreset(
       this.#camera,
@@ -118,6 +122,11 @@ export class FreeViewCameraController {
 
   reset(): FreeViewPreset {
     return this.applyPreset(HOME_FREE_VIEW_PRESET_ID);
+  }
+
+  adoptCurrentView(target: Vector3): void {
+    this.#controls.target.copy(target);
+    this.#controls.update();
   }
 
   setEnabled(enabled: boolean): void {

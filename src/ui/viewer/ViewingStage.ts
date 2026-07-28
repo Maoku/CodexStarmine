@@ -10,6 +10,7 @@ import {
 } from "../../modes/viewFree";
 
 export type ViewerContext = "check" | "free";
+export type ViewerCameraMode = "drone" | "manual";
 
 export interface ViewingStageCallbacks {
   onAudioPhysicality: (value: number) => void;
@@ -22,6 +23,7 @@ export interface ViewingStageCallbacks {
   onFreeViewPresetChange: (presetId: FreeViewPresetId) => void;
   onFreeViewReset: () => void;
   onToast: (message: string) => void;
+  onViewerCameraModeChange: (mode: ViewerCameraMode) => void;
 }
 
 export interface ViewingStageOptions {
@@ -33,6 +35,7 @@ export interface ViewingStageOptions {
   freeState: FreeShowState;
   freeViewPresetId: FreeViewPresetId;
   locale?: Locale;
+  viewerCameraMode: ViewerCameraMode;
 }
 
 interface ViewerPanelTogglePresentation {
@@ -91,20 +94,57 @@ function localizedShowText(locale: Locale, value: string): string {
 export function renderViewerCameraControl(
   presetId: FreeViewPresetId,
   locale: Locale = "ja",
+  cameraMode: ViewerCameraMode = "manual",
 ): string {
   const viewPresetOptions = FREE_VIEW_PRESET_IDS.map(
     (candidate) =>
       `<option value="${candidate}" ${candidate === presetId ? "selected" : ""}>${locale === "en" ? viewLabel(locale, candidate) : FREE_VIEW_PRESETS[candidate].label}</option>`,
   ).join("");
+  const droneActive = cameraMode === "drone";
   return `<section class="free-view-control" aria-labelledby="viewer-camera-heading">
-    <div class="free-view-heading"><span id="viewer-camera-heading">${locale === "en" ? "Move camera" : "視点を動かす"}</span><b>FREE CAMERA</b></div>
-    <div class="free-view-row">
-      <label class="free-view-select"><span>${locale === "en" ? "Camera preset" : "プリセット視点"}</span><select name="viewer-view-preset">${viewPresetOptions}</select></label>
-      <button class="secondary-action free-view-reset" type="button" data-viewer-action="view-reset">${locale === "en" ? "Reset position" : "元の位置に戻る"}</button>
+    <div class="free-view-heading"><span id="viewer-camera-heading">${locale === "en" ? "Camera mode" : "カメラモード"}</span><b data-camera-mode-badge>${droneActive ? "DRONE CAMERA" : "FREE CAMERA"}</b></div>
+    <div class="viewer-camera-mode" role="group" aria-label="${locale === "en" ? "Camera mode" : "カメラモード"}">
+      <button type="button" data-viewer-action="camera-manual" aria-pressed="${!droneActive}">${locale === "en" ? "Manual" : "手動カメラ"}</button>
+      <button type="button" data-viewer-action="camera-drone" aria-pressed="${droneActive}">${locale === "en" ? "Drone" : "ドローン"}</button>
     </div>
-    <p>${locale === "en" ? "Drag / one finger to look around · right-drag / two fingers to move · wheel / pinch to zoom" : "ドラッグ／1本指で見回す · 右ドラッグ／2本指で移動 · ホイール／ピンチで接近"}</p>
-    <p class="free-view-keys"><kbd>WASD / ${locale === "en" ? "arrow keys" : "矢印"}</kbd> ${locale === "en" ? "move" : "前後左右"} · <kbd>Q / E</kbd> ${locale === "en" ? "up/down" : "上下"} · <kbd>Shift</kbd> ${locale === "en" ? "faster" : "高速"}</p>
+    <div class="free-view-row" data-manual-camera-controls aria-disabled="${droneActive}">
+      <label class="free-view-select"><span>${locale === "en" ? "Camera preset" : "プリセット視点"}</span><select name="viewer-view-preset" ${droneActive ? "disabled" : ""}>${viewPresetOptions}</select></label>
+      <button class="secondary-action free-view-reset" type="button" data-viewer-action="view-reset" ${droneActive ? "disabled" : ""}>${locale === "en" ? "Reset position" : "元の位置に戻る"}</button>
+    </div>
+    <p data-camera-mode-copy>${cameraModeCopy(cameraMode, locale)}</p>
+    <p class="free-view-keys" data-camera-mode-keys>${cameraModeKeys(cameraMode, locale)}</p>
   </section>`;
+}
+
+function cameraModeCopy(mode: ViewerCameraMode, locale: Locale): string {
+  if (mode === "drone") {
+    return locale === "en"
+      ? "The drone circles each burst, holds steady shots, and occasionally flies through the heart of the fireworks."
+      : "花火を回り込み、静止撮影を挟みながら、時には開花の中を突き抜けて次のアングルへ移動します。";
+  }
+  return locale === "en"
+    ? "Drag / one finger to look around · right-drag / two fingers to move · wheel / pinch to zoom"
+    : "ドラッグ／1本指で見回す · 右ドラッグ／2本指で移動 · ホイール／ピンチで接近";
+}
+
+function cameraModeKeys(mode: ViewerCameraMode, locale: Locale): string {
+  if (mode === "drone") {
+    return locale === "en"
+      ? "Choose Manual whenever you want to take control from the current angle."
+      : "現在のアングルから操作したい時は、いつでも「手動カメラ」へ戻せます。";
+  }
+  return `<kbd>WASD / ${locale === "en" ? "arrow keys" : "矢印"}</kbd> ${locale === "en" ? "move" : "前後左右"} · <kbd>Q / E</kbd> ${locale === "en" ? "up/down" : "上下"} · <kbd>Shift</kbd> ${locale === "en" ? "faster" : "高速"}`;
+}
+
+export function viewerCameraViewLabel(
+  mode: ViewerCameraMode,
+  presetId: FreeViewPresetId,
+  locale: Locale = "ja",
+  manualViewIsCustom = false,
+): string {
+  if (mode === "drone") return locale === "en" ? "Drone" : "ドローン";
+  if (manualViewIsCustom) return locale === "en" ? "Manual" : "自由操作";
+  return viewLabel(locale, presetId);
 }
 
 export function renderViewerVolumeControl(
@@ -129,9 +169,11 @@ export class ViewingStage {
   #checkState: SingleLoopCheckState;
   #freeState: FreeShowState;
   #freeViewPresetId: FreeViewPresetId;
+  #manualViewIsCustom = false;
   #panelExpanded = true;
   readonly #locale: Locale;
   #audioVolume: number;
+  #viewerCameraMode: ViewerCameraMode;
 
   constructor(options: ViewingStageOptions) {
     this.#callbacks = options.callbacks;
@@ -141,6 +183,7 @@ export class ViewingStage {
     this.#freeState = options.freeState;
     this.#freeViewPresetId = options.freeViewPresetId;
     this.#locale = options.locale ?? "ja";
+    this.#viewerCameraMode = options.viewerCameraMode;
     this.element.className = `renewal-viewer-screen viewing-stage viewing-stage--${this.#context}`;
     this.element.setAttribute(
       "aria-labelledby",
@@ -164,6 +207,7 @@ export class ViewingStage {
     this.element.addEventListener("click", this.#handleClick);
     this.element.addEventListener("input", this.#handleInput);
     this.element.addEventListener("change", this.#handleChange);
+    this.setViewerCameraMode(this.#viewerCameraMode);
     if (this.#context === "check") this.setCheckState(this.#checkState);
     else this.setFreeState(this.#freeState);
   }
@@ -274,12 +318,67 @@ export class ViewingStage {
 
   setFreeViewPreset(presetId: FreeViewPresetId): void {
     this.#freeViewPresetId = presetId;
+    this.#manualViewIsCustom = false;
     const select = this.element.querySelector<HTMLSelectElement>(
       "[name='viewer-view-preset']",
     );
     if (select) select.value = presetId;
     const label = this.element.querySelector<HTMLElement>("[data-view-label]");
-    if (label) label.textContent = viewLabel(this.#locale, presetId);
+    if (label && this.#viewerCameraMode === "manual") {
+      label.textContent = viewLabel(this.#locale, presetId);
+    }
+  }
+
+  setViewerCameraMode(mode: ViewerCameraMode): void {
+    const returningFromDrone =
+      this.#viewerCameraMode === "drone" && mode === "manual";
+    this.#viewerCameraMode = mode;
+    if (returningFromDrone) this.#manualViewIsCustom = true;
+    const droneActive = mode === "drone";
+    this.element.classList.toggle("is-drone-camera", droneActive);
+    this.element
+      .querySelectorAll<HTMLButtonElement>(
+        "[data-viewer-action='camera-manual'], [data-viewer-action='camera-drone']",
+      )
+      .forEach((button) => {
+        button.ariaPressed = String(
+          button.dataset.viewerAction === `camera-${mode}`,
+        );
+      });
+    const manualControls = this.element.querySelector<HTMLElement>(
+      "[data-manual-camera-controls]",
+    );
+    if (manualControls) {
+      manualControls.ariaDisabled = String(droneActive);
+      manualControls
+        .querySelectorAll<
+          HTMLInputElement | HTMLButtonElement | HTMLSelectElement
+        >("button, input, select")
+        .forEach((control) => {
+          control.disabled = droneActive;
+        });
+    }
+    const badge = this.element.querySelector<HTMLElement>(
+      "[data-camera-mode-badge]",
+    );
+    if (badge) badge.textContent = droneActive ? "DRONE CAMERA" : "FREE CAMERA";
+    const copy = this.element.querySelector<HTMLElement>(
+      "[data-camera-mode-copy]",
+    );
+    if (copy) copy.textContent = cameraModeCopy(mode, this.#locale);
+    const keys = this.element.querySelector<HTMLElement>(
+      "[data-camera-mode-keys]",
+    );
+    if (keys) keys.innerHTML = cameraModeKeys(mode, this.#locale);
+    const label = this.element.querySelector<HTMLElement>("[data-view-label]");
+    if (label) {
+      label.textContent = viewerCameraViewLabel(
+        mode,
+        this.#freeViewPresetId,
+        this.#locale,
+        this.#manualViewIsCustom,
+      );
+    }
   }
 
   #renderCheckPanel(): string {
@@ -305,7 +404,11 @@ export class ViewingStage {
           <div><span>NEXT LAUNCH</span><strong data-check-countdown>打上準備</strong></div>
           <div><span>THIS SESSION</span><strong data-check-shot-count>0発</strong></div>
         </section>
-        ${renderViewerCameraControl(this.#freeViewPresetId, this.#locale)}
+        ${renderViewerCameraControl(
+          this.#freeViewPresetId,
+          this.#locale,
+          this.#viewerCameraMode,
+        )}
         <label class="check-loop-control">
           <input name="check-loop" type="checkbox" ${this.#checkState.loopEnabled ? "checked" : ""} />
           <span><strong>${this.#locale === "en" ? "Single-launch loop" : "単発ループ"}</strong><small>${this.#locale === "en" ? "Launch this work once per cycle" : "1周期につきこの作品を1発だけ打ち上げます"}</small></span>
@@ -334,7 +437,11 @@ export class ViewingStage {
           <span>${this.#locale === "en" ? "Show density" : "演出密度"} <output data-output="free-density">${this.#locale === "en" ? (["Quiet", "Standard", "Vibrant"][freeDensity] ?? "Standard") : (["静か", "標準", "華やか"][freeDensity] ?? "標準")}</output></span>
           <input name="free-density" type="range" min="0" max="2" step="1" value="${freeDensity}" aria-label="${this.#locale === "en" ? "Show density" : "演出密度"}" />
         </label>
-        ${renderViewerCameraControl(this.#freeViewPresetId, this.#locale)}
+        ${renderViewerCameraControl(
+          this.#freeViewPresetId,
+          this.#locale,
+          this.#viewerCameraMode,
+        )}
         <div class="show-now"><p>NOW PLAYING</p><strong data-show-title>${escapeHTML(localizedShowText(this.#locale, this.#freeState.title))}</strong><span data-show-progress>${escapeHTML(localizedShowText(this.#locale, this.#freeState.detail))}</span><span class="show-now__firework"><small>${this.#locale === "en" ? "Launching shell" : "打上中の玉"}</small><b data-show-firework-name>${escapeHTML(this.#freeState.currentFireworkName ?? (this.#locale === "en" ? "Preparing launch" : "打上準備中"))}</b></span></div>
         <button class="primary-action viewer-primary-toggle" type="button" data-viewer-action="free-toggle">${this.#freeState.running ? (this.#locale === "en" ? "Pause" : "一時停止") : this.#locale === "en" ? "Resume show" : "演目を再開"}</button>
       </div>
@@ -380,9 +487,9 @@ export class ViewingStage {
 
   #renderSceneCaption(): string {
     if (this.#context === "check") {
-      return `<div class="scene-caption"><span>SEED</span><strong>FIXED</strong><i></i><span>VIEW</span><strong data-view-label>${viewLabel(this.#locale, this.#freeViewPresetId)}</strong></div>`;
+      return `<div class="scene-caption"><span>SEED</span><strong>FIXED</strong><i></i><span>VIEW</span><strong data-view-label>${viewerCameraViewLabel(this.#viewerCameraMode, this.#freeViewPresetId, this.#locale)}</strong></div>`;
     }
-    return `<div class="scene-caption"><span>WIND</span><strong>${this.#locale === "en" ? "East" : "東"} 1.3 m/s</strong><i></i><span>VIEW</span><strong data-view-label>${viewLabel(this.#locale, this.#freeViewPresetId)}</strong></div>`;
+    return `<div class="scene-caption"><span>WIND</span><strong>${this.#locale === "en" ? "East" : "東"} 1.3 m/s</strong><i></i><span>VIEW</span><strong data-view-label>${viewerCameraViewLabel(this.#viewerCameraMode, this.#freeViewPresetId, this.#locale)}</strong></div>`;
   }
 
   readonly #handleClick = (event: Event): void => {
@@ -394,7 +501,21 @@ export class ViewingStage {
     if (action === "back") this.#callbacks.onBack();
     else if (action === "check-toggle") this.#callbacks.onCheckToggle();
     else if (action === "free-toggle") this.#callbacks.onFreeToggle();
-    else if (action === "toggle-panel") {
+    else if (action === "camera-manual" || action === "camera-drone") {
+      const mode = action === "camera-drone" ? "drone" : "manual";
+      if (mode === this.#viewerCameraMode) return;
+      this.setViewerCameraMode(mode);
+      this.#callbacks.onViewerCameraModeChange(mode);
+      this.#callbacks.onToast(
+        mode === "drone"
+          ? this.#locale === "en"
+            ? "Drone camera started."
+            : "ドローン撮影を開始しました"
+          : this.#locale === "en"
+            ? "Manual camera resumed from the current angle."
+            : "現在のアングルから手動カメラへ戻りました",
+      );
+    } else if (action === "toggle-panel") {
       this.#setPanelExpanded(!this.#panelExpanded);
     } else if (action === "view-reset") {
       this.#callbacks.onFreeViewReset();

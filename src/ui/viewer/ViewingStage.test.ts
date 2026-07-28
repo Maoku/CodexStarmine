@@ -5,6 +5,7 @@ import {
   getViewerPanelTogglePresentation,
   renderViewerCameraControl,
   renderViewerVolumeControl,
+  viewerCameraViewLabel,
 } from "./ViewingStage";
 
 describe("viewer camera controls", () => {
@@ -19,6 +20,28 @@ describe("viewer camera controls", () => {
     expect(markup).toContain("ドラッグ");
     expect(markup).toContain("WASD / 矢印");
     expect(markup).toContain('value="wide" selected');
+  });
+
+  it("offers drone mode and disables manual controls while it is active", () => {
+    const markup = renderViewerCameraControl("wide", "ja", "drone");
+
+    expect(markup).toContain('data-viewer-action="camera-manual"');
+    expect(markup).toContain('data-viewer-action="camera-drone"');
+    expect(markup).toContain(
+      'data-viewer-action="camera-drone" aria-pressed="true"',
+    );
+    expect(markup).toContain('name="viewer-view-preset" disabled');
+    expect(markup).toContain("静止撮影を挟みながら");
+    expect(markup).toContain("開花の中を突き抜けて");
+    expect(markup).toContain("いつでも「手動カメラ」へ戻せます");
+  });
+
+  it("labels a handoff from drone mode as a free manual view", () => {
+    expect(viewerCameraViewLabel("drone", "audience")).toBe("ドローン");
+    expect(viewerCameraViewLabel("manual", "audience", "ja", true)).toBe(
+      "自由操作",
+    );
+    expect(viewerCameraViewLabel("manual", "wide")).toBe("湖畔ワイド");
   });
 });
 

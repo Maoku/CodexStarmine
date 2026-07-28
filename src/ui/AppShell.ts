@@ -21,7 +21,11 @@ import {
 } from "./screens/FireworkShelfScreen";
 import { InitialSetupScreen } from "./screens/InitialSetupScreen";
 import { ModeSelectionScreen } from "./screens/ModeSelectionScreen";
-import { ViewingStage, type ViewerContext } from "./viewer";
+import {
+  ViewingStage,
+  type ViewerCameraMode,
+  type ViewerContext,
+} from "./viewer";
 import { I18n, type Locale } from "../i18n";
 import { installDOMLocalizer, localizeDOM } from "../i18n/dom";
 
@@ -37,6 +41,7 @@ export interface AppShellCallbacks {
   onFreeToggle?: () => void;
   onFreeViewPresetChange?: (presetId: FreeViewPresetId) => void;
   onFreeViewReset?: () => void;
+  onViewerCameraModeChange?: (mode: ViewerCameraMode) => void;
   onBackgroundRuntimeChange: (
     runtime: BackgroundRuntime,
     design?: AnyFireworkDesign,
@@ -100,6 +105,7 @@ export class AppShell {
   #freeViewPresetId = HOME_FREE_VIEW_PRESET_ID;
   #screenMount?: MountedScreen;
   #toastTimer = 0;
+  #viewerCameraMode: ViewerCameraMode = "manual";
   #viewingStage?: ViewingStage;
 
   constructor(
@@ -166,6 +172,11 @@ export class AppShell {
   setFreeViewPreset(presetId: FreeViewPresetId): void {
     this.#freeViewPresetId = presetId;
     this.#viewingStage?.setFreeViewPreset(presetId);
+  }
+
+  setViewerCameraMode(mode: ViewerCameraMode): void {
+    this.#viewerCameraMode = mode;
+    this.#viewingStage?.setViewerCameraMode(mode);
   }
 
   showToast(message: string): void {
@@ -377,6 +388,10 @@ export class AppShell {
           this.#callbacks.onFreeViewReset?.();
         },
         onToast: (message) => this.showToast(message),
+        onViewerCameraModeChange: (mode) => {
+          this.setViewerCameraMode(mode);
+          this.#callbacks.onViewerCameraModeChange?.(mode);
+        },
       },
       audioVolume: this.#audioVolume,
       checkState:
@@ -388,6 +403,7 @@ export class AppShell {
       freeState: this.#freeState,
       freeViewPresetId: this.#freeViewPresetId,
       locale: this.#i18n.locale,
+      viewerCameraMode: this.#viewerCameraMode,
     });
     this.#viewingStage = stage;
     return {

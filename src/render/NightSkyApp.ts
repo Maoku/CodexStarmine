@@ -33,9 +33,14 @@ import {
   HOME_FREE_VIEW_PRESET_ID,
 } from "../modes/viewFree";
 import { AppShell } from "../ui/AppShell";
+import type { ViewerCameraMode } from "../ui/viewer";
 import type { Locale } from "../i18n";
 import { text } from "../i18n";
-import { AdvertiseCameraController, FreeViewCameraController } from "./camera";
+import {
+  AdvertiseCameraController,
+  DroneCameraController,
+  FreeViewCameraController,
+} from "./camera";
 import { FireworkSystem } from "./fx";
 import { prepareShowLaunch } from "./prepareShowLaunch";
 import {
@@ -51,6 +56,7 @@ export class NightSkyApp {
   readonly #camera: PerspectiveCamera;
   readonly #check: SingleLoopCheckController;
   readonly #composer: EffectComposer;
+  readonly #droneCamera: DroneCameraController;
   readonly #fireworks: FireworkSystem;
   readonly #freeShow: FreeShowController;
   readonly #freeView: FreeViewCameraController;
@@ -69,6 +75,8 @@ export class NightSkyApp {
     design?: AnyFireworkDesign;
     runtime: BackgroundRuntime;
   };
+  #viewerCameraAvailable = false;
+  #viewerCameraMode: ViewerCameraMode = "manual";
 
   constructor(host: HTMLElement, locale: Locale = "ja") {
     this.#host = host;
@@ -131,6 +139,7 @@ export class NightSkyApp {
       this.#camera,
       this.#renderer.domElement,
     );
+    this.#droneCamera = new DroneCameraController(this.#camera);
     this.#advertiseCamera = new AdvertiseCameraController(this.#camera);
     this.#reducedMotionQuery = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
@@ -202,9 +211,13 @@ export class NightSkyApp {
     this.#advertiseDemo.setPageVisible(document.visibilityState === "visible");
     this.#advertiseDemo.setReducedMotion(this.#reducedMotionQuery.matches);
     this.#advertiseCamera.setReducedMotion(this.#reducedMotionQuery.matches);
+    this.#droneCamera.setReducedMotion(this.#reducedMotionQuery.matches);
     this.#backgroundRuntime = new BackgroundRuntimeController({
       clearScene: () => this.#fireworks.clear(),
-      setFreeViewEnabled: (enabled) => this.#freeView.setEnabled(enabled),
+      setFreeViewEnabled: (enabled) => {
+        this.#viewerCameraAvailable = enabled;
+        this.#syncViewerCameraMode();
+      },
       startAdvertise: () => {
         this.#advertiseCamera.setEnabled(true);
         this.#advertiseDemo.start();
@@ -212,12 +225,18 @@ export class NightSkyApp {
       startCheck: (design) => {
         this.#advertiseCamera.setEnabled(false);
         this.#freeView.reset();
+        if (this.#droneCamera.isEnabled) {
+          this.#droneCamera.restart(this.#freeView.target);
+        }
         this.#ui.setFreeViewPreset(HOME_FREE_VIEW_PRESET_ID);
         this.#check.start(design);
       },
       startFree: () => {
         this.#advertiseCamera.setEnabled(false);
         this.#freeView.reset();
+        if (this.#droneCamera.isEnabled) {
+          this.#droneCamera.restart(this.#freeView.target);
+        }
         this.#ui.setFreeViewPreset(HOME_FREE_VIEW_PRESET_ID);
         this.#freeShow.start();
       },
@@ -258,6 +277,10 @@ export class NightSkyApp {
         onFreeViewReset: () => {
           this.#freeView.reset();
           this.#ui.setFreeViewPreset(HOME_FREE_VIEW_PRESET_ID);
+        },
+        onViewerCameraModeChange: (mode) => {
+          this.#viewerCameraMode = mode;
+          this.#syncViewerCameraMode();
         },
       },
       locale,
@@ -308,6 +331,7 @@ export class NightSkyApp {
     this.#check.stop();
     this.#advertiseDemo.stop();
     this.#advertiseCamera.setEnabled(false);
+    this.#droneCamera.setEnabled(false);
     this.#freeShow.stop();
     this.#ui.destroy();
     this.#freeView.dispose();
@@ -343,6 +367,7 @@ export class NightSkyApp {
     this.#fireworks.update(delta);
     this.#updateScene(elapsed);
     this.#freeView.update(delta);
+    this.#droneCamera.update(delta);
     this.#advertiseCamera.update(delta);
     this.#composer.render(delta);
     this.#animationFrame = window.requestAnimationFrame(this.#render);
@@ -359,7 +384,27 @@ export class NightSkyApp {
   readonly #handleReducedMotionChange = (event: MediaQueryListEvent): void => {
     this.#advertiseDemo.setReducedMotion(event.matches);
     this.#advertiseCamera.setReducedMotion(event.matches);
+    this.#droneCamera.setReducedMotion(event.matches);
   };
+
+  #syncViewerCameraMode(): void {
+    const droneEnabled =
+      this.#viewerCameraAvailable && this.#viewerCameraMode === "drone";
+    if (droneEnabled) {
+      const target = this.#freeView.target;
+      this.#freeView.setEnabled(false);
+      this.#droneCamera.setEnabled(true, target);
+      return;
+    }
+
+    const droneWasEnabled = this.#droneCamera.isEnabled;
+    const droneTarget = this.#droneCamera.target;
+    this.#droneCamera.setEnabled(false);
+    if (this.#viewerCameraAvailable && droneWasEnabled) {
+      this.#freeView.adoptCurrentView(droneTarget);
+    }
+    this.#freeView.setEnabled(this.#viewerCameraAvailable);
+  }
 
   #setBackgroundRuntime(
     runtime: BackgroundRuntime,
