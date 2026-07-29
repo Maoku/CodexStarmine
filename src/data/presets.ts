@@ -579,23 +579,21 @@ export const MAO_TANABATA_AFTERGLOW_PRESET =
   buildMaoTanabataAfterglowPreset(PEONY_PRESET);
 
 const summerFireworkPresets = buildSummerFireworkPresets({
-  crown: CROWN_PRESET,
+  chrysanthemum: CHRYSANTHEMUM_PRESET,
   lightRipple: LIGHT_RIPPLE_PRESET,
-  senrin: SENRIN_PRESET,
   willow: WILLOW_PRESET,
 });
 
-export const MORNING_GLORY_PRESET = summerFireworkPresets.morningGlory;
-export const FIREFLY_SENRIN_PRESET = summerFireworkPresets.fireflySenrin;
-export const BLUE_RIPPLE_PRESET = summerFireworkPresets.blueRipple;
-export const SUMMER_SHOWER_WILLOW_PRESET =
-  summerFireworkPresets.summerShowerWillow;
+export const SUMMER_SUNFLOWER_PRESET = summerFireworkPresets.summerSunflower;
+export const COOL_WATER_RIPPLE_PRESET = summerFireworkPresets.coolWaterRipple;
+export const BLUE_TIP_WILLOW_PRESET = summerFireworkPresets.blueTipWillow;
+export const WATERMELON_RING_PRESET = summerFireworkPresets.watermelonRing;
 
 export const JAPANESE_SUMMER_PRESETS: FireworkDesignV2[] = [
-  MORNING_GLORY_PRESET,
-  FIREFLY_SENRIN_PRESET,
-  BLUE_RIPPLE_PRESET,
-  SUMMER_SHOWER_WILLOW_PRESET,
+  SUMMER_SUNFLOWER_PRESET,
+  COOL_WATER_RIPPLE_PRESET,
+  BLUE_TIP_WILLOW_PRESET,
+  WATERMELON_RING_PRESET,
 ];
 
 export const FIREWORK_PRESETS: FireworkDesignV2[] = [
