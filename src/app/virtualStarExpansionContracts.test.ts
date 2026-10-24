@@ -18,7 +18,11 @@ import {
 } from "./virtualStarExpansionContracts";
 
 function fingerprint(value: unknown): string {
-  const text = JSON.stringify(value);
+  // Ignore platform-specific floating-point noise, including near-zero trig
+  // results, at 1e-9 precision. Only regression fingerprints are normalized.
+  const text = JSON.stringify(value, (_key, entry: unknown) =>
+    typeof entry === "number" ? Number(entry.toFixed(9)) : entry,
+  );
   let hash = 2_166_136_261;
   for (let index = 0; index < text.length; index += 1) {
     hash ^= text.charCodeAt(index);
@@ -98,87 +102,87 @@ describe("virtual star expansion Phase 0 contracts", () => {
     expect(signatures).toEqual([
       {
         id: "preset-chrysanthemum",
-        v2: "3fbc2494",
-        v3: "94e13a0c",
-        v4: "94e13a0c",
+        v2: "6ed630b6",
+        v3: "a4995163",
+        v4: "a4995163",
       },
       {
         id: "preset-peony",
-        v2: "016d8479",
-        v3: "e839cdca",
-        v4: "e839cdca",
+        v2: "7c05d27d",
+        v3: "46117376",
+        v4: "46117376",
       },
       {
         id: "preset-crown",
-        v2: "0d87bf92",
-        v3: "f0d5daec",
-        v4: "f0d5daec",
+        v2: "1e6041f3",
+        v3: "30dd84ec",
+        v4: "30dd84ec",
       },
       {
         id: "preset-palm",
-        v2: "9b7e7906",
-        v3: "ece184ce",
-        v4: "ece184ce",
+        v2: "c863f650",
+        v3: "9e6acc03",
+        v4: "9e6acc03",
       },
       {
         id: "preset-senrin",
-        v2: "758bd5e5",
-        v3: "0651afed",
-        v4: "0651afed",
+        v2: "171b29bf",
+        v3: "84083b45",
+        v4: "84083b45",
       },
       {
         id: "preset-heart",
-        v2: "238872f8",
-        v3: "11e8d39d",
-        v4: "3e84fe01",
+        v2: "48bbd79c",
+        v3: "102cd3f7",
+        v4: "fa34923d",
       },
       {
         id: "preset-willow",
-        v2: "80d8a737",
-        v3: "ef828761",
-        v4: "ef828761",
+        v2: "d3413e58",
+        v3: "828f279a",
+        v4: "828f279a",
       },
       {
         id: "preset-bee",
-        v2: "b053b793",
-        v3: "74186136",
-        v4: "74186136",
+        v2: "bf7b884e",
+        v3: "33221c3d",
+        v4: "33221c3d",
       },
       {
         id: "preset-hiyusei",
-        v2: "f100a40e",
-        v3: "6e48bca4",
-        v4: "6e48bca4",
+        v2: "25a6488e",
+        v3: "fb1169dd",
+        v4: "fb1169dd",
       },
       {
         id: "preset-hanarai",
-        v2: "7af7b586",
-        v3: "380697f1",
-        v4: "380697f1",
+        v2: "ac3f3477",
+        v3: "e25d82df",
+        v4: "e25d82df",
       },
       {
         id: "preset-kaleidoscope",
-        v2: "c08000e1",
-        v3: "86c36c33",
-        v4: "86c36c33",
+        v2: "333afe26",
+        v3: "b3a6c431",
+        v4: "b3a6c431",
       },
       {
         id: "preset-saturn",
-        v2: "ebb991c4",
-        v3: "f1537539",
-        v4: "29538cc4",
+        v2: "cd13394b",
+        v3: "870690fa",
+        v4: "67049f5e",
       },
       {
         id: "preset-butterfly",
-        v2: "bb123d76",
-        v3: "3f72cd75",
-        v4: "487cae68",
+        v2: "0fc3e495",
+        v3: "b26a9107",
+        v4: "b9120948",
       },
       {
         id: "preset-kowari",
-        v2: "bb570d5b",
-        v3: "688e9dde",
-        v4: "688e9dde",
+        v2: "7e578328",
+        v3: "9b12cd8b",
+        v4: "9b12cd8b",
       },
     ]);
   });
